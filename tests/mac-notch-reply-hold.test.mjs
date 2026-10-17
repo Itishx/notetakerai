@@ -21,8 +21,14 @@ test("his answer keeps the width and only the height moves", () => {
   assert.match(r, /releaseReplyHold\("answer"\)/);
 });
 
-test("it folds away on its own when nothing follows", () => {
-  assert.match(r, /if \(idle && Date\.now\(\) - nfReplyHold\.since > 3500\) releaseReplyHold\("quiet"\);/);
+test("one shape for the conversation: held between turns, folds after 9s of quiet or when the session ends", () => {
+  assert.match(r, /if \(!sessionLive && idle && quietMs > 1500\) releaseReplyHold\("session_end"\);/);
+  assert.match(r, /else if \(idle && !rtSpeechInProgress\(\) && quietMs > NF_REPLY_HOLD_QUIET_MS\) releaseReplyHold\("quiet"\);/);
+  // Thinking shows inside the held sheet; nf-thinking on top crushed it.
+  assert.match(r, /const processingActive = !voiceOwnsNotch\n\s+&& !nfReplyHold\.on/);
+  // A finished reply in a live session stays open with his words, no linger timer.
+  assert.match(r, /if \(\(realtimeActive \|\| realtimeConnecting\) && holdNotchAnswerForReply\(\{ keepText: true \}\)\)/);
+  assert.match(r, /if \(nfReplyHold\?\.on && !realtimeActive && !realtimeConnecting\) releaseReplyHold\("quiet"\);/);
   assert.match(css, /#notch-face\.nf-answer-reply/);
 });
 

@@ -88,15 +88,15 @@ async function handle(req: Request) {
   if (action === "claim") {
     /* No JWT here, because the app is asking precisely because it has none.
        Knowing the nonce is the whole credential, and it is spent on use. */
+    /* Read and delete in one statement, so two racing claims cannot both win. */
     const { data, error } = await admin
       .from("mac_auth_handoffs")
-      .select("payload, created_at")
+      .delete()
       .eq("nonce", nonce)
+      .select("payload, created_at")
       .maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ ok: false, reason: "waiting" });
-
-    await admin.from("mac_auth_handoffs").delete().eq("nonce", nonce);
 
     const age = Date.now() - new Date(data.created_at).getTime();
     if (age > MAX_AGE_MS) return json({ ok: false, reason: "expired" });

@@ -373,3 +373,8 @@ export function summarizeCalendarEvent(event: any) {
     status: event?.status || null,
   };
 }
+
+// Generic names for the same HMAC-signed, 15-minute OAuth state. Drive, Notion and
+// Spotify sign with the service role key too, so no new secret is needed.
+export const buildSignedOAuthState = buildCalendarOAuthState;
+export const verifySignedOAuthState = verifyCalendarOAuthState;

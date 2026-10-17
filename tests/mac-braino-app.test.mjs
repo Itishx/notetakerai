@@ -11,10 +11,10 @@ test("double-click Braino opens the one app; Cmd+Shift+D does too", () => {
   for (const name of ["appOpen", "appRecent", "skillsList", "skillsForget", "appOverlay", "loginItem", "onAppGo", "onAppOverlay"]) assert.match(preload, new RegExp(`\\b${name}:`), name);
 });
 
-test("Companion and Foundry, with Braino, Connections and System shared", () => {
-  // Chat is the front door of both (2026-09-28).
-  assert.match(app, /companion: \[\["", \["chat", "home"\]\], \["Your day"/);
-  assert.match(app, /foundry: \[\["", \["chat", "fhome"\]\], \["The four jobs", \["content", "optics", "outbound", "approvals"\]\]/);
+test("Companion only, with Braino, Connections and System shared", () => {
+  // Chat is the front door (2026-09-28). Foundry comes later (2026-10-15).
+  assert.match(app, /companion: \[\["", \["chat", "home"\]\], \["Library"/);
+  assert.doesNotMatch(app, /foundry: \[\[/);
   assert.match(app, /shared: \[\["Braino", \["appearance", "voice", "commands", "skills"\]\]/);
 });
 
@@ -27,12 +27,13 @@ test("the app opens on Chat, which talks or does (2026-09-28)", () => {
 });
 
 test("features not built yet say so, instead of faking numbers", () => {
-  for (const id of ["habits", "focus", "routines", "optics", "outbound", "approvals", "ideas"]) assert.match(app, new RegExp(`${id}: \\{[^\\n]*soon\\(`), id);
+  // Habits, Focus and Routines were taken out instead (2026-10-15).
+  for (const id of ["habits", "focus", "routines", "optics", "outbound", "approvals", "ideas"]) assert.doesNotMatch(app, new RegExp(`\\n  ${id}: \\{`), id);
 });
 
-test("AffectiveOS type and square glass tiles that animate", () => {
-  assert.match(css, /--display:"Iowan Old Style"/);
-  assert.match(css, /--mark:"Bodoni Moda"/);
+test("SF Pro type and square glass tiles that animate", () => {
+  assert.match(css, /--display:"SF Pro Display"/);
+  assert.match(css, /--mark:"SF Pro Display"/);
   assert.match(css, /\.nav button\{position:relative;aspect-ratio:1;/);
   assert.match(css, /@keyframes pageIn/);
   assert.match(css, /prefers-reduced-motion:reduce/);

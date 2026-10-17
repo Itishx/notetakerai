@@ -34,8 +34,10 @@ if (chrome?.runtime?.sendMessage) {
 
 function __sbIsBrainoSiteHost(host = location.hostname) {
   return host === "trybraino.com" ||
+    host === "www.trybraino.com" ||
     host === "braino-eight.vercel.app" ||
-    /^braino-git-.*\.vercel\.app$/i.test(host) ||
+    host === "affctve.com" ||
+    host === "www.affctve.com" ||
     host === "localhost" ||
     host === "127.0.0.1";
 }
@@ -6791,6 +6793,7 @@ function __sbBuildWhatsNewReply() {
 
 // Dashboard (trybraino.com) can set voice preference via postMessage
 window.addEventListener("message", (event) => {
+  if (event.source !== window || !__sbIsBrainoSiteHost()) return;
   if (event.data?.type !== "sbSetVoicePref") return;
   const pref = __sbNormalizeVoiceOutputPref(event.data.pref);
   __sbVoiceOutputPref = pref;

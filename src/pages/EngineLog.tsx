@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import HilShadowLog from "../components/HilShadowLog";
 import "../components/hil-shadow-log.css";
 import { Link } from "react-router-dom";
@@ -21,6 +22,12 @@ import "./engine-log.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
+
+// engine-runs / braino-learning are creator-only, so they need the signed-in session.
+async function authHeaderValue() {
+  const { data } = await supabase.auth.getSession();
+  return `Bearer ${data.session?.access_token ?? ""}`;
+}
 
 type Run = {
   id: string;
@@ -111,7 +118,7 @@ export default function EngineLog() {
     setLoading(true);
     setError(null);
     try {
-      const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+      const headers = { apikey: SUPABASE_KEY, Authorization: await authHeaderValue() };
       const base = `${SUPABASE_URL}/functions/v1/engine-runs`;
       const query = new URLSearchParams({ engine, limit: "200" });
       if (failedOnly) query.set("failed", "1");
@@ -147,7 +154,7 @@ export default function EngineLog() {
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/engine-runs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: await authHeaderValue() },
         body: JSON.stringify({ ...(key.runId ? { runId: key.runId } : { id: key.id }), rating, note: note || null }),
       });
       if (!res.ok) throw new Error(`Save failed (${res.status})`);

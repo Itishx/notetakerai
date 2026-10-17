@@ -20,6 +20,42 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "option-n-recording",
+    title: "Option+N Recording",
+    category: "Feature",
+    date: "2026-10-15",
+    dateLabel: "October 15, 2026",
+    description:
+      "Press Option+N, pick lecture or meeting in the notch, and Braino records. Press it again and the notes are written and saved on your Mac and in your account.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "084",
+  },
+  {
+    slug: "notes-as-pdfs",
+    title: "Notes as PDFs",
+    category: "Feature",
+    date: "2026-10-15",
+    dateLabel: "October 15, 2026",
+    description:
+      "Every meeting and lecture written up answer first, saved as a PDF in Documents with a Finder tag, and read right inside the Braino app.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "084",
+  },
+  {
+    slug: "pause-music-while-you-talk",
+    title: "Pause Music While You Talk",
+    category: "Feature",
+    date: "2026-10-15",
+    dateLabel: "October 15, 2026",
+    description:
+      "Call Braino and whatever is playing pauses. Once he has understood you, it comes back on its own and he works in the background.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "083",
+  },
+  {
     slug: "calendar-on-mac",
     title: "Google Calendar on the Mac",
     category: "Feature",

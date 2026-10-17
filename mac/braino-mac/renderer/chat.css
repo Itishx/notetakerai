@@ -10,7 +10,7 @@
 .main.chatting .body > * { animation: none; }
 
 .chat {
-  --read: "Newsreader", "Iowan Old Style", Charter, Georgia, serif;
+  --read: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif; /* SF Pro everywhere (2026-10-15) */
   --warm: 255, 155, 130;
   position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0;
   animation: chatIn .55s cubic-bezier(.2, .8, .2, 1) both;
@@ -228,3 +228,81 @@
 
 /* No bubbles (2026-10-15): what you wrote reads as plain text, his as plain text. */
 .cm.you .cm-b { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; max-width: 80%; text-align: right; color: #5a574f; font-weight: 500; }
+
+/* ══ Intelligent UI, refined (2026-10-15) ══ */
+/* His words: real headings, lists and emphasis. */
+.cm-text h4 { margin: 4px 0 8px; font: 600 19px/1.3 var(--display, -apple-system); letter-spacing: -.02em; color: #16150f; }
+.cm-text ul, .cm-text ol { margin: 6px 0 12px; padding-left: 20px; display: grid; gap: 6px; }
+.cm-text li { padding-left: 2px; }
+.cm-text li::marker { color: #e05a4f; }
+.cm-text b { font-weight: 600; color: #16150f; }
+.cm-text code { padding: 1px 6px; border-radius: 6px; background: rgba(22,21,15,.06); font: 500 .9em ui-monospace, "SF Mono", monospace; }
+.cm-text u { text-decoration: underline; text-decoration-color: rgba(224,90,79,.5); text-underline-offset: 3px; }
+.rv { animation: chatIn .45s cubic-bezier(.2,.8,.2,1) both; }
+
+/* Cards: one calm surface, a header that says the point, then the detail. */
+.ui-card { margin-top: 16px; padding: 0; border-radius: 18px; background: #fff; border: 1px solid #ebe7de; box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 18px 40px -30px rgba(0,0,0,.35); }
+.ui-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 16px 18px 12px; }
+.ui-k { padding: 0; font: 600 11px var(--read); letter-spacing: .09em; text-transform: uppercase; color: #8a877e; }
+.ui-title { margin-top: 4px; font: 600 17px/1.25 var(--display, -apple-system); letter-spacing: -.02em; color: #16150f; }
+.ui-next { display: flex; flex-direction: column; align-items: flex-end; font: 600 15px var(--read); color: #e05a4f; font-variant-numeric: tabular-nums; }
+.ui-next span { font: 600 10px var(--read); letter-spacing: .1em; text-transform: uppercase; color: #8a877e; }
+/* The day as a timeline. */
+.ui-tl { list-style: none; margin: 0; padding: 4px 18px 16px; position: relative; }
+.ui-tl li { position: relative; display: grid; grid-template-columns: 64px 18px minmax(0, 1fr); align-items: start; gap: 10px; padding: 9px 0; }
+.ui-tl li + li::before { content: ""; position: absolute; left: 82px; top: -9px; height: 18px; width: 1px; background: #e7e3d9; }
+.ui-tl-time { font: 600 13px/1.4 var(--read); color: #16150f; font-variant-numeric: tabular-nums; text-align: right; }
+.ui-tl-dot { width: 9px; height: 9px; margin: 5px auto 0; border-radius: 50%; background: #fff; border: 2px solid #c9c5bb; }
+.ui-tl li.next .ui-tl-dot { border-color: #e05a4f; background: #e05a4f; box-shadow: 0 0 0 4px rgba(224,90,79,.15); }
+.ui-tl li.past { opacity: .45; }
+.ui-tl-body { display: flex; flex-direction: column; gap: 2px; font: 400 14.5px/1.35 var(--read); color: #16150f; }
+.ui-tl-body b { font-weight: 600; }
+.ui-tl-body small { font-size: 12.5px; color: #8a877e; }
+/* Connections as tiles. */
+.ui-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.ui-tile { display: flex; align-items: center; gap: 11px; padding: 12px; border-radius: 13px; background: #faf9f6; border: 1px solid #f0ede5; }
+.ui-tile.on { background: #fff; border-color: #e7e3d9; }
+.ui-mark { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #fff; font: 700 14px var(--read); }
+.ui-tile:not(.on) .ui-mark { opacity: .45; }
+.ui-tile-t { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ui-tile-t b { font: 600 13.5px var(--read); color: #16150f; }
+.ui-tile-t small { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8a877e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-on { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #34c759; }
+.ui-tile .ui-btn { margin-left: auto; padding: 5px 11px; border: 1px solid #d8d4ca; background: #fff; color: #16150f; font: 600 12px var(--read); }
+.ui-tile .ui-btn:hover { border-color: #16150f; background: #fff; }
+/* Choices and sources. */
+.ui-chip { display: inline-flex; align-items: center; gap: 6px; padding: 10px 12px 10px 16px; }
+.ui-chip svg { width: 14px; height: 14px; fill: none; stroke: #8a877e; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ui-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 14px; }
+.ui-src { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: #fff; border: 1px solid #ebe7de; min-width: 0; }
+.ui-src > div { min-width: 0; display: flex; flex-direction: column; }
+.ui-src b { font: 600 13px var(--read); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-src small { font-size: 11.5px; color: #8a877e; }
+.ui-fav { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #f4f2ec; font: 700 12px var(--read); color: #5a574f; }
+
+/* Tables in answers (2026-10-15): hairline rows, no grid, numbers right. */
+.cm-text .cm-table { margin: 14px 0; border: 1px solid var(--line, #e4e0d6); border-radius: 14px; overflow: hidden; background: var(--card, #fdfcf8); }
+.cm-text table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cm-text th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: .02em; color: var(--ink-3, #8a877e); padding: 10px 16px; border-bottom: 1px solid var(--line, #e4e0d6); }
+.cm-text td { padding: 11px 16px; border-bottom: 1px solid var(--line, #eeeae1); }
+.cm-text tr:last-child td { border-bottom: 0; }
+.cm-text .n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Empty chat, Claude style (2026-10-15): everything centred in the page. */
+.chat.empty { justify-content: center; }
+.chat.empty .chat-scroll { flex: none; overflow: visible; mask-image: none; }
+.chat.empty .chat-hello { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 26px; }
+.chat.empty .chat-mascot.big { width: 54px; height: 66px; margin: 0; }
+.chat.empty .chat-hello h1 { margin: 0; font: 400 46px/1.1 var(--read, Georgia, serif); letter-spacing: -.02em; color: var(--ink); }
+.chat.empty .chat-box { margin-bottom: 0; }
+.chat.empty .chat-hint { display: none; }
+.chat-suggest { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(680px, calc(100% - 80px)); margin: 18px auto 0; }
+.chat-sg { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; font: 500 14px var(--ui, -apple-system, sans-serif); color: var(--ink2); background: #fdfcf8; border: 1px solid #e4e0d6; transform: none; }
+.chat-sg:hover { color: var(--ink); background: #fff; border-color: #cfc9bb; transform: none; }
+.chat-sg svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chat:not(.empty) .chat-suggest { display: none; }
+.chat.empty .chat-send { margin-left: auto; }
+.chat.empty #chat-in { min-height: 52px; }
+.nav-chev { margin-left: auto; font-size: 16px; color: #8a877e; transition: transform .2s ease; }
+.nav-chev.open { transform: rotate(90deg); }
+.nav-sub { max-height: 46vh; overflow-y: auto; }

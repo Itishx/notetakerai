@@ -17,6 +17,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getRequestUser, isCreatorUser } from "../../_shared/require-user.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +38,11 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // Creator only: these rows include what other people typed into the engines.
+  const requester = await getRequestUser(req);
+  if (!requester) return json({ error: "Sign in required." }, 401);
+  if (!isCreatorUser(requester)) return json({ error: "Admin access required." }, 403);
 
   try {
     // Judging a run. The rating is the point of the whole log: it turns a

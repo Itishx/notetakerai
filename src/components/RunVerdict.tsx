@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import "./run-verdict.css";
 
 /* ============================================================================
@@ -15,6 +16,12 @@ import "./run-verdict.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
+
+// engine-runs / braino-learning are creator-only, so they need the signed-in session.
+async function authHeaderValue() {
+  const { data } = await supabase.auth.getSession();
+  return `Bearer ${data.session?.access_token ?? ""}`;
+}
 
 type Props = {
   /** One logged call. Use for a single-shot answer. */
@@ -42,7 +49,7 @@ export default function RunVerdict({ logId, runId, label = "Was this right?" }: 
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/engine-runs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: await authHeaderValue() },
         body: JSON.stringify({
           ...(runId ? { runId } : { id: logId }),
           rating: nextRating,

@@ -157,11 +157,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   setupAsk: (id) => ipcRenderer.invoke("braino-mac:setup-ask", id),
   openSources: (urls) => ipcRenderer.invoke("braino-mac:open-sources", { urls }),
   waBadgeOpen: () => ipcRenderer.invoke("braino-mac:wa-badge-open"),
+  waBadgeDismiss: () => ipcRenderer.invoke("braino-mac:wa-badge-dismiss"),
   mesaTokenSave: (token) => ipcRenderer.invoke("braino-mac:mesa-token-save", token),
   quitBraino: () => ipcRenderer.invoke("braino-mac:quit"),
-  mesaTokenStatus: () => ipcRenderer.invoke("braino-mac:mesa-token-status"),
   onbConnect: (kind) => ipcRenderer.invoke("braino-mac:onb-connect", kind),
   onbPeek: (kind) => ipcRenderer.invoke("braino-mac:onb-peek", kind),
+  mesaTokenStatus: () => ipcRenderer.invoke("braino-mac:mesa-token-status"),
   mesaTokenRemove: () => ipcRenderer.invoke("braino-mac:mesa-token-remove"),
   mesaOpenDeveloper: () => ipcRenderer.invoke("braino-mac:mesa-open-developer"),
   setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),
@@ -196,6 +197,19 @@ contextBridge.exposeInMainWorld("brainoMac", {
   mesaConnect: () => ipcRenderer.invoke("braino-mac:mesa-connect"),
   mesaSync: () => ipcRenderer.invoke("braino-mac:mesa-sync"),
   dashboardData: (key) => ipcRenderer.invoke("braino-mac:dashboard-data", key),
+  notesLibrary: () => ipcRenderer.invoke("braino-mac:notes-library"),
+  notesRender: (markdown) => ipcRenderer.invoke("braino-mac:notes-render", markdown),
+  notesSavePdf: (payload) => ipcRenderer.invoke("braino-mac:notes-save-pdf", payload),
+  notesReveal: (file) => ipcRenderer.invoke("braino-mac:notes-reveal", file),
+  notesText: (file) => ipcRenderer.invoke("braino-mac:notes-text", file),
+  notesRename: (payload) => ipcRenderer.invoke("braino-mac:notes-rename", payload),
+  notesAsk: (payload) => ipcRenderer.invoke("braino-mac:notes-ask", payload),
+  notesWriteUp: (payload) => ipcRenderer.invoke("braino-mac:notes-write-up", payload),
+  onNotesChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("braino-mac:notes-changed", listener);
+    return () => ipcRenderer.removeListener("braino-mac:notes-changed", listener);
+  },
   dashboardOpen: () => ipcRenderer.invoke("braino-mac:dashboard-open"),
   setWindowTheme: (theme) => ipcRenderer.invoke("braino-mac:window-theme", theme),
   revealPath: (target) => ipcRenderer.invoke("braino-mac:reveal-path", target),
@@ -317,6 +331,14 @@ contextBridge.exposeInMainWorld("brainoMac", {
   idleScreenAction: (shortcut) => ipcRenderer.invoke("braino-mac:idle-screen-action", shortcut || {}),
   idleScreenSettings: (patch) => ipcRenderer.invoke("braino-mac:idle-screen-settings", patch || null),
   notchStyle: (style) => ipcRenderer.invoke("braino-mac:notch-style", style || null),
+  // Listening engine: "on-device" (default) or "sarvam". See main.cjs parakeetSend.
+  speechEngine: (engine) => ipcRenderer.invoke("braino-mac:speech-engine", engine || null),
+  onSarvamCommand: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:sarvam-command", handler);
+    return () => ipcRenderer.removeListener("braino-mac:sarvam-command", handler);
+  },
+  sarvamEvent: (payload) => ipcRenderer.send("braino-mac:sarvam-event", payload),
   onNotchStyle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:notch-style", handler);
@@ -611,6 +633,28 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:alarm-dismiss", handler);
     return () => ipcRenderer.removeListener("braino-mac:alarm-dismiss", handler);
   },
+  calendarNextNow: () => ipcRenderer.invoke("braino-mac:calendar-next-now"),
+  recordStop: () => ipcRenderer.invoke("braino-mac:record-stop"),
+  recordStart: (payload) => ipcRenderer.invoke("braino-mac:record-start", payload),
+  recordingsList: () => ipcRenderer.invoke("braino-mac:recordings-list"),
+  recordingGet: (id) => ipcRenderer.invoke("braino-mac:recording-get", id),
+  recordingState: () => ipcRenderer.invoke("braino-mac:recording-state"),
+  onRecordAsk: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:record-ask", handler);
+    return () => ipcRenderer.removeListener("braino-mac:record-ask", handler);
+  },
+  onRecordPhase: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:record-phase", handler);
+    return () => ipcRenderer.removeListener("braino-mac:record-phase", handler);
+  },
+  onRecordingsChanged: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:recordings-changed", handler);
+    return () => ipcRenderer.removeListener("braino-mac:recordings-changed", handler);
+  },
+  mediaHold: (payload) => ipcRenderer.invoke("braino-mac:media-hold", payload),
   musicDuck: (payload) => ipcRenderer.invoke("braino-mac:music-duck", payload),
   systemVolume: (payload) => ipcRenderer.invoke("braino-mac:system-volume", payload),
   calendarJoin: () => ipcRenderer.invoke("braino-mac:calendar-join"),

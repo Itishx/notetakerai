@@ -167,19 +167,17 @@ struct BrainoDictate {
         // 700ms: long enough that a mid-sentence breath is not treated as the
         // end of a thought, short enough to still feel immediate. EOU now only
         // paces commits — correctness no longer depends on it.
-        /* 320ms rather than 160ms.
+        /* 160ms, back from 320ms (2026-10-16).
          *
-         * Halving the number of decoder invocations per second of audio is the
-         * cheapest way to stay ahead of real time, and it is what this file's
-         * own offline path already defaults to. The cost is that the running
-         * hypothesis updates about three times a second instead of six, which
-         * is still faster than anyone reads. The benefit is that the machine
-         * stops falling behind, and falling behind was not costing granularity,
-         * it was costing whole sentences.
-         *
-         * Bigger chunks also give the model more context per inference, so this
-         * is not a trade of accuracy for speed. */
-        let asr = StreamingEouAsrManager(chunkSize: .ms320, eouDebounceMs: 700)
+         * 320ms was chosen while the mic queue had no backpressure and falling
+         * behind cost whole sentences. MicPipeline.maxBacklog fixed that, and
+         * the health line now reads ~9ms mean decode with a backlog peak of 1,
+         * so there is room to spare. At 320ms only ~2 partials a second reached
+         * LIVE, with gaps up to 2s, which reads as words arriving in lumps.
+         * Wispr Flow streams 40ms frames for the same reason: words should land
+         * as they are said. If `health:` ever shows the backlog climbing, this
+         * is the line to put back. */
+        let asr = StreamingEouAsrManager(chunkSize: .ms160, eouDebounceMs: 700)
 
         // Partials are for the Notch only — never inserted, because they get
         // rewritten as the model firms up its guess.

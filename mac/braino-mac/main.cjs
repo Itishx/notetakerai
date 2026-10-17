@@ -275,6 +275,7 @@ const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "i
 const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
 const { createNarrator, stepLine, asDoing } = require(path.join(__dirname, "narrate.cjs"));
 const formFill = require(path.join(__dirname, "form-fill.cjs"));
+const notesPdf = require(path.join(__dirname, "notes-pdf.cjs"));
 const webAddress = require(path.join(__dirname, "web-address.cjs"));
 const { createLayaContext } = require(path.join(__dirname, "laya-context.cjs"));
 /* What Laya sees around each sentence, fed by the log itself (see logMac). */
@@ -1237,13 +1238,15 @@ function macTrail(payload) {
   if (payload?.kind === "start") macTrailActive = true;
   if (!macTrailActive) return;
   if (payload?.kind === "end") macTrailActive = false;
-  sendToRenderer("braino-mac:task-trail", payload);
+  if (!macChatRunning) sendToRenderer("braino-mac:task-trail", payload);
   // The chat page in the Braino app draws the same steps inside its reply.
   try { if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:task-trail", payload); } catch (_) {}
 }
 
+let macChatRunning = false; // a typed chat job: its progress stays out of the notch
 function sendTaskProgress(payload) {
   if (payload && typeof payload.status === "string") lastTaskProgressStatus = payload.status;
+  if (macChatRunning && !payload?.clearNotch) return;
   sendToRenderer("braino-mac:task-progress", payload);
 }
 
@@ -2342,6 +2345,10 @@ function handleParakeetLine(line) {
     logMac("parakeet.error", { message: event.message });
     return;
   }
+  if (recCaptionMode && ["partial", "utterance", "segment", "delta", "final"].includes(event.type)) {
+    handleRecordCaptionEvent(event);
+    return;
+  }
   /* The running hypothesis, roughly every 150-500ms. Display only — it gets
      rewritten as the model firms up its guess, so it must never reach the
      caret — but it is what makes the Notch show words as they are spoken. */
@@ -3151,7 +3158,53 @@ function startParakeet() {
   return proc;
 }
 
+/* ── Listening engine: on-device (Parakeet) or Sarvam (2026-10-16) ─────────
+   One lane, two engines. Everything that listens (HERA, dictation, LIVE)
+   talks to parakeetSend and hears back through handleParakeetLine. When the
+   switch in Settings says "sarvam", start/stop/rotate go to the dock renderer
+   instead, which streams the mic to Sarvam's realtime socket and answers with
+   the same helper-shaped events. Nothing downstream knows which engine spoke.
+   On-device stays the default. The Parakeet helper keeps running either way,
+   so flipping back is instant. */
+const SPEECH_ENGINE_PATH = path.join(AUTH_STORE_DIR, "speech-engine.json");
+const SPEECH_ENGINES = new Set(["on-device", "sarvam"]);
+function readSpeechEngine() {
+  try {
+    const engine = JSON.parse(fs.readFileSync(SPEECH_ENGINE_PATH, "utf8"))?.engine;
+    return SPEECH_ENGINES.has(engine) ? engine : "on-device";
+  } catch (_) { return "on-device"; }
+}
+function writeSpeechEngine(engine) {
+  const next = SPEECH_ENGINES.has(engine) ? engine : "on-device";
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(SPEECH_ENGINE_PATH, JSON.stringify({ engine: next }, null, 2));
+  } catch (error) { logMac("speech_engine.save_failed", { error }); }
+  logMac("speech_engine.set", { engine: next });
+  return { ok: true, engine: next, hasSarvamKey: Boolean(ENV.SARVAM_API_KEY) };
+}
+function sarvamActive() {
+  return readSpeechEngine() === "sarvam" && Boolean(ENV.SARVAM_API_KEY);
+}
+ipcMain.handle("braino-mac:speech-engine", async (_event, engine) => (
+  engine ? writeSpeechEngine(String(engine)) : { ok: true, engine: readSpeechEngine(), hasSarvamKey: Boolean(ENV.SARVAM_API_KEY) }
+));
+/* The renderer's Sarvam client reports in the helper's own vocabulary. */
+ipcMain.on("braino-mac:sarvam-event", (_event, payload) => {
+  if (!payload || typeof payload.type !== "string") return;
+  if (payload.type === "log") { logMac("sarvam." + String(payload.event || "log"), payload.data || {}); return; }
+  handleParakeetLine(JSON.stringify(payload));
+});
+
 function parakeetSend(command) {
+  if (["start", "stop", "rotate"].includes(command) && sarvamActive()) {
+    /* Dock window only: the dashboard also receives sendToRenderer, and two
+       renderers opening the mic would be two streams for one session. */
+    if (!dockWindow || dockWindow.isDestroyed()) return false;
+    dockWindow.webContents.send("braino-mac:sarvam-command", { command, key: ENV.SARVAM_API_KEY });
+    logMac("sarvam.command", { command });
+    return true;
+  }
   if (!parakeet.proc || parakeet.proc.killed) return false;
   try {
     parakeet.proc.stdin.write(`${command}\n`);
@@ -4020,7 +4073,24 @@ function registerHotkeys() {
     }),
     /* LIVE: the lecture as it is being said. Cmd+Shift+E, because it is a
        thing you reach for at the start of a class and E is not taken. */
+    // Option+N: the one way in and out of recording. Not recording: the notch
+    // asks "Lecture or meeting?". Recording: stop and write it up.
+    recordToggle: globalShortcut.register("Alt+N", () => { void recordHotkey(); }),
+    /* Cmd+Shift+E is Option+N with the answer already given (2026-10-16).
+       It used to open its own LIVE panel, a second recorder that saved
+       somewhere else. Now it is a lecture through the one recorder: same
+       listening, same notes, same note opening in the Mac app. Pressing it
+       again stops, exactly like Option+N. The old LIVE branch below only
+       runs to close a LIVE panel some other path already opened. */
     liveTranscript: globalShortcut.register("CommandOrControl+Shift+E", () => {
+      if (!liveTranscriptMode) {
+        if (meetingState || recordStopping) { void recordHotkey(); return; }
+        logMac("hotkey.live", { action: "lecture_via_recorder" });
+        void startMeetingRecording("lecture", { kind: "lecture", via: "cmd_shift_e" })
+          .then((result) => { if (!result?.ok) logMac("rec.start.failed", { kind: "lecture", via: "cmd_shift_e", say: textForLog(result?.say || "") }); })
+          .catch((error) => logMac("rec.start.failed", { kind: "lecture", via: "cmd_shift_e", error }));
+        return;
+      }
       if (liveTranscriptMode) {
         logMac("hotkey.live", { action: "stop" });
         void endLiveTranscript("hotkey");
@@ -6520,6 +6590,12 @@ async function executeClassifiedIntent(classified, raw) {
 // line back. Called by the renderer's ambient loop while he's awake-idle.
 async function runAmbientObserve() {
   const startedAt = Date.now();
+  // Never comment on a video someone is watching.
+  const video = await findPlayingYouTubeTab().catch(() => null);
+  if (video) {
+    logMac("ambient.skipped_video", { title: textForLog(video.title || "") });
+    return { ok: false, say: "" };
+  }
   const shot = await captureScreenBase64();
   if (!shot.ok) return { ok: false, say: "" };
   const authToken = await getBrainoAuthToken();
@@ -7557,6 +7633,8 @@ function waSoundsLike(heard, names) {
 }
 
 /* Tapping the badge: the messages it counted, to show in the notch. */
+/* Dismiss the badge without reading it (2026-10-15). */
+ipcMain.handle("braino-mac:wa-badge-dismiss", async () => { logMac("whatsapp.badge_dismissed", {}); clearWaBadge(); return { ok: true }; });
 ipcMain.handle("braino-mac:wa-badge-open", async () => {
   const count = waBadgeCount;
   const sender = waBadgeSender;
@@ -8060,6 +8138,13 @@ let activeTimers = [];
 let waBadgeCount = 0;
 let waBadgeSender = "";
 let calendarNext = null;
+let calendarCheckedAt = 0;
+/* The greeting asks what is next. If the calendar has not been read yet this
+   session, read it now, but never hold the hello for more than 6 seconds. */
+ipcMain.handle("braino-mac:calendar-next-now", async () => {
+  if (!calendarCheckedAt) await Promise.race([checkCalendarNext().catch(() => null), new Promise((r) => setTimeout(r, 6000))]);
+  return { checked: Boolean(calendarCheckedAt), next: calendarNext };
+});
 
 function broadcastTimers() {
   sendToRenderer("braino-mac:timers", {
@@ -8928,10 +9013,23 @@ async function handleMeetingSegment(payload = {}) {
   }
   for (const stream of audible) meetingState.rolesSeen.add(stream.role);
 
+  const segmentMs = segmentEndMs - segmentStartMs;
+  const recLost = (why, extra = {}) => {
+    if (!meetingState) return;
+    meetingState.failedSegments += 1;
+    meetingState.lostSegmentMs += segmentMs;
+    logMac("rec.segment.lost", { recId: meetingState.recId, why, segmentS: Math.round(segmentMs / 1000), totalLostS: Math.round(meetingState.lostSegmentMs / 1000), ...extra });
+  };
   const authToken = await getBrainoAuthToken();
-  if (!authToken) return { ok: false, error: "not_signed_in" };
+  if (!authToken) { recLost("not_signed_in"); return { ok: false, error: "not_signed_in" }; }
 
   meetingState.segmentBusy = true;
+  const segmentSentAt = Date.now();
+  logMac("rec.segment.sent", {
+    recId: meetingState.recId,
+    segmentS: Math.round(segmentMs / 1000),
+    streams: audible.map((st) => ({ role: st.role, kb: Math.round((st.bytes || 0) / 1024), ms: st.durationMs })),
+  });
   try {
     const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
       method: "POST",
@@ -8941,7 +9039,7 @@ async function handleMeetingSegment(payload = {}) {
         Authorization: `Bearer ${authToken}`,
       },
       body: JSON.stringify({
-        mode: "meeting",
+        mode: meetingState.kind === "lecture" ? "lecture" : "meeting",
         audioStreams: audible.map(({ role, audioBase64, mimeType }) => ({ role, audioBase64, mimeType })),
         existingNotes: meetingState.notesMarkdown,
         existingTranscript: meetingState.transcriptText,
@@ -8954,6 +9052,7 @@ async function handleMeetingSegment(payload = {}) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       logMac("meeting.segment.failed", { status: response.status, error: textForLog(data?.error || "") });
+      recLost("transcribe_failed", { status: response.status, ms: Date.now() - segmentSentAt });
       return { ok: false, error: data?.error || `transcribe failed (${response.status})` };
     }
     if (!meetingState) return { ok: true, empty: true };   // stopped while we were away
@@ -8963,6 +9062,10 @@ async function handleMeetingSegment(payload = {}) {
     if (data?.meetingArtifacts) meetingState.artifacts = data.meetingArtifacts;
     meetingState.lastSegmentEndMs = segmentEndMs;
     meetingState.segmentCount += 1;
+    meetingState.lastSegmentAt = Date.now();
+    meetingState.warnedQuiet = false;
+    sendToRenderer("braino-mac:meeting", { action: "transcript", text: meetingState.transcriptText.slice(-2400) });
+    logMac("rec.segment.done", { recId: meetingState.recId, segment: meetingState.segmentCount, ms: Date.now() - segmentSentAt, transcriptChars: meetingState.transcriptText.length, notesChars: meetingState.notesMarkdown.length });
     logMac("meeting.segment.done", {
       segment: meetingState.segmentCount,
       roles: audible.map((s) => s.role),
@@ -8979,6 +9082,7 @@ async function handleMeetingSegment(payload = {}) {
     return { ok: true, segment: meetingState.segmentCount };
   } catch (error) {
     logMac("meeting.segment.error", { error });
+    recLost("upload_error", { error: String(error?.message || error) });
     return { ok: false, error: error?.message || "segment upload failed" };
   } finally {
     if (meetingState) meetingState.segmentBusy = false;
@@ -9176,8 +9280,111 @@ function meetingMacContext(segmentStartMs, segmentEndMs) {
   };
 }
 
-async function startMeetingRecording(source) {
+/* One recorder for lectures and meetings (Option+N, 2026-10-15). Every step
+ * logs under "rec.*" with the recording's id, so one search tells the whole
+ * story of a recording, including the moments it quietly went wrong. */
+const REC_HEARTBEAT_MS = 30 * 1000;
+const REC_QUIET_WARN_MS = 90 * 1000;
+const RECORDINGS_DIR = () => path.join(app.getPath("userData"), "recordings");
+
+function recHeartbeat() {
+  const st = meetingState;
+  if (!st) return;
+  const now = Date.now();
+  const sinceSegmentMs = now - st.lastSegmentAt;
+  logMac("rec.heartbeat", {
+    recId: st.recId,
+    kind: st.kind,
+    elapsedS: Math.round((now - st.startedAt) / 1000),
+    segments: st.segmentCount,
+    failedSegments: st.failedSegments,
+    lostS: Math.round(st.lostSegmentMs / 1000),
+    transcriptChars: (st.transcriptText || "").length,
+    captionLines: st.transcript.length,
+    sinceSegmentS: Math.round(sinceSegmentMs / 1000),
+    roles: Array.from(st.rolesSeen),
+    audioError: st.audioCaptureError || undefined,
+  });
+  if (sinceSegmentMs > REC_QUIET_WARN_MS && !st.warnedQuiet) {
+    st.warnedQuiet = true;
+    logMac("rec.warn.no_audio", { recId: st.recId, sinceSegmentS: Math.round(sinceSegmentMs / 1000), audioError: st.audioCaptureError || "", captionLines: st.transcript.length });
+  }
+}
+
+function saveRecordingLocal(record) {
+  try {
+    fs.mkdirSync(RECORDINGS_DIR(), { recursive: true });
+    const file = path.join(RECORDINGS_DIR(), `${record.id}.json`);
+    fs.writeFileSync(file, JSON.stringify(record, null, 2));
+    logMac("rec.saved.local", { recId: record.id, file, transcriptChars: record.transcript.length, notesChars: record.notes.length });
+    sendToRenderer("braino-mac:recordings-changed", { id: record.id });
+    return file;
+  } catch (error) {
+    logMac("rec.saved.local_failed", { recId: record.id, error });
+    return "";
+  }
+}
+
+function listRecordingsLocal() {
+  try {
+    return fs.readdirSync(RECORDINGS_DIR())
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => { try { return JSON.parse(fs.readFileSync(path.join(RECORDINGS_DIR(), f), "utf8")); } catch (_) { return null; } })
+      .filter(Boolean)
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  } catch (_) {
+    return [];
+  }
+}
+
+let recordStopping = false;
+async function recordHotkey() {
+  if (recordStopping) { logMac("rec.hotkey", { action: "ignored_stopping" }); return; }
+  if (meetingState) {
+    logMac("rec.hotkey", { action: "stop", recId: meetingState.recId });
+    recordStopping = true;
+    sendToRenderer("braino-mac:record-phase", { phase: "saving", kind: meetingState.kind });
+    try {
+      const result = await stopMeetingRecording();
+      sendToRenderer("braino-mac:record-phase", { phase: "saved", ok: result?.ok !== false });
+      if (result?.say) sendToRenderer("braino-mac:speak-line", { text: String(result.say) });
+    } catch (error) {
+      logMac("rec.stop.failed", { error });
+      sendToRenderer("braino-mac:record-phase", { phase: "saved", ok: false });
+    } finally {
+      recordStopping = false;
+    }
+    return;
+  }
+  logMac("rec.hotkey", { action: "ask" });
+  sendToRenderer("braino-mac:record-ask", {});
+}
+
+// The Stop button: straight to the recorder, never through the voice pipeline.
+ipcMain.handle("braino-mac:record-stop", async () => {
+  logMac("rec.stop.button", { recording: Boolean(meetingState), stopping: recordStopping });
+  if (meetingState && !recordStopping) await recordHotkey();
+  return { ok: true };
+});
+
+ipcMain.handle("braino-mac:record-start", async (_event, payload = {}) => {
+  const kind = payload?.kind === "lecture" ? "lecture" : "meeting";
+  logMac("rec.picked", { kind });
+  const result = await startMeetingRecording(kind === "lecture" ? "lecture" : "meeting", { kind, via: "option_n" });
+  if (!result?.ok) logMac("rec.start.failed", { kind, say: textForLog(result?.say || "") });
+  return result;
+});
+
+ipcMain.handle("braino-mac:recordings-list", () => listRecordingsLocal());
+ipcMain.handle("braino-mac:recording-get", (_event, id) => listRecordingsLocal().find((r) => r.id === String(id || "")) || null);
+ipcMain.handle("braino-mac:recording-state", () => (meetingState
+  ? { recording: true, id: meetingState.recId, kind: meetingState.kind, startedAt: meetingState.startedAt }
+  : { recording: false }));
+
+async function startMeetingRecording(source, { kind = "meeting", via = "voice" } = {}) {
   if (meetingState) return { ok: true, say: "Already recording. I have not missed a word." };
+  const recId = `${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
+  logMac("rec.start.requested", { recId, kind, via });
 
   audioCapturePlistState = await ensureAudioCaptureUsageKey();
   if (audioCapturePlistState.changed) {
@@ -9191,6 +9398,13 @@ async function startMeetingRecording(source) {
   }
 
   meetingState = {
+    recId,
+    kind: kind === "lecture" ? "lecture" : "meeting",
+    via,
+    lastSegmentAt: Date.now(),
+    lostSegmentMs: 0,
+    failedSegments: 0,
+    warnedQuiet: false,
     startedAt: Date.now(),
     source: source || "meeting",
     transcript: [],
@@ -9218,6 +9432,7 @@ async function startMeetingRecording(source) {
     // Only fires while real transcription has produced nothing — see meetingLiveNotes.
     noteTimer: setInterval(() => void meetingLiveNotes(), 2 * 60 * 1000),
     shotTimer: setInterval(() => void meetingSnapshot(), 90 * 1000),
+    recHeartbeat: setInterval(() => recHeartbeat(), REC_HEARTBEAT_MS),
   };
 
   // Zoom and Teams keep their participant list in the accessibility tree, which is the only
@@ -9232,16 +9447,20 @@ async function startMeetingRecording(source) {
   // Live captions stay on because they are instant and on-device, which is what makes the
   // surface feel alive. They are no longer the transcript, only the preview of one.
   startLiveCaptions();
-  meetingState.stealth = loadMeetingStealth();
+  // Hidden from screen shares is for calls. A lecture has nobody to hide from,
+  // and hiding it also hid the notch from every screenshot used to fix it.
+  meetingState.stealth = meetingState.kind === "lecture" ? false : loadMeetingStealth();
   applyMeetingStealth(meetingState.stealth);
   sendToRenderer("braino-mac:meeting", {
     action: "start",
+    kind: meetingState.kind,
     source: meetingState.source,
     startedAt: meetingState.startedAt,
     captureAudio: audioCapturePlistState.ready,
     stealth: meetingState.stealth,
   });
   logMac("meeting.start", { source: textForLog(meetingState.source), systemAudio: audioCapturePlistState.ready });
+  logMac("rec.started", { recId, kind: meetingState.kind, systemAudio: audioCapturePlistState.ready, signedIn: Boolean(authStatusPayload()?.userId) });
   logInteraction({
     kind: "record",
     mode: "meeting",
@@ -9311,16 +9530,21 @@ async function meetingLiveNotes() {
 async function stopMeetingRecording() {
   if (!meetingState) return { ok: false, say: "Nothing is being recorded right now." };
   const state = meetingState;
+  const stopAt = Date.now();
+  logMac("rec.stop.requested", { recId: state.recId, kind: state.kind, elapsedS: Math.round((stopAt - state.startedAt) / 1000) });
   // Ask the renderer for the last few seconds before tearing anything down, so the closing
   // sentence of a meeting is not the one line that never makes it into the notes.
-  const tail = await requestFinalMeetingSegment().catch(() => null);
+  const tail = await requestFinalMeetingSegment().catch((error) => { logMac("rec.stop.tail_failed", { recId: state.recId, error }); return null; });
   await waitForMeetingSegmentIdle();
   if (tail) await handleMeetingSegment(tail).catch(() => null);
+  await stopRecordCaptions().catch(() => null);
 
   meetingState = null;
   clearInterval(state.noteTimer);
   clearInterval(state.shotTimer);
+  clearInterval(state.recHeartbeat);
   if (state.axTimer) clearInterval(state.axTimer);
+  logMac("rec.stop.captured", { recId: state.recId, tailMs: Date.now() - stopAt, segments: state.segmentCount, failedSegments: state.failedSegments, lostS: Math.round(state.lostSegmentMs / 1000) });
   try { dockWindow?.setContentProtection(false); } catch (_) {}
   sendToRenderer("braino-mac:meeting", { action: "stop" });
   const minutes = Math.max(1, Math.round((Date.now() - state.startedAt) / 60000));
@@ -9354,13 +9578,27 @@ async function stopMeetingRecording() {
       transcriptChars: transcript.length,
     },
   });
-  if (!transcript) return { ok: true, say: "Stopped. The meeting never produced a word I could hear, so there is nothing to save." };
-  sendTaskProgress({ status: "thinking", text: "Writing up the meeting" });
+  const isLecture = state.kind === "lecture";
+  const noun = isLecture ? "lecture" : "meeting";
+  if (!transcript) {
+    logMac("rec.empty", { recId: state.recId, kind: state.kind, audioError: state.audioCaptureError || "", segments: state.segmentCount, failedSegments: state.failedSegments });
+    saveRecordingLocal({ id: state.recId, kind: state.kind, title: `${isLecture ? "Lecture" : "Meeting"} (nothing heard)`, startedAt: state.startedAt, endedAt: Date.now(), durationMs: Date.now() - state.startedAt, transcript: "", notes: "", status: "empty", problems: { audioError: state.audioCaptureError || "", failedSegments: state.failedSegments, lostS: Math.round(state.lostSegmentMs / 1000) } });
+    return { ok: true, say: `Stopped. The ${noun} never produced a word I could hear, so there is nothing to save.` };
+  }
+  sendTaskProgress({ status: "thinking", text: `Writing up the ${noun}` });
+  const notesStartedAt = Date.now();
 
   // The notes were already being written segment by segment. Only fall back to a one-shot
   // summary when nothing built them along the way.
   let summary = state.notesMarkdown;
-  if (!summary) {
+  if (!summary && isLecture) {
+    try {
+      summary = (await lectureNotes(transcript, "")).notes || "";
+    } catch (error) {
+      logMac("rec.notes.failed", { recId: state.recId, kind: state.kind, error });
+    }
+  }
+  if (!summary && !isLecture) {
     const authToken = await getBrainoAuthToken();
     try {
       const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
@@ -9381,6 +9619,28 @@ async function stopMeetingRecording() {
       logMac("meeting.summary.failed", { error });
     }
   }
+  logMac(summary ? "rec.notes.ok" : "rec.notes.missing", { recId: state.recId, kind: state.kind, ms: Date.now() - notesStartedAt, chars: (summary || "").length, builtLive: Boolean(state.notesMarkdown) });
+  const dateLabel = new Date(state.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  // On this Mac first, so a recording is never lost to a failed sync.
+  saveRecordingLocal({
+    id: state.recId,
+    kind: state.kind,
+    title: `${isLecture ? "Lecture" : "Meeting"}, ${dateLabel}`,
+    startedAt: state.startedAt,
+    endedAt: Date.now(),
+    durationMs: Date.now() - state.startedAt,
+    transcript,
+    notes: summary || "",
+    status: summary ? "ready" : "notes_missing",
+    problems: { audioError: state.audioCaptureError || "", failedSegments: state.failedSegments, lostS: Math.round(state.lostSegmentMs / 1000), transcriptSource: state.transcriptText ? "transcribed" : "captions" },
+  });
+  // The PDF is written in the background so "Done" is never late for it.
+  // From Option+N or Stop, the finished note then opens by itself in the app.
+  void saveNotesPdf({ kind: state.kind, source: state.source, minutes, date: state.startedAt, notes: summary, transcript }).then((saved) => {
+    if (state.via !== "option_n") return;
+    logMac("rec.note.open", { recId: state.recId, ok: Boolean(saved?.ok), file: saved?.file || "" });
+    openBrainoApp(saved?.ok && saved.file ? `note:${saved.file}` : "notes");
+  }).catch((error) => logMac("rec.note.open_failed", { recId: state.recId, error }));
   const auth = authStatusPayload();
   const title = `${state.source} — ${new Date(state.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} (${minutes} min)`;
   const body = [summary || "(summary unavailable)", "", "— Full transcript —", transcript].join("\n");
@@ -9397,12 +9657,14 @@ async function stopMeetingRecording() {
         user_id: auth.userId || undefined,
         title: title.slice(0, 120),
         structured_notes: body.slice(0, 60000),
-        use_case: "meeting",
+        use_case: state.kind,
         source_title: state.source,
       }),
     });
     if (!response.ok) throw new Error(`notes insert ${response.status}`);
     logMac("meeting.synced", { title: textForLog(title), chars: body.length });
+    logMac("rec.saved.cloud", { recId: state.recId, chars: body.length, totalMs: Date.now() - stopAt });
+    if (isLecture) return { ok: true, say: `Done. ${minutes} minutes of lecture, notes written and saved.` };
     return {
       ok: true,
       say: heardBothSides
@@ -9411,7 +9673,8 @@ async function stopMeetingRecording() {
     };
   } catch (error) {
     logMac("meeting.sync.failed", { error });
-    return { ok: true, say: "Recorded and summarized, but the dashboard sync hiccuped. The notes are safe in my log." };
+    logMac("rec.saved.cloud_failed", { recId: state.recId, error, totalMs: Date.now() - stopAt });
+    return { ok: true, say: `Recorded and written up. It is saved on this Mac; the cloud copy did not go through.` };
   }
 }
 
@@ -9529,6 +9792,107 @@ async function ensureLiveCaptionApp() {
   }
 }
 
+/* One place a caption lands, whichever engine heard it. */
+function recordCaptionLine(text, final) {
+  sendToRenderer("braino-mac:live-caption", { text, final });
+  if (meetingState && String(text || "").trim()) {
+    // Partials too, not just finals: the surface exists to prove Braino is hearing
+    // the room, and words appearing as they are spoken is the proof. The renderer
+    // collapses a growing partial into one line rather than stacking near-duplicates.
+    if (final) meetingState.transcript.push({ t: Date.now(), text: text.trim() });
+    sendToRenderer("braino-mac:meeting", {
+      action: "live",
+      text: text.trim(),
+      speaker: meetingCurrentSpeakerName(),
+    });
+  }
+}
+
+/* ── Recorder captions on the one listening lane (2026-10-16) ─────────────
+   Option+N (and Cmd+Shift+E, which is now a lecture through Option+N) used to
+   caption with a separate helper app. It now listens through the same lane as
+   HERA and dictation: Parakeet on device, or Sarvam when Settings says so.
+   The helper reports each utterance as the whole segment so far, so only the
+   new tail becomes a caption line; a rotate closes the segment every ~45s in a
+   pause, the same way LIVE survived an hour. The old helper stays as the
+   fallback when the lane is busy or not warm yet. */
+let recCaptionMode = false;
+let recCaptionStopping = false;
+let recCaptionSettled = "";
+let recCaptionRotatedAt = 0;
+let recCaptionLastHeardAt = 0;
+let recCaptionTimer = null;
+let recCaptionFinalWaiter = null;
+
+function recCaptionNewTail(whole) {
+  const text = String(whole || "").replace(/\s+/g, " ").trim();
+  const before = recCaptionSettled;
+  if (before && text.startsWith(before)) return text.slice(before.length).trim();
+  return before === text ? "" : text;
+}
+
+function handleRecordCaptionEvent(event) {
+  const text = String(event.text || "").trim();
+  if (event.type === "partial") {
+    if (!text || recCaptionStopping) return;
+    recCaptionLastHeardAt = Date.now();
+    recordCaptionLine(text, false);
+    return;
+  }
+  if (event.type === "utterance" || event.type === "segment" || event.type === "final") {
+    const tail = recCaptionNewTail(text);
+    if (tail) recordCaptionLine(tail, true);
+    recCaptionSettled = event.type === "utterance" ? text.replace(/\s+/g, " ").trim() : "";
+    if (event.type === "final") {
+      recCaptionMode = false;
+      recCaptionStopping = false;
+      if (recCaptionFinalWaiter) { recCaptionFinalWaiter(); recCaptionFinalWaiter = null; }
+    }
+  }
+}
+
+function startRecordCaptions() {
+  if (recCaptionMode) return true;
+  const sarvam = sarvamActive();
+  if (!sarvam) {
+    if (!parakeetEnabled() || !parakeet.ready) return false;
+    if (localDictationActive || localDictationStarting || liveTranscriptMode || voiceCaptionMode || parakeet.listening) return false;
+  }
+  if (!parakeetSend("start")) return false;
+  parakeet.listening = true;
+  recCaptionMode = true;
+  recCaptionStopping = false;
+  recCaptionSettled = "";
+  recCaptionRotatedAt = Date.now();
+  recCaptionLastHeardAt = 0;
+  if (recCaptionTimer) clearInterval(recCaptionTimer);
+  recCaptionTimer = setInterval(() => {
+    if (!recCaptionMode || recCaptionStopping) return;
+    const now = Date.now();
+    if (now - recCaptionRotatedAt < LIVE_ROTATE_AFTER_MS) return;
+    if (recCaptionLastHeardAt && now - recCaptionLastHeardAt < LIVE_QUIET_MS) return;
+    recCaptionRotatedAt = now;
+    parakeetSend("rotate");
+  }, 500);
+  logMac("rec.captions.lane", { engine: sarvam ? "sarvam" : "on-device" });
+  return true;
+}
+
+/* Waits (briefly) for the closing words, so the last sentence makes it in. */
+async function stopRecordCaptions() {
+  if (!recCaptionMode) return;
+  if (recCaptionTimer) { clearInterval(recCaptionTimer); recCaptionTimer = null; }
+  recCaptionStopping = true;
+  const done = new Promise((resolve) => { recCaptionFinalWaiter = resolve; });
+  parakeetSend("stop");
+  await Promise.race([done, new Promise((r) => setTimeout(r, 3000))]);
+  recCaptionMode = false;
+  recCaptionStopping = false;
+  recCaptionFinalWaiter = null;
+  parakeet.listening = false;
+  logMac("rec.captions.lane_stopped", {});
+}
+
 function tailLiveCaptions() {
   if (liveCaptionTailTimer) return;
   liveCaptionTailOffset = 0;
@@ -9548,18 +9912,7 @@ function tailLiveCaptions() {
         const kind = sep < 0 ? trimmed : trimmed.slice(0, sep);
         const text = sep < 0 ? "" : trimmed.slice(sep + 1);
         if (kind === "caption" || kind === "caption-final") {
-          sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
-          if (meetingState && text.trim()) {
-            // Partials too, not just finals: the surface exists to prove Braino is hearing
-            // the room, and words appearing as they are spoken is the proof. The renderer
-            // collapses a growing partial into one line rather than stacking near-duplicates.
-            if (kind === "caption-final") meetingState.transcript.push({ t: Date.now(), text: text.trim() });
-            sendToRenderer("braino-mac:meeting", {
-              action: "live",
-              text: text.trim(),
-              speaker: meetingCurrentSpeakerName(),
-            });
-          }
+          recordCaptionLine(text, kind === "caption-final");
         } else if (kind === "unavailable") {
           logMac("caption.helper.unavailable", { reason: textForLog(text) });
         } else if (kind === "caption-ready") {
@@ -9571,6 +9924,7 @@ function tailLiveCaptions() {
 }
 
 function startLiveCaptions() {
+  if (meetingState && startRecordCaptions()) return;
   if (liveCaptionRunning) return;
   liveCaptionRunning = true;
   void (async () => {
@@ -11090,6 +11444,7 @@ async function checkCalendarNext() {
       : null;
     const changed = JSON.stringify(next) !== JSON.stringify(calendarNext);
     calendarNext = next;
+    calendarCheckedAt = Date.now();
     if (changed) {
       logMac("calendar.next", next || { none: true });
       sendToRenderer("braino-mac:calendar-next", { next });
@@ -11110,7 +11465,9 @@ const WA_BADGE_MAX_MS = 10 * 60 * 1000;
 function updateWaBadge(sender) {
   waBadgeCount += 1;
   waBadgeSender = String(sender || "").slice(0, 20);
-  sendToRenderer("braino-mac:wa-badge", { count: waBadgeCount, sender: waBadgeSender });
+  // The newest message rides along so the notch can open and show it (2026-10-15).
+  const last = [...notchWhatsApp].reverse().find((m) => m.text && m.name.slice(0, 20) === waBadgeSender);
+  sendToRenderer("braino-mac:wa-badge", { count: waBadgeCount, sender: waBadgeSender, name: last?.name || waBadgeSender, text: String(last?.text || "").slice(0, 400) });
   /* Ten minutes from the FIRST message: each new one used to restart the
      clock, so a busy chat kept "Komi · 2 new" up all day (2026-10-15). */
   if (!waBadgeTimer) waBadgeTimer = setTimeout(() => { logMac("whatsapp.badge_expired", {}); clearWaBadge(); }, WA_BADGE_MAX_MS);
@@ -14626,6 +14983,12 @@ async function findInstalledApps(appName) {
   return matches;
 }
 
+const WEB_ONLY_APPS = {
+  nexus: { name: "Nexus", url: "https://students.mesaschool.co.in/student" },
+  "mesa nexus": { name: "Nexus", url: "https://students.mesaschool.co.in/student" },
+  mesa: { name: "Nexus", url: "https://students.mesaschool.co.in/student" },
+};
+
 async function openApp(appName, { allowFuzzy = true } = {}) {
   const canonical = canonicalAppName(appName);
   if (!canonical) return { ok: false, error: "No app name was provided." };
@@ -14638,6 +15001,15 @@ async function openApp(appName, { allowFuzzy = true } = {}) {
     requested: textForLog(appName),
     canonical,
   });
+  /* Websites people call apps. "Open Nexus" looked for a Mac app, found none,
+     and fell into a slow step-by-step run (2026-10-17). */
+  const webApp = WEB_ONLY_APPS[String(canonical).trim().toLowerCase()];
+  if (webApp) {
+    await openChromeUrl(webApp.url);
+    logMac("app.open.success", { requested: textForLog(appName), canonical, method: "web_app", url: webApp.url });
+    rememberActed("app", webApp.name);
+    return { ok: true, appName: webApp.name, method: "web_app" };
+  }
   const bundleId = nativeBundleIdForApp(canonical);
   if (bundleId) {
     try {
@@ -16921,10 +17293,12 @@ function macRecentExchanges(turns = 4) {
    not a number. These two are backstops for a runaway, not a budget. */
 const MAC_HIL_HARD_STOP = 60;
 const MAC_HIL_FAILS_IN_A_ROW = 3;
-const MAC_HIL_SOFT_TIME_MS = 90000;
+const MAC_HIL_SOFT_TIME_MS = 200000; // past the 3 minute ask, so he is never stopped before he is asked
 const MAC_HIL_MAX_MS = 420000;
-const MAC_HIL_STUCK_MS = 20000;
-const MAC_HIL_KEEP_GOING_MS = 60000;
+// 3 minutes, not 20s: he stopped every job to ask "keep going?" 100 times
+// (2026-10-17). Real failures still report at once; this is only the nag.
+const MAC_HIL_STUCK_MS = 180000;
+const MAC_HIL_KEEP_GOING_MS = 180000;
 
 /* What a step was, the way you'd say it. For the notch and for "I got to ...". */
 const PLAIN_STEP = {
@@ -17493,6 +17867,31 @@ async function calendarCancelEvent(a = {}) {
   const r = await macCalendar("cancel_event", { eventId: found.id });
   return r.ok ? { ok: true, say: `Cancelled "${found.summary}".` } : { ok: false, say: "Google Calendar didn't let me cancel it." };
 }
+/* Onboarding's Connect step (2026-10-16): open the sign in for Calendar or
+   Spotify, then read a little back so the person watches him use it: their
+   next events, and their song of the month. Read only. */
+ipcMain.handle("braino-mac:onb-connect", async (_e, kind) => {
+  if (kind === "calendar") return { ok: await startGoogleCalendarConnect() };
+  if (kind === "spotify") return { ok: await openSpotifyReconnect(await getBrainoAuthToken().catch(() => "")) };
+  return { ok: false };
+});
+ipcMain.handle("braino-mac:onb-peek", async (_e, kind) => {
+  if (kind === "calendar") {
+    const start = new Date(); const end = new Date(start); end.setDate(end.getDate() + 2); end.setHours(0, 0, 0, 0);
+    const r = await macCalendar("list_events", { timeMin: start.toISOString(), timeMax: end.toISOString(), maxResults: 6 });
+    if (r.notConnected || !r.ok) return { connected: false };
+    return { connected: true, items: (r.events || []).slice(0, 5).map((e) => ({ when: calendarWhen(e.start?.dateTime || e.start?.date || ""), title: String(e.summary || "Untitled").slice(0, 60), meet: Boolean(e.meetUrl) })) };
+  }
+  if (kind === "spotify") {
+    const taste = await callSpotifyFunction("spotify-player-state", { view: "taste" }).catch(() => null);
+    const top = taste?.topThisMonth?.[0] || null;
+    const recent = (taste?.recentlyPlayed || []).slice(0, 3).map((p) => ({ title: String(p.title || p.track || ""), artist: String(p.artist || "") }));
+    if (!top && !recent.length) return { connected: false };
+    return { connected: true, top: top ? { title: String(top.title || top.track || ""), artist: String(top.artist || "") } : null, recent };
+  }
+  return { connected: false };
+});
+
 async function calendarJoinNextMeet() {
   const r = await macCalendar("open_next_meet", { maxResults: 10, timeMax: new Date(Date.now() + 864e5).toISOString() });
   if (r.notConnected) return calendarNotConnectedReply();
@@ -17670,31 +18069,6 @@ async function saveMesaToken(raw) {
 ipcMain.handle("braino-mac:mesa-token-save", async (_e, token) => saveMesaToken(token));
 ipcMain.handle("braino-mac:mesa-token-status", async () => {
   try { const j = JSON.parse(fs.readFileSync(MESA_TOKEN_PATH, "utf8")); return { connected: Boolean(j.token), name: j.name || "", program: j.program || "", at: j.at || "" }; } catch (_) { return { connected: false }; }
-/* Onboarding's Connect step (2026-10-16): open the sign in for Calendar or
-   Spotify, then read a little back so the person watches him use it: their
-   next events, and their song of the month. Read only. */
-ipcMain.handle("braino-mac:onb-connect", async (_e, kind) => {
-  if (kind === "calendar") return { ok: await startGoogleCalendarConnect() };
-  if (kind === "spotify") return { ok: await openSpotifyReconnect(await getBrainoAuthToken().catch(() => "")) };
-  return { ok: false };
-});
-ipcMain.handle("braino-mac:onb-peek", async (_e, kind) => {
-  if (kind === "calendar") {
-    const start = new Date(); const end = new Date(start); end.setDate(end.getDate() + 2); end.setHours(0, 0, 0, 0);
-    const r = await macCalendar("list_events", { timeMin: start.toISOString(), timeMax: end.toISOString(), maxResults: 6 });
-    if (r.notConnected || !r.ok) return { connected: false };
-    return { connected: true, items: (r.events || []).slice(0, 5).map((e) => ({ when: calendarWhen(e.start?.dateTime || e.start?.date || ""), title: String(e.summary || "Untitled").slice(0, 60), meet: Boolean(e.meetUrl) })) };
-  }
-  if (kind === "spotify") {
-    const taste = await callSpotifyFunction("spotify-player-state", { view: "taste" }).catch(() => null);
-    const top = taste?.topThisMonth?.[0] || null;
-    const recent = (taste?.recentlyPlayed || []).slice(0, 3).map((p) => ({ title: String(p.title || p.track || ""), artist: String(p.artist || "") }));
-    if (!top && !recent.length) return { connected: false };
-    return { connected: true, top: top ? { title: String(top.title || top.track || ""), artist: String(top.artist || "") } : null, recent };
-  }
-  return { connected: false };
-});
-
 });
 ipcMain.handle("braino-mac:mesa-token-remove", async () => { try { fs.unlinkSync(MESA_TOKEN_PATH); } catch (_) {} logMac("mesa.token_removed", {}); return { ok: true }; });
 ipcMain.handle("braino-mac:mesa-open-developer", async () => { await openChromeUrl(MESA_DEVELOPER_URL); return { ok: true }; });
@@ -18454,6 +18828,22 @@ async function macAnswerScheduleFast(text) {
  * The one question attendance is actually asked, and it needs the gap in
  * SESSIONS rather than the percentage, because "you are on 68%" does not tell
  * anyone whether one more class fixes it. */
+/* Mesa returns the courses as data; this is the sentence he says. */
+function spokenMesaAttendance(text) {
+  let data = null;
+  try { data = JSON.parse(String(text || "").slice(String(text || "").indexOf("{"))); } catch (_) { return ""; }
+  const courses = (data?.courses || []).filter((c) => Number(c?.total) > 0);
+  if (!courses.length) return "";
+  const attended = courses.reduce((n, c) => n + (Number(c.attended) || 0), 0);
+  const total = courses.reduce((n, c) => n + (Number(c.total) || 0), 0);
+  const short = (name) => String(name || "").split(/\s+with\s+|\s*:\s*/i)[0].trim();
+  const low = courses.filter((c) => Number(c.percentage) < 75).sort((a, b) => a.percentage - b.percentage).slice(0, 3);
+  const overall = `You're at ${Math.round((attended / total) * 100)}% overall, ${attended} of ${total} classes.`;
+  return low.length
+    ? `${overall} Lowest: ${low.map((c) => `${short(c.course)} at ${Math.round(c.percentage)}%`).join(", ")}.`
+    : `${overall} Every course is above 75%.`;
+}
+
 async function lookupAttendance(args = {}) {
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot see your attendance." };
@@ -18468,6 +18858,14 @@ async function lookupAttendance(args = {}) {
     if (!res.ok) throw new Error(`attendance ${res.status}`);
     const rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
+      // Connected to Mesa? Ask Mesa itself (2026-10-17): the old answer below
+      // sent people to Chrome even when the token could read it directly.
+      if (readMesaToken()) {
+        const live = await runMesaNexus({ tool: "get_attendance_summary", args: {} }).catch(() => null);
+        logMac("attendance.mesa_live", { ok: Boolean(live?.ok) });
+        const spoken = live?.ok ? spokenMesaAttendance(live.say) : "";
+        if (spoken) return { ok: true, say: spoken, detail: live.say.slice(0, 3000), source: "mesa" };
+      }
       /* Said to you, so in your words: "Run the nexus_sync_all tool" was being
          read out loud (2026-09-26). Attendance still only syncs from Chrome. */
       return { ok: true, say: "I don't have your attendance yet. It syncs from your Chrome: open Nexus attendance there once, then ask me again.", detail: "No attendance rows. nexus_sync_all syncs the timetable; attendance comes from the Chrome extension on the Nexus attendance page." };
@@ -19194,6 +19592,7 @@ const MAC_HIL_TOOLS = {
       : openApp(target);
   },
 };
+
 /* Intelligent answers in the chat (2026-10-15): when a tool comes back with
    something worth drawing (a day of events, connections, a choice, sources),
    the chat shows it as a card instead of only a sentence. Every tool is
@@ -22013,7 +22412,6 @@ async function runDelegate(prompt, options = {}) {
       return { ok: false, say: "I don't see any steps on your clipboard. Copy them, then ask me again.", source: "handoff" };
     }
   }
-
   // A new job ends the last one's use of his browser; an answer to it does not.
   if (!pendingMacWorkflow && !/^show me\b|^(?:hide|close) (?:it|that|the browser|your browser)\b/i.test(String(raw || "").replace(/^(?:hey\s+)?brain(?:o|elle)[\s,]*/i, ""))) macOwnJob = null;
 
@@ -24840,7 +25238,8 @@ function openBrainoApp(page) {
     fullscreenable: false,
     backgroundColor: "#ffffff",
     show: false,
-    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+    // plugins: Chromium's PDF viewer, so notes open inside the app (Notes page).
+    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false, plugins: true },
   });
   appWindow.webContents.once("did-finish-load", () => {
     if (page) appWindow?.webContents.send("braino-mac:app-go", page);
@@ -25140,23 +25539,13 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   try {
     // Where this came from decides where an approval card for it appears.
     macCommandSurface = appWindow && !appWindow.isDestroyed() && event?.sender === appWindow.webContents ? "chat" : "voice";
-    /* Every input the same way (2026-10-15): a command from the app's chat
-       goes to the notch and runs exactly as if it were spoken. */
-    if (macCommandSurface === "chat" && options?.reason === "app_chat" && dockWindow && !dockWindow.isDestroyed()) {
-      /* It runs in the notch like speech, and the chat waits for that job's
-         answer (and its card) so you read it where you typed it. */
-      const waited = new Promise((resolve) => {
-        chatForward = { resolve, started: false, at: Date.now() };
-        // Handled in the notch without a job (a stop, a hide): say so.
-        setTimeout(() => { if (chatForward && !chatForward.started) { chatForward = null; resolve({ ok: true, say: "Done, in the notch.", source: "to_notch" }); } }, 20000);
-        setTimeout(() => { if (chatForward) { chatForward = null; resolve({ ok: true, say: "Still working on it in the notch.", source: "to_notch" }); } }, 7 * 60000);
-      });
-      dockWindow.webContents.send("braino-mac:run-input", { text: String(prompt || "") });
-      logMac("input.to_notch", { chars: String(prompt || "").length });
-      return await waited;
-    }
+    /* Chat stays in chat (2026-10-15): a command typed in the app runs the
+       same brain as voice but answers only in the chat, never the notch. */
     if (chatForward && !chatForward.started) { chatForward.started = true; chatForward.jobStartedAt = Date.now(); }
-    result = await runDelegate(prompt, options || {});
+    const chatStartedAt = Date.now();
+    macChatRunning = macCommandSurface === "chat";
+    try { result = await runDelegate(prompt, options || {}); } finally { macChatRunning = false; }
+    if (macCommandSurface === "chat" && result && macLastToolUi && macLastToolUi.at >= chatStartedAt) result = { ...result, ui: macLastToolUi.ui };
   } finally {
     macDelegatesInFlight = Math.max(0, macDelegatesInFlight - 1);
     // Whatever the handler did (or threw), a "thinking" it did not close is
@@ -25341,7 +25730,14 @@ const DASHBOARD_SOURCES = {
     table: "notes",
     select: "id,title,source_title,structured_notes,use_case,created_at",
     order: "created_at.desc",
-    limit: 40,
+    limit: 300,
+  },
+  // Lectures (LIVE mode) land in braino_docs, not notes.
+  docs: {
+    table: "braino_docs",
+    select: "id,slug,kind,title,markdown,overview,happened_on",
+    order: "happened_on.desc",
+    limit: 300,
   },
   // X Automation and Highlights, same tables the website reads.
   xauto: {
@@ -25855,7 +26251,12 @@ async function pollNowPlaying() {
 // Spotify, the user's words never survive a turn, and realtime feels broken.
 // So the moment a voice session starts, the PLAYER volume dips to ~20% (his
 // own TTS rides system volume, untouched) and is restored on session end.
-let musicDuckState = null; // { source, volume }
+let musicDuckState = null; // { source, volume, chrome }
+// The latest ask wins: an "up" that lands while a "down" is still reading the
+// player must not leave the music stuck at 20%.
+let musicDuckWanted = false;
+const CHROME_DIP_JS = "(function(){var n=0;document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.muted&&m.dataset.brainoVol===undefined){m.dataset.brainoVol=String(m.volume);m.volume=m.volume*0.2;n++;}});return String(n);})()";
+const CHROME_UNDIP_JS = "(function(){var n=0;document.querySelectorAll('[data-braino-vol]').forEach(function(m){var v=Number(m.dataset.brainoVol);delete m.dataset.brainoVol;if(isFinite(v)){m.volume=v;n++;}});return String(n);})()";
 
 async function readAppleMusicVolume() {
   try {
@@ -25872,41 +26273,148 @@ async function setPlayerVolume(source, volume) {
   await execFileP("/usr/bin/osascript", ["-e", `tell application "${appName}" to set sound volume to ${Math.max(0, Math.min(100, Math.round(volume)))}`], { timeout: 4000 });
 }
 
+async function restoreMusicDuck() {
+  if (!musicDuckState) return { ok: true };
+  const restore = musicDuckState;
+  musicDuckState = null;
+  if (restore.source && restore.volume != null) await setPlayerVolume(restore.source, restore.volume).catch(() => {});
+  if (restore.chrome) await chromeMediaEachTab(CHROME_UNDIP_JS).catch(() => 0);
+  logMac("music.unduck", { source: restore.source, volume: restore.volume, chrome: restore.chrome });
+  return { ok: true, restored: restore.source || "chrome" };
+}
+
 ipcMain.handle("braino-mac:music-duck", async (_event, payload = {}) => {
   const wantDuck = Boolean(payload?.duck);
+  musicDuckWanted = wantDuck;
   try {
     if (wantDuck) {
       if (musicDuckState) return { ok: true, already: true };
+      /* Every sound the mic would hear goes down, not just Spotify: his echo
+         cancelling only removes his own voice, so a YouTube video in Chrome
+         was half of why words got lost under music. */
+      musicDuckState = { source: "", volume: null, chrome: 0 };
+      const state = musicDuckState;
+      state.chrome = await chromeMediaEachTab(CHROME_DIP_JS).catch(() => 0);
       const spotify = await readSpotifyMacState().catch(() => null);
       if (spotify?.ok && /playing/i.test(spotify.state || "") && spotify.volumePercent != null) {
-        musicDuckState = { source: "spotify", volume: spotify.volumePercent };
+        Object.assign(state, { source: "spotify", volume: spotify.volumePercent });
         await setPlayerVolume("spotify", Math.max(8, Math.round(spotify.volumePercent * 0.2)));
-        logMac("music.duck", musicDuckState);
-        return { ok: true, ducked: "spotify" };
       }
-      const music = await readAppleMusicState().catch(() => null);
+      const music = state.source ? null : await readAppleMusicState().catch(() => null);
       if (music?.ok && /playing/i.test(music.state || "")) {
         const volume = await readAppleMusicVolume();
         if (volume != null) {
-          musicDuckState = { source: "music", volume };
+          Object.assign(state, { source: "music", volume });
           await setPlayerVolume("music", Math.max(8, Math.round(volume * 0.2)));
-          logMac("music.duck", musicDuckState);
-          return { ok: true, ducked: "music" };
         }
       }
-      return { ok: true, ducked: "" };
+      if (!state.source && !state.chrome) {
+        if (musicDuckState === state) musicDuckState = null;
+        return { ok: true, ducked: "" };
+      }
+      logMac("music.duck", { source: state.source, volume: state.volume, chrome: state.chrome });
+      // The session closed while we were turning things down: put them back.
+      if (!musicDuckWanted && musicDuckState === state) await restoreMusicDuck();
+      return { ok: true, ducked: state.source || "chrome" };
     }
-    if (!musicDuckState) return { ok: true };
-    const restore = musicDuckState;
-    musicDuckState = null;
-    await setPlayerVolume(restore.source, restore.volume);
-    logMac("music.unduck", restore);
-    return { ok: true, restored: restore.source };
+    return await restoreMusicDuck();
   } catch (error) {
     logMac("music.duck.failed", { wantDuck, error });
     musicDuckState = null;
     return { ok: false };
   }
+});
+
+/* Hold the room while you talk (Wispr-style). "Hey Braino" pauses whatever is
+ * playing: Spotify, Apple Music, any video or audio in Chrome. The moment he
+ * has understood you it all resumes, and he works in the background.
+ * Only what HE paused is resumed: a Spotify track that changed, or a Chrome
+ * player you paused yourself, is left alone. */
+let mediaHoldState = null; // { spotifyTrack, musicTrack, chromeHeld, at }
+
+const CHROME_HOLD_JS = "(function(){var n=0;document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended&&m.currentTime>0&&!m.muted){m.pause();m.dataset.brainoHeld='1';n++;}});return String(n);})()";
+const CHROME_RELEASE_JS = (resume) => `(function(){var n=0;document.querySelectorAll('[data-braino-held]').forEach(function(m){delete m.dataset.brainoHeld;${resume ? "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});n++;}" : ""}});return String(n);})()`;
+
+async function chromeMediaEachTab(js) {
+  const script = `
+if application "Google Chrome" is not running then return "0"
+set total to 0
+tell application "Google Chrome"
+  repeat with w in windows
+    repeat with t in tabs of w
+      try
+        set r to execute t javascript "${js.replace(/"/g, '\\"')}"
+        set total to total + (r as integer)
+      end try
+    end repeat
+  end repeat
+end tell
+return total as text`;
+  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 5000 });
+  return Number(String(stdout).trim()) || 0;
+}
+
+async function playerHold(appName) {
+  const script = `
+if application "${appName}" is not running then return ""
+tell application "${appName}"
+  if player state is playing then
+    set n to name of current track
+    pause
+    return n
+  end if
+end tell
+return ""`;
+  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 3000 });
+  return String(stdout || "").trim();
+}
+
+async function playerResume(appName, track) {
+  const script = `
+if application "${appName}" is not running then return "no"
+tell application "${appName}"
+  if player state is paused and (name of current track) is "${track.replace(/["\\]/g, "")}" then
+    play
+    return "yes"
+  end if
+end tell
+return "no"`;
+  const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 3000 });
+  return String(stdout).trim() === "yes";
+}
+
+ipcMain.handle("braino-mac:media-hold", async (_event, payload = {}) => {
+  const startedAt = Date.now();
+  if (payload?.hold) {
+    if (mediaHoldState) return { ok: true, already: true };
+    mediaHoldState = { spotifyTrack: "", musicTrack: "", chromeHeld: 0, at: startedAt };
+    const held = mediaHoldState;
+    // A release can arrive while the pause is still in flight; it waits on this.
+    held.ready = Promise.all([
+      playerHold("Spotify").catch(() => ""),
+      playerHold("Music").catch(() => ""),
+      chromeMediaEachTab(CHROME_HOLD_JS).catch(() => 0),
+    ]);
+    const [spotify, music, chrome] = await held.ready;
+    Object.assign(held, { spotifyTrack: spotify, musicTrack: music, chromeHeld: chrome });
+    logMac("media.hold", { spotify: Boolean(spotify), music: Boolean(music), chrome, ms: Date.now() - startedAt });
+    return { ok: true, held: Boolean(spotify || music || chrome) };
+  }
+  const held = mediaHoldState;
+  mediaHoldState = null;
+  if (!held) return { ok: true };
+  if (held.ready) {
+    const [spotifyTrack, musicTrack, chromeHeld] = await held.ready;
+    Object.assign(held, { spotifyTrack, musicTrack, chromeHeld });
+  }
+  const resume = payload?.resume !== false;
+  const [spotify, music, chrome] = await Promise.all([
+    resume && held.spotifyTrack ? playerResume("Spotify", held.spotifyTrack).catch(() => false) : false,
+    resume && held.musicTrack ? playerResume("Music", held.musicTrack).catch(() => false) : false,
+    held.chromeHeld ? chromeMediaEachTab(CHROME_RELEASE_JS(resume)).catch(() => 0) : 0,
+  ]);
+  logMac("media.release", { resume, why: String(payload?.why || ""), spotify, music, chrome, heldMs: startedAt - held.at, ms: Date.now() - startedAt });
+  return { ok: true };
 });
 
 ipcMain.handle("braino-mac:timer-cancel", (_event, payload = {}) => {
@@ -26154,6 +26662,161 @@ async function lectureNotes(transcript, subject) {
   return { notes: String(data.notes).trim(), overview: String(data.overview || "").trim() };
 }
 
+/* Meetings and lectures as PDFs in ~/Documents/Braino (notes-pdf.cjs, spec in
+   docs/NOTES_PDF_DESIGN.md). One write-up call per recording, then print. If the
+   write-up fails, the notes he already has are printed instead: never nothing. */
+const NOTES_PDF_ROOT = path.join(os.homedir(), "Documents", "Braino");
+const NOTES_WRITEUP_TIMEOUT_MS = 90000;
+async function saveNotesPdf({ kind, source, minutes, date, notes, transcript }) {
+  let markdown = "";
+  const started = Date.now();
+  try {
+    const authToken = await getBrainoAuthToken();
+    const stopWaiting = new AbortController();
+    const bell = setTimeout(() => stopWaiting.abort(), NOTES_WRITEUP_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ notes: "", chatHistory: [], responseMedium: "text", message: notesPdf.writeUpPrompt(kind, { minutes, source, notes, transcript }) }),
+        signal: stopWaiting.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      const reply = String(data?.reply || "").trim();
+      if (res.ok && /^\s*#\s+/m.test(reply) && reply.length > 200) markdown = reply;
+    } finally { clearTimeout(bell); }
+    logMac("notes_pdf.writeup", { kind, ok: Boolean(markdown), ms: Date.now() - started, chars: markdown.length });
+  } catch (error) {
+    logMac("notes_pdf.writeup_failed", { kind, ms: Date.now() - started, error: String(error?.message || error) });
+  }
+  if (!markdown) markdown = String(notes || "").trim() || "_The write-up was not ready. The full transcript is below._";
+  const fallbackTitle = `${kind === "lecture" ? "Lecture" : source || "Meeting"}, ${new Date(date || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "long" })}`;
+  const title = notesPdf.titleFrom(markdown, fallbackTitle);
+  const chips = [
+    new Date(date || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+    minutes ? `${Math.max(1, Math.round(minutes))} min` : "",
+    kind === "meeting" ? source : "Lecture",
+    authStatusPayload()?.displayName ? `@${authStatusPayload().displayName}` : "",
+  ];
+  const saved = await notesPdf.savePdf({ BrowserWindow, kind, title, chips, markdown, transcript, source: kind === "meeting" ? source : (source !== "Lecture" ? source : ""), minutes, date, log: logMac, root: NOTES_PDF_ROOT });
+  if (saved.ok && appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:notes-changed");
+  return saved;
+}
+
+/* The Notes page in the app: PDFs on this Mac plus the notes synced to his account. */
+function listNotesPdfs() {
+  const rows = [];
+  for (const [kind, k] of Object.entries(notesPdf.KINDS)) {
+    const dir = path.join(NOTES_PDF_ROOT, k.folder);
+    let names = [];
+    try { names = fs.readdirSync(dir).filter((n) => n.toLowerCase().endsWith(".pdf")); } catch (_) { continue; }
+    for (const name of names) {
+      try { rows.push({ kind, name: name.replace(/\.pdf$/i, ""), file: path.join(dir, name), at: fs.statSync(path.join(dir, name)).mtimeMs }); } catch (_) {}
+    }
+  }
+  return rows.sort((a, b) => b.at - a.at);
+}
+const insideNotesRoot = (file) => { const r = path.resolve(String(file || "")); return r.startsWith(NOTES_PDF_ROOT + path.sep) && r.toLowerCase().endsWith(".pdf"); };
+ipcMain.handle("braino-mac:notes-library", async () => ({ ok: true, pdfs: listNotesPdfs(), root: NOTES_PDF_ROOT }));
+ipcMain.handle("braino-mac:notes-render", async (_event, markdown) => ({ ok: true, html: notesPdf.markdownToHtml(String(markdown || "")) }));
+ipcMain.handle("braino-mac:notes-save-pdf", async (_event, payload = {}) => {
+  const kind = notesPdf.KINDS[payload?.kind] ? payload.kind : "meeting";
+  const markdown = String(payload?.markdown || "");
+  if (!markdown.trim()) return { ok: false, error: "empty" };
+  return notesPdf.savePdf({ BrowserWindow, kind, title: String(payload?.title || "").slice(0, 90) || undefined, chips: [new Date(payload?.date || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })], markdown, source: String(payload?.source || ""), date: payload?.date || Date.now(), log: logMac, root: NOTES_PDF_ROOT });
+});
+ipcMain.handle("braino-mac:notes-text", async (_event, file) => {
+  if (!insideNotesRoot(file)) return { ok: false, error: "outside" };
+  const side = path.join(path.dirname(path.resolve(file)), ".text", path.basename(file).replace(/\.pdf$/i, ".json"));
+  try { return { ok: true, ...JSON.parse(fs.readFileSync(side, "utf8")) }; } catch (_) { return { ok: false, error: "no_text" }; }
+});
+/* A tutor for one note: questions answered from its notes and transcript only. */
+ipcMain.handle("braino-mac:notes-ask", async (_event, payload = {}) => {
+  const question = String(payload?.question || "").trim();
+  const context = String(payload?.notes || "").slice(0, 60000);
+  if (!question || !context) return { ok: false, error: "empty" };
+  const history = (Array.isArray(payload?.history) ? payload.history : []).slice(-8)
+    .map((m) => ({ role: m?.role === "assistant" ? "assistant" : "user", content: String(m?.content || "").slice(0, 2000) }));
+  try {
+    const authToken = await getBrainoAuthToken();
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        notes: context,
+        chatHistory: history,
+        responseMedium: "text",
+        message: `Answer like a patient tutor, using ONLY these notes and transcript. If they do not cover it, say so plainly. Short, clear, plain words, no em dashes.\n\nQuestion: ${question}`,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    logMac("notes.ask", { ok: res.ok && Boolean(reply), chars: context.length });
+    return reply ? { ok: true, reply } : { ok: false, error: data?.error || `status ${res.status}` };
+  } catch (error) {
+    logMac("notes.ask_failed", { error: String(error?.message || error) });
+    return { ok: false, error: "network" };
+  }
+});
+/* A note that is only a transcript gets written up on request, same as a fresh recording. */
+ipcMain.handle("braino-mac:notes-write-up", async (_event, payload = {}) => {
+  const transcript = String(payload?.transcript || "").trim();
+  if (!transcript) return { ok: false, error: "empty" };
+  const kind = payload?.kind === "lecture" ? "lecture" : "meeting";
+  const minutes = Math.max(1, Math.round(transcript.split(/\s+/).length / 140));
+  return saveNotesPdf({ kind, source: String(payload?.source || (kind === "lecture" ? "Lecture" : "Meeting")), minutes, date: payload?.date || Date.now(), notes: String(payload?.notes || ""), transcript });
+});
+/* Rename a note from the app: a PDF (and the words beside it) on this Mac, or
+   the title of a note or lecture synced to his account. */
+ipcMain.handle("braino-mac:notes-rename", async (_event, payload = {}) => {
+  const title = String(payload?.title || "").replace(/[\n\r]+/g, " ").trim().slice(0, 120);
+  if (!title) return { ok: false, error: "empty" };
+  if (payload?.file) {
+    const from = path.resolve(String(payload.file));
+    if (!insideNotesRoot(from)) return { ok: false, error: "outside" };
+    const dateBit = (path.basename(from).match(/^\d{4}-\d{2}-\d{2}/) || [""])[0];
+    const safe = title.replace(/[\/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 90);
+    let to = path.join(path.dirname(from), `${dateBit ? `${dateBit} · ` : ""}${safe}.pdf`);
+    for (let n = 2; to !== from && fs.existsSync(to) && n < 100; n++) to = to.replace(/( \d+)?\.pdf$/, ` ${n}.pdf`);
+    try {
+      if (to !== from) fs.renameSync(from, to);
+      const side = (f) => path.join(path.dirname(f), ".text", path.basename(f).replace(/\.pdf$/i, ".json"));
+      try {
+        const data = JSON.parse(fs.readFileSync(side(from), "utf8"));
+        fs.writeFileSync(side(to), JSON.stringify({ ...data, title }));
+        if (to !== from) fs.rmSync(side(from), { force: true });
+      } catch (_) {}
+      return { ok: true, file: to, title };
+    } catch (error) {
+      logMac("notes.rename_failed", { error: String(error?.message || error) });
+      return { ok: false, error: "rename_failed" };
+    }
+  }
+  const table = payload?.table === "braino_docs" ? "braino_docs" : payload?.table === "notes" ? "notes" : "";
+  const id = String(payload?.id || "");
+  if (!table || !id) return { ok: false, error: "unknown_note" };
+  try {
+    const authToken = await getBrainoAuthToken();
+    if (!authToken) return { ok: false, error: "signed_out" };
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) { logMac("notes.rename_failed", { table, status: res.status }); return { ok: false, error: `http_${res.status}` }; }
+    return { ok: true, title };
+  } catch (error) {
+    logMac("notes.rename_failed", { table, error: String(error?.message || error) });
+    return { ok: false, error: "network" };
+  }
+});
+ipcMain.handle("braino-mac:notes-reveal", async (_event, file) => {
+  if (file === "root") { fs.mkdirSync(NOTES_PDF_ROOT, { recursive: true }); shell.openPath(NOTES_PDF_ROOT); return { ok: true }; }
+  if (!insideNotesRoot(file)) return { ok: false, error: "outside" };
+  shell.showItemInFolder(path.resolve(file));
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
   const transcript = String(payload?.transcript || "").trim();
   if (!transcript) return { ok: false, reason: "empty" };
@@ -26173,6 +26836,8 @@ ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
   } catch (error) {
     logMac("lecture.notes.failed", { ms: Date.now() - notesStartedAt, error: String(error?.message || error) });
   }
+  // Saved on this Mac even when he is not signed in, so a lecture is never lost to sync.
+  void saveNotesPdf({ kind: "lecture", source: String(payload?.subject || "").trim() || "Lecture", minutes, date: Date.now(), notes, transcript });
 
   try {
     const auth = authStatusPayload();

@@ -27,7 +27,7 @@ serve(async (req) => {
   const { data: connection } = await supabase
     .from("x_connections")
     .select("user_identifier, username, display_name, x_user_id")
-    .ilike("username", requestedUsername)
+    .ilike("username", requestedUsername.replace(/[\\%_]/g, "\\$&"))
     .maybeSingle();
 
   if (!connection) {

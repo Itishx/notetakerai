@@ -20,12 +20,12 @@ test("2. chat that reached main goes back to the voice session", () => {
 });
 
 test("3. the loop stops at 20 seconds and asks; a yes lifts the limit, a no stops", () => {
-  assert.match(main, /const MAC_HIL_STUCK_MS = 20000;/);
+  assert.match(main, /const MAC_HIL_STUCK_MS = 180000;/);
   // "Keep going" buys a minute, never the rest of the seven (2026-09-27).
   assert.match(main, /let stuckAt = Date\.now\(\) \+ \(resume\?\.keepGoing \? MAC_HIL_KEEP_GOING_MS : MAC_HIL_STUCK_MS\);/);
   // 20 seconds with no move that worked, not 20 seconds from the start (2026-10-01).
   assert.match(main, /if \(settled\?\.ok !== false\) stuckAt = Math\.max\(stuckAt, Date\.now\(\) \+ MAC_HIL_STUCK_MS\);/);
-  assert.match(main, /const MAC_HIL_KEEP_GOING_MS = 60000;/);
+  assert.match(main, /const MAC_HIL_KEEP_GOING_MS = 180000;/);
   assert.doesNotMatch(main, /keepGoing \? Infinity/);
   // One run's questions share one 90s clock, at most two of them.
   assert.match(main, /const HIL_ASK_TTL_MS = 90000;/);

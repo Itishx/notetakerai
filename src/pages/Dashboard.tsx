@@ -2798,7 +2798,7 @@ export default function Dashboard() {
   const notesByFilter = useMemo(
     () =>
       notes
-        .filter((n) => n.use_case !== "memory" && n.use_case !== "highlight")
+        .filter((n) => n.use_case !== "memory" && n.use_case !== "highlight" && n.use_case !== "agent")
         .filter((note) => {
           const matchesSearch =
             !searchQuery ||
@@ -4417,7 +4417,7 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {["all", "lecture", "meeting", "page", "general", "agent"].map((filter) => (
+                    {["all", "lecture", "meeting", "page", "general"].map((filter) => (
                       <button
                         key={filter}
                         type="button"

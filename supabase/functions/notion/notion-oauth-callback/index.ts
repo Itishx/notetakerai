@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { verifySignedOAuthState } from "../../_shared/google-calendar.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 serve(async (req) => {
@@ -22,7 +23,7 @@ serve(async (req) => {
 
     let userIdentifier: string;
     try {
-      const parsed = JSON.parse(atob(state));
+      const parsed = await verifySignedOAuthState(state, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "");
       userIdentifier = parsed.userIdentifier;
     } catch {
       return new Response(renderHTML(false, "Invalid state parameter"), {

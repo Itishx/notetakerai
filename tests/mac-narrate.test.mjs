@@ -62,3 +62,10 @@ test("steps are said from the action, and looking or waiting is silent", () => {
   assert.equal(stepLine({ type: "navigate", url: "x" }), "Opening the page.");
   assert.equal(stepLine({ type: "tool", tool: "web_search" }, () => "searching the web"), "Searching the web.");
 });
+
+test("he talks to you, never about 'the user' (2026-10-17)", () => {
+  const { asDoing: doing } = require("../mac/braino-mac/narrate.cjs");
+  assert.equal(doing("Open the meeting so the user can confirm it"), "Opening the meeting so you can confirm it.");
+  assert.equal(doing("Open Nexus and tell the user their next class"), "Opening Nexus and tell you your next class.");
+  assert.equal(doing("Explain how it would make the user's life better"), "Explaining how it would make your life better.");
+});

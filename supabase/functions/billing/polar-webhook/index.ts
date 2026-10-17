@@ -1,25 +1,29 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
-// Polar sends webhooks signed with HMAC-SHA256
-async function verifyPolarSignature(body: string, signature: string, secret: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-  const sigBytes = hexToBytes(signature);
-  return await crypto.subtle.verify("HMAC", key, new Uint8Array(sigBytes.buffer) as any, encoder.encode(body));
-}
+// Polar signs webhooks with the Standard Webhooks spec:
+// HMAC-SHA256 over "<webhook-id>.<webhook-timestamp>.<body>", base64, sent as "v1,<sig>".
+// Polar uses the secret's raw UTF-8 bytes as the key ("whsec_" secrets are base64).
+async function verifyPolarSignature(req: Request, body: string, secret: string): Promise<boolean> {
+  const id = req.headers.get("webhook-id");
+  const timestamp = req.headers.get("webhook-timestamp");
+  const header = req.headers.get("webhook-signature");
+  if (!id || !timestamp || !header) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
 
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
+  const keyBytes = secret.startsWith("whsec_")
+    ? Uint8Array.from(atob(secret.slice(6)), (c) => c.charCodeAt(0))
+    : new TextEncoder().encode(secret);
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${body}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+
+  return header.split(" ").some((part) => {
+    const sig = part.split(",")[1] || "";
+    if (sig.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+    return diff === 0;
+  });
 }
 
 Deno.serve(async (req) => {
@@ -28,9 +32,6 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.text();
-  const rawSig = req.headers.get("webhook-signature") || req.headers.get("x-polar-signature") || "";
-  // Polar sends signature as "v1=<hex>" — strip the prefix
-  const signature = rawSig.includes("=") ? rawSig.split("=").slice(1).join("=") : rawSig;
   const webhookSecret = Deno.env.get("POLAR_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
@@ -38,13 +39,10 @@ Deno.serve(async (req) => {
     return new Response("Webhook secret not configured", { status: 500 });
   }
 
-  // Verify signature — skip if no signature provided (allow testing without sig)
-  if (signature) {
-    const isValid = await verifyPolarSignature(body, signature, webhookSecret);
-    if (!isValid) {
-      console.error("Invalid webhook signature, rawSig:", rawSig);
-      return new Response("Invalid signature", { status: 401 });
-    }
+  // Every request must be signed by Polar. Unsigned requests could grant anyone premium.
+  if (!(await verifyPolarSignature(req, body, webhookSecret))) {
+    console.error("Invalid or missing webhook signature");
+    return new Response("Invalid signature", { status: 401 });
   }
 
   let event: any;

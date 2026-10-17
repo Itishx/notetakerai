@@ -17,6 +17,11 @@ function clean(text) {
     .replace(/[—–]/g, ",")
     .replace(/^\s*(?:the user|user|they|he|she)\s+(?:wants?|would like|needs?|asked)\s+(?:me\s+)?to\s+/i, "")
     .replace(/^\s*(?:i\s+(?:will|need to|should|am going to|'ll)|let me|now|next|then|so)\s+/i, "")
+    /* The goal is written about you ("so the user can confirm it"), and he
+       says it to you (2026-10-17). */
+    .replace(/\bthe user's\b/gi, "your")
+    .replace(/\bthe user\s+(their|his|her)\b/gi, "you your")
+    .replace(/\bthe user\b/gi, "you")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[.!?,;:]+$/, "");

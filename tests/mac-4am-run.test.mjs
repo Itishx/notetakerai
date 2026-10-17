@@ -29,7 +29,7 @@ test("HIL learned the use cases by intent, in every brain, and its version moved
 
 test("the agent stops honestly: three fails in a row, or 90 seconds", () => {
   assert.match(main, /const MAC_HIL_FAILS_IN_A_ROW = 3;/);
-  assert.match(main, /const MAC_HIL_SOFT_TIME_MS = 90000;/);
+  assert.match(main, /const MAC_HIL_SOFT_TIME_MS = 200000;/);
   assert.match(main, /logMac\("hil\.loop\.honest_stop"/);
 });
 

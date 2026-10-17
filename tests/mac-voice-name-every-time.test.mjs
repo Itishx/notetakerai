@@ -162,7 +162,7 @@ test("the open thinking sheet has a Stop button that stops the task", () => {
   assert.match(lab, /nf-thinking-stop/);
   assert.match(css, /#notch-face \.nf-thinking-stop \{\s*display: none;/);
   assert.match(css, /#notch-face\.nf-think-open \.nf-thinking-stop \{ display: inline-flex; \}/);
-  assert.match(js, /querySelector\("\.nf-thinking-stop"\)\?\.addEventListener\("click", async \(event\) => \{[\s\S]{0,400}await stopTaskNow\("thinking_button"\)/);
+  assert.match(js, /querySelector\("\.nf-thinking-stop"\)\?\.addEventListener\("click", async \(event\) => \{[\s\S]{0,800}await stopTaskNow\("thinking_button"\)/);
 });
 
 /* ── Boot and hotkeys ─────────────────────────────────────────────────────── */

@@ -6814,6 +6814,67 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
   #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-q::after { animation: none !important; }
 }
 
+/* ── Recording: the default notch, a little wider (2026-10-16) ──
+   Same height as the resting notch. It only grows sideways, 52px a side like
+   the music wing: "● 0:40" left of the camera, the arrow to its right. The
+   camera housing sits in the middle, over nothing. Tap the arrow for the
+   transcript and Stop. */
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-pill {
+  width: calc(var(--nf-notch-w, 190px) + 104px);   /* 52px each side, like the music wing */
+  height: calc(var(--nf-notch-h) + 22px);   /* the resting notch's own height */
+  min-height: 0;
+  border-radius: 0 0 16px 16px;
+  box-shadow: none;
+}
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-pill > *:not(.nf-think-chip):not(.nf-face) { visibility: hidden; }
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-face { opacity: 0; }
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-think-chip {
+  top: 0;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  transform: none;
+  max-width: none;
+  height: calc(var(--nf-notch-h) + 22px);
+  /* Text sits on the notch's lower edge, under the menu bar row, not up in it. */
+  padding: 0 8px 5px 12px;
+  gap: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-think-chip-text {
+  width: 40px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: nowrap;
+  animation: none;
+  -webkit-text-fill-color: #ff6b63;
+  color: #ff6b63;
+}
+#notch-face.nf-rec.nf-thinking:not(.nf-think-open) .nf-think-chip-arrow {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Collapsed music, quieter (2026-10-15) ──
+   Only the album cover, on the left; the rest of the notch stays the plain
+   Mac notch. No EQ bars, no song title under it. Hover still opens the full
+   player exactly as before (.nf-music-open is untouched). Braino's own words
+   still show while he talks (.captioning). */
+/* Only while nothing else is in the notch: an answer, its exit, or his
+   live words keep their own size, or the reply is crushed into the cover's. */
+#notch-face.music:not(.nf-music-open):not(.nf-answer-open):not(.nf-answer-exiting):not(.nf-answer-reply):not(.captioning) .nf-pill { width: calc(var(--nf-notch-w, 190px) + 64px); }
+#notch-face.music:not(.nf-music-open):not(.nf-answer-open):not(.nf-answer-exiting):not(.nf-answer-reply):not(.captioning) .nf-mm-art { left: 7px; width: 22px; height: 22px; border-radius: 6px; }
+#notch-face.music:not(.nf-music-open) .nf-mm-eq { display: none; }
+#notch-face.music:not(.nf-music-open):not(.captioning) #nf-status,
+#notch-face.music:not(.nf-music-open):not(.captioning) #nf-status-2 { display: none; }
+
 /* ── AffectiveOS notch style (Settings › Notch) ──────────────────────────────
  *
  * Off unless #notch-face carries .nf-aos, so the Braino notch is exactly what
@@ -6877,18 +6938,3 @@ body.aos-notch #status-pill { opacity: 0 !important; visibility: hidden !importa
 #notch-face.nf-aos .nf-thinking-canvas,
 #notch-face.nf-aos .nf-think-chip,
 #notch-face.nf-aos .nf-think-arrow { display: none !important; }
-
-
-
-
-
-/* ── Collapsed music, quieter (2026-10-15) ──
-   Only the album cover, on the left; the rest of the notch stays the plain
-   Mac notch. No EQ bars, no song title under it. Hover still opens the full
-   player exactly as before (.nf-music-open is untouched). Braino's own words
-   still show while he talks (.captioning). */
-#notch-face.music:not(.nf-music-open) .nf-pill { width: calc(var(--nf-notch-w, 190px) + 64px); }
-#notch-face.music:not(.nf-music-open) .nf-mm-art { left: 7px; width: 22px; height: 22px; border-radius: 6px; }
-#notch-face.music:not(.nf-music-open) .nf-mm-eq { display: none; }
-#notch-face.music:not(.nf-music-open):not(.captioning) #nf-status,
-#notch-face.music:not(.nf-music-open):not(.captioning) #nf-status-2 { display: none; }

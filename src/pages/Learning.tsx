@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import "./learning.css";
 
 /* ============================================================================
@@ -20,6 +21,12 @@ import "./learning.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
+
+// engine-runs / braino-learning are creator-only, so they need the signed-in session.
+async function authHeaderValue() {
+  const { data } = await supabase.auth.getSession();
+  return `Bearer ${data.session?.access_token ?? ""}`;
+}
 
 type Route = {
   id: string;
@@ -73,7 +80,7 @@ export default function Learning() {
     const load = async () => {
       try {
         const res = await fetch(`${SUPABASE_URL}/functions/v1/braino-learning?limit=120`, {
-          headers: { apikey: SUPABASE_KEY },
+          headers: { apikey: SUPABASE_KEY, Authorization: await authHeaderValue() },
         });
         const body = await res.json();
         if (!alive) return;

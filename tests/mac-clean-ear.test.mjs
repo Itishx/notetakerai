@@ -15,7 +15,9 @@ const verdict = (meter, logprobs, text = "open the door", now = 10000) => Functi
   const rtUserStoppedAt = 9500;
   ${liftLine("const CLEAN_EAR_MIN_VOICED =")}
   ${liftLine("const CLEAN_EAR_MIN_LOGPROB =")}
+  ${liftLine("const CLEAN_EAR_MAX_TURN_WORDS =")}
   let cleanEarMeterWhy = "";
+  let dictationMode = false;
   ${lift("function cleanEarVoicedSamples() {")}
   ${lift("function cleanEarVerdict(event, text, { localWindow, heraWords = 0 }) {")}
   return cleanEarVerdict({ logprobs: ${JSON.stringify(logprobs)} }, ${JSON.stringify(text)}, { localWindow: true });
@@ -51,6 +53,8 @@ test("OpenAI unsure is not a drop when HERA heard a sentence", () => {
     const rtSpeechStartedAt = 0, rtUserStoppedAt = 0;
     ${liftLine("const CLEAN_EAR_MIN_VOICED =")}
     ${liftLine("const CLEAN_EAR_MIN_LOGPROB =")}
+    ${liftLine("const CLEAN_EAR_MAX_TURN_WORDS =")}
+    let dictationMode = false;
     ${lift("function cleanEarVoicedSamples() {")}
     ${lift("function cleanEarVerdict(event, text, { localWindow, heraWords = 0 }) {")}
     return cleanEarVerdict({ logprobs: [{ logprob: -2.5 }] }, "This is a test.", { localWindow: true, heraWords: 40 });
@@ -132,4 +136,9 @@ test("real speech, a voice being fetched, the system voice, or a silent reply ar
   const playing = stuck();
   playing.tick(100000, true); playing.tick(120000, true);
   assert.equal(playing.state().speaking, true);
+});
+
+test("a film's worth of words in one turn is media audio and is dropped", () => {
+  const film = Array.from({ length: 474 }, () => "dialogue").join(" ");
+  assert.equal(verdict({ everHeard: true, samples: samples(12) }, [{ logprob: -0.1 }], film).why, "too_long_media_audio");
 });

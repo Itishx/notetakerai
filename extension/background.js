@@ -3894,6 +3894,8 @@ async function bgPostSaveNote({ title, transcript, structuredNotes, useCase, sou
   return res.ok ? { ok: true } : { ok: false, error: `save_failed_${res.status}` };
 }
 
+// No longer called (2026-10-15): agent tasks are not notes. They were filling
+// Notes & meetings with "open Netflix" rows. Task history lives in Activity.
 async function bgSaveAgentTask(tabId, task, result) {
   try {
     let sourceUrl = "", sourceTitle = "";
@@ -5707,12 +5709,10 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     if (finalTabId) {
       bgAgentTaskByTab.set(finalTabId, task);
       bgBrainUpdate(finalTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
-      bgSaveAgentTask(finalTabId, task, message);
     }
     if (originTabId && originTabId !== finalTabId) {
       bgAgentTaskByTab.set(originTabId, task);
       bgBrainUpdate(originTabId, message, true, { task, keepLectureCard: extra.keepLectureCard === true });
-      bgSaveAgentTask(originTabId, task, message);
     }
   };
   const finish = async (message, ok = true, extra = {}) => {
@@ -5884,11 +5884,15 @@ async function bgCallGoogleDriveFunction(functionName, payload) {
 async function bgOpenGoogleDriveReconnect(userIdentifier) {
   if (!userIdentifier) return false;
   try {
+    const { authToken: storedToken } = await new Promise(r => chrome.storage.local.get("authToken", r));
+    const authToken = storedToken || (await bgRefreshAuthToken());
+    if (!authToken) return false;
     const response = await fetch(`${BG_API_BASE}/google-drive-oauth-start`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
       },
       body: JSON.stringify({ userIdentifier }),
     });

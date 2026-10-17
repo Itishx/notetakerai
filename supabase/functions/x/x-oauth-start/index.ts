@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getRequestUser } from "../../_shared/require-user.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getEnvValue, getXCallbackUrl, getXOAuth2Credentials } from "../../_shared/x-oauth.ts";
 
@@ -35,6 +36,20 @@ serve(async (req) => {
     if (!userIdentifier) {
       return new Response(JSON.stringify({ error: "userIdentifier required" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const authedUser = await getRequestUser(req);
+    if (!authedUser) {
+      return new Response(JSON.stringify({ error: "Not signed in." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (userIdentifier !== authedUser.id) {
+      return new Response(JSON.stringify({ error: "User mismatch." }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

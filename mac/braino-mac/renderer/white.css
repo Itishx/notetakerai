@@ -18,7 +18,8 @@
   --w-ok: #1f9d63;
   /* The website hero's face, exactly: Iowan Old Style, 400, tight tracking.
      Bodoni was tried on the site and dropped; same here. */
-  --w-didone: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  /* SF Pro everywhere (2026-10-15). The name stays so every rule keeps working. */
+  --w-didone: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 
   /* setup.css tokens */
   --ink: var(--w-ink); --ink-2: var(--w-ink-2); --ink-3: var(--w-ink-3); --ink-4: rgba(17, 17, 17, 0.3);

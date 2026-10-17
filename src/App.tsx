@@ -163,6 +163,9 @@ const SeeYouDocs = lazy(() => import("./pages/SeeYouDocs.tsx"));
 const LayaJobDocs = lazy(() => import("./pages/LayaJobDocs.tsx"));
 const OwnBrowserDocs = lazy(() => import("./pages/OwnBrowserDocs.tsx"));
 const CleanHearingDocs = lazy(() => import("./pages/CleanHearingDocs.tsx"));
+const PauseMusicDocs = lazy(() => import("./pages/PauseMusicDocs.tsx"));
+const OptionMRecordingDocs = lazy(() => import("./pages/OptionMRecordingDocs.tsx"));
+const NotesPdfDocs = lazy(() => import("./pages/NotesPdfDocs.tsx"));
 const MondayMode = lazy(() => import("./pages/MondayMode.tsx"));
 const MondayModeDocs = lazy(() => import("./pages/MondayModeDocs.tsx"));
 const BrainoEmbedDocs = lazy(() => import("./pages/BrainoEmbedDocs.tsx"));
@@ -405,6 +408,9 @@ function AppRoutes() {
         <Route path="/knowledge/laya-names-the-job" element={<LayaJobDocs />} />
         <Route path="/knowledge/brainos-own-browser" element={<OwnBrowserDocs />} />
         <Route path="/knowledge/clean-hearing" element={<CleanHearingDocs />} />
+        <Route path="/knowledge/pause-music-while-you-talk" element={<PauseMusicDocs />} />
+        <Route path="/knowledge/option-n-recording" element={<OptionMRecordingDocs />} />
+        <Route path="/knowledge/notes-as-pdfs" element={<NotesPdfDocs />} />
         <Route path="/knowledge/trace" element={<Navigate to="/trace" replace />} />
         <Route path="/knowledge/hil-scored" element={<HilScoredDocs />} />
         <Route path="/knowledge/labs-and-saburi" element={<Navigate to="/labs" replace />} />

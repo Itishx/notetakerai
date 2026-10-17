@@ -1,7 +1,6 @@
 /* Braino for Mac: one app for everything. Double-click Braino to open it.
    System Settings shape (categories on the left, panels on the right), in
-   AffectiveOS glass and type. Companion and Foundry share Braino, Connections
-   and System. Every panel reads and writes his real settings through the
+   AffectiveOS glass and type. Foundry comes later; only Companion ships. Every panel reads and writes his real settings through the
    same calls the old dashboard and Set him up used; the few features that
    are not built yet say so plainly ("Coming soon") instead of faking numbers.
    House rule: no dashes of any kind in anything Braino says. */
@@ -26,6 +25,8 @@ const chip = (t, cls = "") => `<span class="chip ${cls}">${esc(t)}</span>`;
 const S = { auth: null, snap: null, recent: [], skills: [], profiles: null, mesa: null, contacts: null, important: [], login: null, look: {} };
 // Which notch you talk to (Settings in main, applied live to the notch).
 call("notchStyle").then((r) => { S.notchStyle = r?.style || "braino"; });
+// How he hears you: on this Mac, or Sarvam's live stream (Settings > Appearance > Listening).
+call("speechEngine").then((r) => { S.speechEngine = r?.engine || "on-device"; S.hasSarvamKey = Boolean(r?.hasSarvamKey); });
 try { S.look = JSON.parse(localStorage.getItem("braino-app-look") || "{}"); } catch (_) {}
 const saveLook = () => { try { localStorage.setItem("braino-app-look", JSON.stringify(S.look)); } catch (_) {} };
 async function load(kind) {
@@ -39,11 +40,87 @@ async function load(kind) {
   if (kind === "login") S.login = await call("loginItem");
   if (kind === "wake") S.wake = await call("namedMode");
   if (kind === "activity") S.activity = (await call("appActivity", 400))?.rows || [];
+  if (kind === "notes") {
+    const [lib, notes, docs] = await Promise.all([call("notesLibrary"), call("dashboardData", "notes"), call("dashboardData", "docs")]);
+    const ms = (d) => (d ? new Date(d).getTime() || 0 : 0);
+    S.notesLib = {
+      items: [
+        ...(lib?.pdfs || []).map((x) => ({ kind: x.kind, title: x.name.replace(/^\d{4}-\d{2}-\d{2} · /, ""), at: x.at, file: x.file, pdf: true })),
+        ...(notes?.rows || []).filter((r) => NOTE_KINDS.has(r.use_case)).map((r) => ({ table: "notes", id: r.id, kind: r.use_case === "meeting" ? "meeting" : "note", title: r.title || "", at: ms(r.created_at), markdown: r.structured_notes || "", source: r.source_title || "" })),
+        ...(docs?.rows || []).map((r) => ({ table: "braino_docs", id: r.id, kind: r.kind === "lecture" ? "lecture" : "note", title: r.title || "", at: ms(r.happened_on), markdown: r.markdown || "" })),
+      ],
+      signedOut: notes?.error === "signed_out",
+    };
+    for (const x of S.notesLib.items) x.title = niceTitle(x);
+  }
   if (kind === "mems") { const r = await call("memoriesList"); S.mems = r?.ok ? r.rows : null; S.memsError = r?.ok ? "" : (r?.error || "unavailable"); }
 }
 const first = () => String(S.auth?.displayName || S.snap?.name || "").split(" ")[0];
 window.__brainoFirstName = first;
 const hello = () => { const h = new Date().getHours(); return h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
+
+/* Notes: the write-up and the transcript are one text in the database. Split
+   them so the transcript can be its own view. No marker and no structure at
+   all means it was only ever a transcript. */
+S.nf = { kind: "all", sort: "new", range: "all", from: "", to: "", q: "" };
+/* The notes table also holds memories, highlights and (until 15 Oct) every
+   agent task the extension ran. Only real notes belong on this page. */
+const NOTE_KINDS = new Set(["meeting", "lecture", "page", "general"]);
+/* "Notetaker meeting" tells you nothing. A missing or generic title reads as
+   what it was and when: "Meeting, 19 August". */
+function niceTitle(x) {
+  const t = String(x.title || "").trim();
+  const generic = !t || /^(?:untitled|notetaker(?:\s+(?:meeting|note|recording))?|meeting|lecture|note|recording|new note)$/i.test(t);
+  if (!generic) return t;
+  const kind = { meeting: "Meeting", lecture: "Lecture" }[x.kind] || "Note";
+  return x.at ? `${kind}, ${new Date(x.at).toLocaleDateString([], { day: "numeric", month: "long" })}` : kind;
+}
+function splitNote(md) {
+  const text = String(md || "");
+  const marks = [/\n\s*[—-]+\s*Full transcript\s*[—-]+\s*\n/i, /\n-{3,}\s*\n+#{1,3}\s*(?:Full\s+)?transcript\s*\n/i, /\n#{1,3}\s*(?:Full\s+)?transcript\s*\n/i];
+  for (const re of marks) { const m = text.match(re); if (m) return { notes: text.slice(0, m.index).trim(), transcript: text.slice(m.index + m[0].length).trim() }; }
+  if (!/^\s*(#|[-*] |\d+[.)] |\|)/m.test(text)) return { notes: "", transcript: text.trim() };
+  return { notes: text.trim(), transcript: "" };
+}
+const txHtml = (t) => String(t || "").split(/\n+/).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join("");
+function noteView(o) {
+  const x = o.item;
+  const views = [...(x.pdf ? [["pdf", "Document"]] : [["notes", "Notes"]]), ["transcript", "Transcript"]];
+  const head = `<div class="note-head">${seg(views, o.view, "nview", "View")}<span style="flex:1"></span>${x.pdf ? btn("Show the PDF in Finder", "noteReveal") : o.notes ? btn("Save as PDF", "noteSavePdf") : ""}</div>`;
+  let body;
+  if (o.view === "pdf") body = `<iframe class="note-pdf" title="${esc(x.title)}" src="${esc(encodeURI("file://" + x.file))}#toolbar=0&view=FitH"></iframe>`;
+  else if (o.view === "transcript") body = `<article class="note-doc tx">${o.transcript ? txHtml(o.transcript) : '<p class="sub">No transcript was kept for this one.</p>'}</article>`;
+  else body = `<article class="note-doc">${o.notes ? (o.html || '<p class="sub">Opening…</p>') : `<p>This one is only a transcript so far.</p><p>${btn(o.writing ? "Writing it up…" : "Write it up as notes", "noteWriteUp", o.writing ? "disabled" : "")}</p>`}</article>`;
+  const qa = (o.qa || []).map((q) => `<div class="qa ${q.role}">${q.role === "user" ? esc(q.content) : (q.html || esc(q.content))}</div>`).join("");
+  const ask = m("", `${kicker("Ask about this " + (x.kind === "lecture" ? "lecture" : x.kind === "meeting" ? "meeting" : "note"))}<div class="qa-list">${qa || '<p class="sub">Like a tutor who sat through it. Try "explain the main idea simply", "what did we decide about pricing", or "quiz me on this".</p>'}${o.asking ? '<div class="qa assistant sub">Thinking…</div>' : ""}</div><label class="ask qa-ask"><input id="note-ask" placeholder="Ask anything about it" aria-label="Ask about this note"${o.asking ? " disabled" : ""}></label>`);
+  return `${head}${body}${ask}`;
+}
+async function openNote(x) {
+  S.noteOpen = { item: x, view: x.pdf ? "pdf" : "notes", notes: "", transcript: "", html: "", qa: [] };
+  if (x.pdf) {
+    const t = await call("notesText", x.file);
+    if (t?.ok) { S.noteOpen.notes = t.markdown || ""; S.noteOpen.transcript = t.transcript || ""; }
+  } else {
+    const sp = splitNote(x.markdown);
+    Object.assign(S.noteOpen, sp);
+    if (!sp.notes) S.noteOpen.view = "transcript";
+    paint();
+    if (sp.notes) { const r = await call("notesRender", sp.notes); if (S.noteOpen?.item === x) S.noteOpen.html = r?.html || ""; }
+  }
+  paint();
+}
+async function askNote(question) {
+  const o = S.noteOpen; if (!o || o.asking) return;
+  const context = [o.notes, o.transcript ? `Transcript:\n${o.transcript}` : ""].filter(Boolean).join("\n\n") || o.item.markdown || "";
+  if (!context) { toast("There is no text in this one to ask about."); return; }
+  const history = o.qa.map(({ role, content }) => ({ role, content }));
+  o.qa.push({ role: "user", content: question }); o.asking = true; paint();
+  const r = await call("notesAsk", { notes: context, question, history });
+  o.asking = false;
+  if (r?.ok) { const h = await call("notesRender", r.reply); o.qa.push({ role: "assistant", content: r.reply, html: h?.html || "" }); }
+  else o.qa.push({ role: "assistant", content: "I couldn't answer that just now. Try again in a moment." });
+  if (S.noteOpen === o) { paint(); const box = $("note-ask"); box?.focus(); document.querySelector(".qa-list")?.lastElementChild?.scrollIntoView({ block: "nearest" }); }
+}
 
 const P = {
   /* Chat: the first page. Type to him; he answers or does it (chat.js). */
@@ -80,9 +157,6 @@ const P = {
       ${m("s4", `${kicker("Next class")}${next ? `<h2>${esc(next.title)}</h2><p class="sub">${esc(next.at)}${next.room ? ` · ${esc(next.room)}` : ""}</p>` : `<p class="sub">Nothing left today.</p>`}${people.length ? `<div class="k" style="margin-top:16px">Your people</div><div class="chips">${people.map((n) => chip(`★ ${n}`)).join("")}</div>` : ""}`, "mesa")}
       ${m("", `${kicker("Recent")}<div class="rows">${todays.length ? todays.slice(0, 5).map((x) => row(esc(x.heard), esc(x.did || x.lane || ""), `<span class="val">${x.ms != null ? `${(x.ms / 1000).toFixed(1)}s` : ""}</span>`)).join("") : row("Nothing yet today", "Press Control twice and ask him something")}</div>`, "activity")}`;
   } },
-  habits: { t: "Habits", l: "The few things you want to do every day. He notices them, so you never log anything.", nav: ["Habits", "repeat"], r: () => soon("Habits he notices by himself, from your day. Say \"I want to read 20 minutes a day\" and he'll keep an eye on it once this lands.") },
-  focus: { t: "Focus", l: "He keeps you on the one thing, and holds messages until you're done.", nav: ["Focus", "target"], r: () => soon("Focus sessions with messages held and distractions closed.") },
-  routines: { t: "Routines", l: "Your mornings and nights, run by one sentence.", nav: ["Routines", "sun"], r: () => soon("A morning and a wind down you start by saying it.") },
   /* Activity: everything he did, newest first, a day at a time. */
   activity: { t: "Activity", l: "Everything Braino did for you: what you asked, what he did, how long it took.", nav: ["Activity", "radar"], need: ["activity"], r: () => {
     const rows = (S.activity || []).filter((x) => (S.actFilter === "bad" ? !x.ok || x.stood : S.actFilter === "ok" ? x.ok && !x.stood : true))
@@ -117,8 +191,50 @@ const P = {
       ${m("s4", `${kicker("Kept")}<div class="big">7 days</div><p class="sub">then deleted by itself</p>`)}
       ${m("", `${kicker("Today, hour by hour")}<div class="rows">${(S.snap?.summaries || []).length ? S.snap.summaries.map((d) => row(esc(d.hour), esc(d.summary))).join("") : row("No summaries yet", "The first one lands at the end of the hour")}</div><div style="margin-top:10px">${btn("Open the memory window", "memoryOpen")}</div>`)}`;
   } },
-  notes: { t: "Notes & meetings", nav: ["Notes & meetings", "meet"], r: () => `${m("", `${kicker("Your notes and meetings")}<p class="sub">They still live in the full library for now.</p><div style="margin-top:10px">${btn("Open the library", "dashboardOpen")}</div>`)}` },
-  dictation: { t: "Dictation", l: "Option twice, anywhere. Your words, cleaned up, where your cursor is.", nav: ["Dictation", "text"], r: () => m("", `<div class="rows">${row("Shortcut", "", '<span class="kc"><kbd>⌥</kbd><kbd>⌥</kbd></span>')}${row("Clean up my words", "Capitals, full stops, no \"um\"", chip("Always on", "ok"))}${row("Where it goes", "At your cursor. No box? It's copied for you.")}</div>`) },
+  /* Notes, meetings and lectures, read right here (2026-10-15). Filter by kind
+     and date, open one, flip between the notes and the raw transcript (like a
+     Notion toggle), and ask it questions like a tutor. */
+  notes: { t: "Notes & meetings", l: "Every meeting and lecture, written up. Filter, read, flip to the transcript, or ask it anything.", nav: ["Notes & meetings", "meet"], need: ["notes"], r: () => {
+    const o = S.noteOpen;
+    if (o) return noteView(o);
+    const L = S.notesLib || {};
+    const f = S.nf;
+    const day0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
+    const now = Date.now();
+    const lo = f.range === "week" ? now - 7 * 864e5 : f.range === "month" ? now - 31 * 864e5 : f.range === "custom" && f.from ? day0(f.from) : 0;
+    const hi = f.range === "custom" && f.to ? day0(f.to) + 864e5 - 1 : Infinity;
+    const all = L.items || [];
+    const items = all
+      .filter((x) => f.kind === "all" || x.kind === f.kind)
+      .filter((x) => x.at >= lo && x.at <= hi)
+      .filter((x) => !f.q || x.title.toLowerCase().includes(f.q))
+      .sort((a, b) => (f.sort === "old" ? a.at - b.at : b.at - a.at));
+    const KIND = { meeting: "Meeting", lecture: "Lecture", assignment: "Assignment", note: "Note" };
+    const count = (k) => all.filter((x) => x.kind === k).length;
+    let month = "";
+    const list = items.map((x) => {
+      const mo = x.at ? new Date(x.at).toLocaleDateString([], { month: "long", year: "numeric" }) : "No date";
+      const head = mo !== month ? `<div class="nl-month">${esc((month = mo))}</div>` : "";
+      const idx = all.indexOf(x);
+      return `${head}<div class="row link" data-note="${idx}" tabindex="0"><div class="lb"><b>${esc(x.title)}</b><small>${x.at ? esc(new Date(x.at).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })) : ""}${x.pdf ? " · PDF on this Mac" : ""}</small></div>${chip(KIND[x.kind] || "Note", `nk-${x.kind}`)}<span class="chev">›</span></div>`;
+    }).join("");
+    const filters = `<div class="nf">
+      ${seg([["all", `All ${all.length}`], ["meeting", `Meetings ${count("meeting")}`], ["lecture", `Lectures ${count("lecture")}`], ["note", `Notes ${count("note")}`]], f.kind, "nkind", "Kind")}
+      ${seg([["new", "Newest"], ["old", "Oldest"]], f.sort, "nsort", "Sort")}
+      ${seg([["all", "All time"], ["week", "This week"], ["month", "This month"], ["custom", "Dates"]], f.range, "nrange", "When")}
+      ${f.range === "custom" ? `<span class="nf-dates"><input type="date" id="nf-from" value="${esc(f.from)}" aria-label="From"> to <input type="date" id="nf-to" value="${esc(f.to)}" aria-label="To"></span>` : ""}
+      <label class="act-find nf-q"><input id="nf-q" placeholder="Search titles" value="${esc(f.q)}"></label>
+    </div>`;
+    return `${m("", `${filters}${kicker("Showing", chip(`${items.length}`))}${items.length ? `<div class="rows nl">${list}</div>` : `<p class="sub">${L.signedOut ? "Sign in to see notes from your other devices." : all.length ? "Nothing matches these filters." : 'Nothing yet. Say "record this meeting" or press ⌘⇧E in a lecture.'}</p>`}${all.some((x) => x.pdf) ? `<div style="margin-top:10px">${btn("Show all PDFs in Finder", "notesFolder")}</div>` : ""}`)}`;
+  } },
+  dictation: { t: "Dictation", l: "Talk instead of type, in any app. Your words, cleaned up, typed where your cursor is.", nav: ["Dictation", "text"], r: () => `
+    ${m("dict-hero", `<div class="dict-keys"><span class="kc"><kbd>⌥</kbd><kbd>⌥</kbd></span></div><h2>Press Option twice. Talk. Press it again.</h2><p class="sub">Works in Mail, Slack, WhatsApp, Notes, Google Docs, a search box, anywhere you can type. You talk the way you talk, and the text comes out the way you would have written it.</p>`)}
+    ${m("s4", `${kicker("1 · Start")}<div class="big">⌥ ⌥</div><p class="sub">Click where the text should go, then tap Option twice. The notch shows he is listening.</p>`)}
+    ${m("s4", `${kicker("2 · Talk")}<div class="big">🎙</div><p class="sub">Say it naturally. Pause, restart, say "um". Nothing is typed until you finish.</p>`)}
+    ${m("s4", `${kicker("3 · Done")}<div class="big">⌥ ⌥</div><p class="sub">Tap Option twice again. Clean text appears at your cursor in about a second.</p>`)}
+    ${m("s6", `${kicker("What you say")}<p class="dict-say">"um so can we move the call to uh thursday actually friday at four"</p>`)}
+    ${m("s6", `${kicker("What gets typed")}<p class="dict-out">Can we move the call to Friday at 4?</p>`)}
+    ${m("", `${kicker("Good to know")}<div class="rows">${row("Clean up my words", "Capitals, full stops, numbers. \"Um\" and false starts are dropped.", chip("Always on", "ok"))}${row("No text box?", "If nothing is selected to type into, the text is copied so you can paste it.")}${row("Silent", "He never talks back in dictation. It is only for writing.")}${row("Private", "Your voice is turned into text and then thrown away. Nothing is kept as audio.")}</div>`)}` },
   mesa: { t: "School", l: "Mesa Nexus, synced by himself every day.", nav: ["School", "school"], need: ["mesa", "snap"], r: () => {
     const ms = S.mesa || {};
     const due = S.snap?.dueSoon || [];
@@ -127,30 +243,26 @@ const P = {
   } },
   whatsapp: { t: "People", l: "Everyone who messages is remembered. Only your important people show in the notch, silently.", nav: ["People", "people"], need: ["contacts"], r: () => `
     ${m("s6", `${kicker("Important people")}<div class="chips">${S.important.length ? S.important.map((n) => `<button class="chip" data-unstar="${esc(n)}" title="Remove">★ ${esc(n)}</button>`).join("") : '<span class="sub">Nobody yet. Say "mark Ilu as important".</span>'}</div>`)}
-    ${m("s6", `${kicker("Contacts")}<div class="big">${(S.contacts?.contacts || []).length || "—"}</div><p class="sub">from your Mac's address book</p><div style="margin-top:8px">${btn("Sync contacts", "contactsSync")}</div>`)}` },
-
-  /* Foundry */
-  fhome: { t: "", nav: ["Home", "home"], need: ["recent"], r: () => `<h1 class="greet">Your company, this week.</h1>
-    <section class="hero-photo"><h2>Tell the world what you <em>shipped</em>.</h2><p>He drafts posts in your voice from what you built this week. Nothing goes out until you say so.</p><button class="btn" type="button" data-go="content">Draft a post</button></section>
-    <label class="ask"><input id="ask" placeholder="Tell Braino what to ship, post or send" aria-label="Ask Braino"><span class="kb">⌃⌃ to talk</span></label>
-    ${m("s6", `${kicker("Content")}<p class="sub">Posts in your voice, from what you shipped.</p>`, "content")}
-    ${m("s6", `${kicker("Braino Code")}<p class="sub">What you're building, and who's on it.</p>`, "code")}
-    ${soon("Optics, Outbound and the Approvals inbox. The four jobs of Foundry, one at a time.")}` },
-  content: { t: "Content", l: "Post everywhere, in your voice.", nav: ["Content", "pen"], r: () => m("", `${kicker("X", chip("@brainosays"))}<p class="sub">Drafts, the queue and auto-posting live in X automation for now.</p><div style="margin-top:10px">${btn("Open X automation", "dashboardOpen")}</div>`) },
-  optics: { t: "Optics", l: "Get named when people ask an AI for something like yours.", nav: ["Optics", "radar"], r: () => soon("He'll ask the AI assistants about your space every week and tell you when you're named.") },
-  outbound: { t: "Outbound", l: "Find the right people and write to them, not to four hundred.", nav: ["Outbound", "send"], r: () => soon("He'll find the right people and draft notes you approve.") },
-  approvals: { t: "Approvals", l: "Nothing goes out until you say so. One inbox for all of it.", nav: ["Approvals", "inbox"], r: () => soon("Every post, email and reply he wants to send, waiting for your yes.") },
-  code: { t: "Braino Code", l: "What you're building, and who's working on it.", nav: ["Braino Code", "code"], r: () => m("", `${kicker("Cursor mode")}<p class="sub">Say "what am I working on" or "is Claude done". The full view lives in the library for now.</p><div style="margin-top:10px">${btn("Open Braino Code", "dashboardOpen")}</div>`) },
-  ideas: { t: "Ideas", l: "Every idea you say out loud, kept and ranked.", nav: ["Ideas", "bulb"], r: () => soon("Ideas you say out loud, kept and ranked.") },
+    ${m("s6", `${kicker("Contacts")}<div class="big">${(S.contacts?.contacts || []).length || "—"}</div><p class="sub">from your Mac's address book</p><div style="margin-top:8px">${btn("Sync contacts", "contactsSync")}</div>`)}
+    ${(() => {
+      /* Every contact, as a grid you can scroll and search (2026-10-15). */
+      const all = S.contacts?.contacts || [];
+      const q = S.peopleQ || "";
+      const shown = q ? all.filter((c) => `${c.name} ${c.nickname} ${c.company} ${(c.phones || []).join(" ")}`.toLowerCase().includes(q)) : all;
+      const ini = (n) => String(n || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+      const card = (c) => `<div class="pc"><span class="pc-av">${esc(ini(c.name))}</span><div class="pc-tx"><b>${esc(c.name || "No name")}</b><small>${esc(c.company || c.phone || (c.emails || [])[0] || "")}</small></div>${S.important.includes(c.name) ? '<span class="pc-star" title="Important">★</span>' : ""}</div>`;
+      return m("", `${kicker("Everyone", chip(q ? `${shown.length} of ${all.length}` : String(all.length)))}<label class="act-find" style="margin:0 0 12px"><input id="people-q" placeholder="Search by name, company or number" value="${esc(q)}"></label>${shown.length ? `<div class="pgrid">${shown.map(card).join("")}</div>` : `<p class="sub">${all.length ? "Nobody matches that." : "No contacts yet. Press Sync contacts."}</p>`}`);
+    })()}` },
 
   /* Braino (shared) */
   appearance: { t: "Appearance", nav: ["Appearance", "face"], r: () => `
+    ${m("", `${kicker("Listening")}${seg([["on-device", "On this Mac"], ["sarvam", "Sarvam"]], S.speechEngine || "on-device", "engine", "Listening")}<p class="sub" style="margin-top:10px">How he turns your voice into words, for everything: talking to him, dictation, and lecture or meeting recordings. On this Mac is private and free. Sarvam streams to Sarvam's servers and is strong on Indian accents and Hinglish.${S.hasSarvamKey ? "" : " Sarvam needs a key in .env.local first."} It changes from the next time he listens.</p>`)}
     ${m("", `${kicker("Subtitles")}${seg([["braino", "With subtitles"], ["affective", "Without subtitles"]], S.notchStyle || "braino", "notch", "Subtitles")}<p class="sub" style="margin-top:10px">With subtitles, you see what you said and read his reply in the notch. Without subtitles, you only hear him: the notch stays small, with a dot while he listens and bars while he speaks. It changes straight away.</p>`)}
     ${m("s6", `${kicker("Character")}${seg([["braino", "Braino"], ["brainelle", "Brainelle"], ["webb", "Webb"], ["ferro", "Ferro"]], S.look.mascot || "braino", "mascot", "Character")}<div style="margin-top:14px">${row("Size", "", `<input type="range" min="1" max="5" step=".1" value="${S.look.scale || 1}" data-range="scale" aria-label="Size" style="accent-color:#fff;width:150px">`)}</div>`)}
     ${m("s6", `${kicker("Where he stays")}${seg([["left", "Left"], ["top", "Top"], ["bottom", "Bottom"], ["right", "Right"], ["walk", "Walk"]], S.look.dock || "right", "dock", "Where he stays")}<p class="sub" style="margin-top:10px">Or drag him anywhere: he goes to the nearest spot.</p>`)}
     ${m("", `${kicker("Hide him")}${seg([["", "Shown"], ["hour", "For an hour"], ["hidden", "Until I call"], ["stealth", "Stealth"]], S.look.hide || "", "hide", "Hide him")}<p class="sub" style="margin-top:10px">He still hears you. Bring him back: "Braino, come back", ⌘⇧B, or click the notch.</p>`)}` },
   voice: { t: "Voice & listening", nav: ["Voice & listening", "mic"], need: ["wake"], r: () => `
-    ${m("s6", `${kicker("Calling him")}<div class="rows">${row("Hey Braino", "Wake him by saying his name. Heard on this Mac only, nothing is sent until he wakes.", tg(Boolean(S.wake?.enabled), "wake", "Hey Braino"))}${row("Instant listening", "A ready connection, mic off until you call", tg(S.look.warmVoice !== false, "warmVoice", "Instant listening"))}${row("Clean hearing", "Mic rests while he talks; sounds that are not you are dropped", tg(S.look.cleanEar !== false, "cleanEar", "Clean hearing"))}${row("Shortcut", "", '<span class="kc"><kbd>⌃</kbd><kbd>⌃</kbd></span>')}</div>`)}
+    ${m("s6", `${kicker("Calling him")}<div class="rows">${row("Hey Braino", "Wake him by saying his name. Heard on this Mac only, nothing is sent until he wakes.", tg(Boolean(S.wake?.enabled), "wake", "Hey Braino"))}${row("Instant listening", "A ready connection, mic off until you call", tg(S.look.warmVoice !== false, "warmVoice", "Instant listening"))}${row("Clean hearing", "Mic rests while he talks; sounds that are not you are dropped", tg(S.look.cleanEar !== false, "cleanEar", "Clean hearing"))}${row("Pause music while I talk", "Calling him pauses what is playing; it comes back once he has understood you", tg(S.look.mediaHold === true, "mediaHold", "Pause music while I talk"))}${row("Shortcut", "", '<span class="kc"><kbd>⌃</kbd><kbd>⌃</kbd></span>')}</div>`)}
     ${m("s6", `${kicker("Talking")}<div class="rows">${row("Talk out loud", "Off: answers only in the notch", tg(S.look.talkOutLoud !== false, "talkOutLoud", "Talk out loud"))}${row("Talk me through it", "He says what he's doing while he works", tg(S.look.narrate !== false, "narrate", "Talk me through it"))}${row("Follow-ups", "No need to say Braino again", "<span class='val'>45s</span>")}</div>`)}` },
   commands: { t: "Commands & modes", nav: ["Commands & modes", "modes"], r: () => m("", `${kicker("Your voice commands and modes")}<p class="sub">Phrases that run a set of actions, and modes like Monday Mode. They live in the library for now.</p><div style="margin-top:10px">${btn("Open commands", "dashboardOpen")}</div>`) },
   skills: { t: "Skills he learned", l: "Jobs that worked, remembered under your words. Say them again and they run with no thinking. Nothing that can't be undone is ever learned.", nav: ["Skills he learned", "spark"], need: ["skills"], badge: () => S.skills.length || "", r: () => S.skills.length
@@ -192,16 +304,18 @@ const P = {
   account: { t: "Account", nav: ["Account", "user"], r: () => `${m("s6", `<div class="head"><div class="av" style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ff9b82,#b24a36);display:grid;place-items:center;font:600 17px var(--ui)">${esc((first() || "·").charAt(0))}</div><div><h2>${esc(S.auth?.displayName || "Not signed in")}</h2><p class="sub">${esc(S.auth?.email || "")}</p></div></div>`)}${m("s6", `${kicker("This Mac")}<div class="rows">${row("Signed in", S.auth?.authenticated ? "Yes" : "No")}${row("Sign out", "", btn("Sign out", "signOut"))}</div>`)}` },
 };
 const NAV = {
-  companion: [["", ["chat", "home"]], ["Your day", ["habits", "focus", "routines"]], ["Library", ["activity", "memory", "notes", "dictation"]], ["Your world", ["mesa", "whatsapp"]]],
-  foundry: [["", ["chat", "fhome"]], ["The four jobs", ["content", "optics", "outbound", "approvals"]], ["Build", ["code", "ideas"]]],
+  companion: [["", ["chat", "home"]], ["Library", ["activity", "memory", "notes", "dictation"]], ["Your world", ["mesa", "whatsapp"]]],
   shared: [["Braino", ["appearance", "voice", "commands", "skills"]], ["Connections", ["chrome", "music"]], ["System", ["general", "permissions", "keys", "privacy", "setup"]]],
 };
 
 let product = "companion", cur = "chat";
 /* Recent chats, nested under Chat (2026-10-15), like Claude and ChatGPT. */
+/* Chat > : outside chat it is one row with a chevron; inside chat, every
+   chat is listed under it (2026-10-16). */
 function chatSubNav() {
+  if (cur !== "chat") return "";
   const list = window.BrainoChat?.list?.() || [];
-  const rows = list.slice(0, 8).map((c) => `<button type="button" class="nav-chat${c.current && cur === "chat" ? " on" : ""}" data-chat="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>`).join("");
+  const rows = list.map((c) => `<button type="button" class="nav-chat${c.current && cur === "chat" ? " on" : ""}" data-chat="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>`).join("");
   return `<div class="nav-sub"><button type="button" class="nav-chat nav-new" data-chat="new">+ New chat</button>${rows}</div>`;
 }
 window.addEventListener("braino-chats-changed", () => renderNav());
@@ -210,12 +324,18 @@ function renderNav() {
   $("nav").innerHTML = [...NAV[product], ...NAV.shared].map(([g, ids]) => {
     const items = ids.filter((id) => !f || P[id].nav[0].toLowerCase().includes(f));
     if (!items.length) return "";
-    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}</button>${id === "chat" ? chatSubNav() : ""}`; }).join("");
+    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}${id === "chat" ? `<span class="nav-chev${cur === "chat" ? " open" : ""}">›</span>` : ""}</button>${id === "chat" ? chatSubNav() : ""}`; }).join("");
   }).join("");
 }
 function paint() {
   const p = P[cur];
   $("title").textContent = p.t || ""; $("lede").textContent = p.l || "";
+  /* Inside a note you are in that note: its title, editable in place, replaces the page name. */
+  if (cur === "notes" && S.noteOpen) {
+    const x = S.noteOpen.item;
+    $("title").innerHTML = `<button class="back" type="button" data-act="noteBack" aria-label="All notes">‹</button><input id="note-title" class="title-edit" value="${esc(x.title)}" aria-label="Title" spellcheck="false" title="Click to rename">`;
+    $("lede").textContent = [{ meeting: "Meeting", lecture: "Lecture" }[x.kind] || "Note", x.at ? new Date(x.at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : ""].filter(Boolean).join(" · ");
+  }
   document.querySelector(".bar").style.display = p.t ? "flex" : "none";
   document.querySelector(".main").classList.toggle("bare", !p.t);
   document.querySelector(".main").classList.toggle("chatting", cur === "chat");
@@ -251,7 +371,7 @@ document.addEventListener("click", async (e) => {
     if (k === "memoryOn" || k === "recallOn" || k === "improveBraino") { await call("setupSave", { [k]: on }); toast(on ? "On." : "Off."); }
     else if (k === "wake") { S.wake = await call("namedMode", { enabled: on }); toast(on ? "Say \u201cHey Braino\u201d any time." : "He won't wake on his name now."); }
     else if (k === "openAtLogin") { await call("loginItem", on); toast(on ? "He'll open when you log in." : "He won't open at login."); }
-    else if (k === "warmVoice" || k === "talkOutLoud" || k === "cleanEar" || k === "narrate") { overlay({ [k]: on }); toast(on ? "On." : "Off."); }
+    else if (k === "warmVoice" || k === "mediaHold" || k === "talkOutLoud" || k === "cleanEar" || k === "narrate") { overlay({ [k]: on }); toast(on ? "On." : "Off."); }
     return;
   }
   const sb = t.closest(".seg button");
@@ -262,6 +382,11 @@ document.addEventListener("click", async (e) => {
     if (key === "dock") overlay({ dock: v });
     if (key === "hide") overlay({ hide: v });
     if (key === "actFilter") { S.actFilter = v; paint(); }
+    if (key === "nkind") { S.nf.kind = v; paint(); }
+    if (key === "nsort") { S.nf.sort = v; paint(); }
+    if (key === "nrange") { S.nf.range = v; paint(); }
+    if (key === "nview" && S.noteOpen) { S.noteOpen.view = v; paint(); }
+    if (key === "engine") { const r = await call("speechEngine", v); S.speechEngine = r?.engine || v; toast(v === "sarvam" ? (S.hasSarvamKey ? "Listening with Sarvam." : "Add SARVAM_API_KEY to .env.local first.") : "Listening on this Mac."); paint(); }
     if (key === "notch") { S.notchStyle = v; await call("notchStyle", v); toast(v === "affective" ? "Subtitles off. You'll just hear him." : "Subtitles on."); }
     return;
   }
@@ -270,6 +395,22 @@ document.addEventListener("click", async (e) => {
     if (act === "setupOpen") await call("setupOpen");
     if (act === "memoryOpen") await call("memoryOpen");
     if (act === "dashboardOpen") await call("dashboardOpen");
+    if (act === "noteBack") { S.noteOpen = null; paint(); }
+    if (act === "notesFolder") await call("notesReveal", "root");
+    if (act === "noteReveal" && S.noteOpen?.item?.file) await call("notesReveal", S.noteOpen.item.file);
+    if (act === "noteSavePdf" && S.noteOpen?.notes) {
+      toast("Saving as PDF…");
+      const o = S.noteOpen;
+      const r = await call("notesSavePdf", { kind: o.item.kind === "lecture" ? "lecture" : "meeting", title: o.item.title, markdown: `${o.notes}`, date: o.item.at });
+      if (r?.ok) { toast("Saved in Documents › Braino."); await load("notes"); } else toast("Couldn't save that just now.");
+    }
+    if (act === "noteWriteUp" && S.noteOpen?.transcript && !S.noteOpen.writing) {
+      const o = S.noteOpen; o.writing = true; paint(); toast("Writing it up. About a minute.");
+      const r = await call("notesWriteUp", { kind: o.item.kind, transcript: o.transcript, date: o.item.at, source: o.item.source });
+      o.writing = false;
+      if (r?.ok) { await load("notes"); const x = (S.notesLib?.items || []).find((i) => i.file === r.file); if (x) await openNote(x); else paint(); toast("Done. Saved as a PDF too."); }
+      else { paint(); toast("Couldn't write it up just now."); }
+    }
     if (act === "mesaSync") { toast("Syncing Nexus…"); await call("mesaSync"); await load("mesa"); paint(); toast("Synced."); }
     if (act === "mesaConnect") { await call("mesaConnect"); await load("mesa"); paint(); }
     if (act === "contactsSync") { toast("Reading your contacts…"); S.contacts = await call("contactsSync"); paint(); }
@@ -286,6 +427,8 @@ document.addEventListener("click", async (e) => {
     return;
   }
   const pane = t.closest("[data-pane]")?.dataset.pane; if (pane) { await call("setupOpenPane", pane); return; }
+  const nt = t.closest("[data-note]")?.dataset.note;
+  if (nt != null) { const x = S.notesLib?.items?.[Number(nt)]; if (x) await openNote(x); return; }
   const me = t.closest("[data-mem-edit]")?.dataset.memEdit; if (me) { S.memEditing = me; paint(); document.querySelector(`[data-mem-text="${me}"]`)?.focus(); return; }
   const ms = t.closest("[data-mem-save]")?.dataset.memSave;
   if (ms) {
@@ -316,9 +459,12 @@ document.addEventListener("change", async (e) => {
     const rules = (S.profiles.config.rules || []).filter((r) => r.dir !== dir); if (words.length) rules.push({ dir, words });
     const r = await call("chromeProfilesSave", { ...S.profiles.config, rules }); if (r?.config) S.profiles.config = r.config; toast("Saved.");
   }
+  if (e.target?.id === "nf-from" || e.target?.id === "nf-to") { S.nf[e.target.id === "nf-from" ? "from" : "to"] = e.target.value; paint(); return; }
   if (e.target?.dataset?.range === "scale") overlay({ scale: Number(e.target.value) });
 });
 document.addEventListener("keydown", async (e) => {
+  if (e.target.id === "note-title" && (e.key === "Enter" || e.key === "Escape")) { if (e.key === "Escape") e.target.value = S.noteOpen?.item?.title || ""; e.target.blur(); return; }
+  if (e.key === "Enter" && e.target.id === "note-ask" && e.target.value.trim()) { const q = e.target.value.trim(); e.target.value = ""; await askNote(q); return; }
   if (e.key === "Enter" && e.target.id === "mem-new") { document.querySelector('[data-act="memAdd"]')?.click(); return; }
   if (e.key === "Enter" && e.target.id === "ask" && e.target.value.trim()) { const text = e.target.value.trim(); e.target.value = ""; toast("On it."); await call("delegate", text, { canTalk: false, reason: "app_ask" }); return; }
   if (e.key === "Enter") { const g = e.target.closest?.("[data-go]"); if (g) void go(g.dataset.go); }
@@ -326,16 +472,39 @@ document.addEventListener("keydown", async (e) => {
 $("q").addEventListener("input", renderNav);
 document.addEventListener("input", (e) => {
   const id = e.target?.id;
-  if (id !== "act-q" && id !== "mem-q") return;
-  if (id === "act-q") S.actQ = e.target.value.trim().toLowerCase(); else S.memQ = e.target.value.trim().toLowerCase();
+  if (id !== "act-q" && id !== "mem-q" && id !== "people-q" && id !== "nf-q") return;
+  const v = e.target.value.trim().toLowerCase();
+  if (id === "act-q") S.actQ = v; else if (id === "people-q") S.peopleQ = v; else if (id === "nf-q") S.nf.q = v; else S.memQ = v;
   const pos = e.target.selectionStart; paint();
   const again = $(id); if (again) { again.focus(); again.setSelectionRange(pos, pos); }
 });
-api.onAppGo?.((page) => { if (P[page]) { if ((NAV.foundry.flat(2)).includes(page) && product !== "foundry") setProduct("foundry"); void go(page); } });
+api.onAppGo?.((page) => {
+  /* "note:<file>": a recording just finished; open its note, not just the list. */
+  if (typeof page === "string" && page.startsWith("note:")) {
+    const file = page.slice(5);
+    void go("notes").then(async () => {
+      if (!S.notesLib) await load("notes");
+      const x = S.notesLib?.items?.find((i) => i.file === file);
+      if (x) { await openNote(x); paint(); }
+    });
+    return;
+  }
+  if (P[page]) void go(page);
+});
+
+document.addEventListener("focusout", async (e) => {
+  if (e.target?.id !== "note-title" || !S.noteOpen) return;
+  const x = S.noteOpen.item; const title = e.target.value.trim();
+  if (!title || title === x.title) { e.target.value = x.title; return; }
+  const r = await call("notesRename", x.file ? { file: x.file, title } : { table: x.table, id: x.id, title });
+  if (r?.ok) { x.title = title; if (r.file) x.file = r.file; toast("Renamed."); }
+  else { e.target.value = x.title; toast(r?.error === "signed_out" ? "Sign in to rename synced notes." : "Couldn't rename that just now."); }
+});
+api.onNotesChanged?.(() => { if (cur === "notes") void load("notes").then(() => { if (!S.noteOpen) paint(); }); });
 
 (async () => {
   let saved = {}; try { saved = JSON.parse(localStorage.getItem("braino-app") || "{}"); } catch (_) {}
-  product = "companion"; $("win").dataset.product = product;   // Foundry hidden for now
+  product = "companion"; $("win").dataset.product = product;   // Foundry comes later (removed 2026-10-15)
   document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.product === product)));
   await load("auth");
   $("me-name").textContent = S.auth?.displayName || "Braino"; $("me-plan").textContent = S.auth?.email || "Account"; $("me-av").textContent = (first() || "·").charAt(0);

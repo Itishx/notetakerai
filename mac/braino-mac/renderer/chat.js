@@ -119,21 +119,69 @@
   }
   function newChat() { if (busy) return false; current = null; msgs = []; try { localStorage.setItem(CUR, ""); } catch (_) {} const page = document.querySelector(".chat"); if (page) { page.outerHTML = html(); mount(); } announce(); return true; }
   const hello = () => { const h = new Date().getHours(); return h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
+  /* Empty chat, Claude style (2026-10-15): greeting, the box in the middle,
+     a few short ways in under it. */
   const SUGGEST = [
-    ["What's my next class?", "Your day"],
-    ["Open YouTube", "Instant"],
-    ["Find me five cheapest flights to Mumbai for next Friday", "He works it out"],
-    ["Send this page to Param on WhatsApp", "Asks before anything odd"],
+    ["What do I have today?", "My day", "M7 3v3M17 3v3M4 8h16M5 5h14v15H5z"],
+    ["Open YouTube", "Open an app", "M7 5l12 7-12 7z"],
+    ["Find me five cheapest flights to Mumbai for next Friday", "Research", "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"],
+    ["Send this page to Param on WhatsApp", "Message someone", "M4 5h16v11H9l-5 4z"],
+    ["Write a short note about today's lecture", "Write", "M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3"],
   ];
 
+  /* His words, rendered: headings, bold, lists and links read as such, never
+     as raw ## and ** (2026-10-15). Each block fades in as he writes it. */
+  function inline(t) {
+    return esc(t)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/(^|[\s(])_(.+?)_(?=[\s).,!?]|$)/g, "$1<i>$2</i>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, "<u>$1</u>");
+  }
   function paras(text, reveal = false) {
-    let w = 0;
-    return String(text || "").trim().split(/\n{2,}/).map((p) => {
-      if (!reveal) return `<p>${esc(p).replace(/\n/g, "<br>")}</p>`;
-      // Each word fades up in turn, as if he is writing it; capped so a long
-      // answer is readable in about a second and a half.
-      return `<p>${p.split(/(\s+)/).map((part) => /^\s+$/.test(part) ? (part.includes("\n") ? "<br>" : " ") : `<span class="rw" style="animation-delay:${Math.min(1500, (w++) * 22)}ms">${esc(part)}</span>`).join("")}</p>`;
-    }).join("");
+    const lines = String(text || "").trim().split("\n");
+    const blocks = [];
+    let list = null;
+    const flush = () => { if (list) { blocks.push(`<${list.tag}>${list.items.map((x) => `<li>${inline(x)}</li>`).join("")}</${list.tag}>`); list = null; } };
+    let table = null;
+    const num = (c) => /^[\s₹$€£+-]*[\d,.]+%?\s*$/.test(c);
+    const flushTable = () => {
+      if (!table) return;
+      const [head, ...rows] = table;
+      const right = head.map((_, k) => rows.length > 0 && rows.every((r) => !r[k] || num(r[k])));
+      const cell = (c, t, k) => `<${t}${right[k] ? ' class="n"' : ""}>${inline(c)}</${t}>`;
+      blocks.push(`<div class="cm-table"><table><thead><tr>${head.map((c, k) => cell(c, "th", k)).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, k) => cell(c, "td", k)).join("")}</tr>`).join("")}</tbody></table></div>`);
+      table = null;
+    };
+    let para = [];
+    const flushPara = () => { if (para.length) { blocks.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; } };
+    for (const raw of lines) {
+      const line = raw.trimEnd();
+      const h = line.match(/^#{1,4}\s+(.+)$/);
+      const ul = line.match(/^\s*[-*\u2022]\s+(.+)$/);
+      const ol = line.match(/^\s*\d{1,2}[.)]\s+(.+)$/);
+      if (!line.trim()) { flushPara(); flush(); flushTable(); continue; }
+      /* Pipe tables come out as a clean table, numbers right aligned. */
+      if (/^\s*\|.*\|\s*$/.test(line)) {
+        flushPara(); flush();
+        if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue;
+        (table = table || []).push(line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+        continue;
+      }
+      flushTable();
+      if (h) { flushPara(); flush(); blocks.push(`<h4>${inline(h[1])}</h4>`); continue; }
+      if (ul || ol) {
+        flushPara();
+        const tag = ul ? "ul" : "ol";
+        if (!list || list.tag !== tag) { flush(); list = { tag, items: [] }; }
+        list.items.push((ul || ol)[1]);
+        continue;
+      }
+      flush(); para.push(line);
+    }
+    flushPara(); flush(); flushTable();
+    if (!reveal) return blocks.join("");
+    return blocks.map((b, k) => b.replace(/^<(\w+)/, `<$1 class="rv" style="animation-delay:${Math.min(1200, k * 140)}ms"`)).join("");
   }
   const revealMs = (text) => Math.min(1500, String(text || "").split(/\s+/).length * 22) + 350;
   function secs(ms) { return `${Math.max(0.1, (ms || 0) / 1000).toFixed(1)}s`; }
@@ -158,16 +206,27 @@
     if (!u || m.pending) return "";
     const time = (iso) => { const d = new Date(iso); return Number.isFinite(d.getTime()) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
     if (u.type === "day" && u.events?.length) {
-      return `<div class="ui-card ui-day"><div class="ui-k">Your calendar</div>${u.events.map((e) => `<div class="ui-ev"><span class="ui-time">${esc(e.allDay ? "All day" : time(e.start))}</span><span class="ui-ev-t"><b>${esc(e.title || "Event")}</b>${e.calendar || e.location ? `<small>${esc([e.calendar, e.location].filter(Boolean).join(" · "))}</small>` : ""}</span></div>`).join("")}</div>`;
+      const now = Date.now();
+      const next = u.events.find((e) => !e.allDay && new Date(e.start).getTime() > now);
+      const day = new Date(u.events[0].start).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+      return `<div class="ui-card ui-day">
+        <div class="ui-head"><div><div class="ui-k">${esc(day)}</div><div class="ui-title">${u.events.length} ${u.events.length === 1 ? "thing" : "things"} on your calendar</div></div>${next ? `<div class="ui-next"><span>Next</span>${esc(time(next.start))}</div>` : ""}</div>
+        <ol class="ui-tl">${u.events.map((e) => { const past = !e.allDay && new Date(e.end || e.start).getTime() < now; return `<li class="${past ? "past" : ""}${e === next ? " next" : ""}"><span class="ui-tl-time">${esc(e.allDay ? "All day" : time(e.start))}</span><span class="ui-tl-dot"></span><span class="ui-tl-body"><b>${esc(e.title || "Event")}</b>${e.calendar || e.location ? `<small>${esc([e.location, e.calendar].filter(Boolean).join(" · "))}</small>` : ""}</span></li>`; }).join("")}</ol>
+      </div>`;
     }
     if (u.type === "connections" && u.items?.length) {
-      return `<div class="ui-card ui-conn"><div class="ui-k">Connections</div>${u.items.map((c) => `<div class="ui-row"><span class="ui-dot ${c.connected ? "on" : "off"}"></span><span class="ui-name">${esc(c.name)}</span><span class="ui-as">${esc(c.connected ? (c.as || "Connected") : "Not connected")}</span>${c.connected === false ? `<button type="button" class="ui-btn" data-say="Connect ${esc(c.name)}">Connect</button>` : ""}</div>`).join("")}</div>`;
+      const on = u.items.filter((c) => c.connected).length;
+      const hue = { "Google Calendar": "#4285f4", "Google Drive": "#0f9d58", Notion: "#16150f", X: "#16150f" };
+      return `<div class="ui-card ui-conn">
+        <div class="ui-head"><div><div class="ui-k">Connections</div><div class="ui-title">${on} of ${u.items.length} connected</div></div></div>
+        <div class="ui-tiles">${u.items.map((c) => `<div class="ui-tile${c.connected ? " on" : ""}"><span class="ui-mark" style="background:${hue[c.name] || "#8a877e"}">${esc(String(c.name || "?").replace(/^Google\s+/, "").charAt(0))}</span><div class="ui-tile-t"><b>${esc(c.name)}</b><small>${c.connected ? `<i class="ui-on"></i>${esc(c.as || "Connected")}` : "Not connected"}</small></div>${c.connected === false ? `<button type="button" class="ui-btn" data-say="Connect ${esc(c.name)}">Connect</button>` : ""}</div>`).join("")}</div>
+      </div>`;
     }
     if (u.type === "choices" && u.options?.length) {
-      return `<div class="ui-choices">${u.options.map((o) => `<button type="button" class="ui-chip" data-say="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
+      return `<div class="ui-choices">${u.options.map((o) => `<button type="button" class="ui-chip" data-say="${esc(o)}">${esc(o)}<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>`).join("")}</div>`;
     }
     if (u.type === "sources" && u.sources?.length) {
-      return `<div class="ui-card ui-src"><div class="ui-k">Sources</div>${u.sources.map((x) => { const url = typeof x === "string" ? x : (x.url || ""); let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch (_) {} return `<div class="ui-row"><span class="ui-name">${esc((typeof x === "object" && x.title) || host || url)}</span><span class="ui-as">${esc(host)}</span></div>`; }).join("")}</div>`;
+      return `<div class="ui-sources">${u.sources.map((x) => { const url = typeof x === "string" ? x : (x.url || ""); let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch (_) {} return `<div class="ui-src"><span class="ui-fav">${esc((host || "?").charAt(0).toUpperCase())}</span><div><b>${esc((typeof x === "object" && x.title) || host || url)}</b><small>${esc(host)}</small></div></div>`; }).join("")}</div>`;
     }
     return "";
   }
@@ -185,8 +244,7 @@
     const name = window.__brainoFirstName?.() || "";
     return `<div class="chat${empty ? " empty" : ""}">
       <div class="chat-scroll" id="chat-scroll"><div class="chat-col" id="chat-col">
-        ${empty ? `<div class="chat-hello"><div class="chat-mascot big" id="chat-mascot" aria-hidden="true"></div><h1>${hello()}${name ? `, <em>${esc(name)}</em>` : ""}.</h1><p>Type to me. I'll answer, or just do it.</p></div>
-          <div class="chat-suggest">${SUGGEST.map(([t, k]) => `<button type="button" class="chat-sg" data-say="${esc(t)}"><b>${esc(t)}</b><span>${esc(k)}</span></button>`).join("")}</div>`
+        ${empty ? `<div class="chat-hello"><div class="chat-mascot big" id="chat-mascot" aria-hidden="true"></div><h1>${hello()}${name ? `, ${esc(name)}` : ""}</h1></div>`
         : msgs.map(msgHtml).join("")}
       </div></div>
       <form class="chat-box" id="chat-box" autocomplete="off">
@@ -199,6 +257,7 @@
           <button type="submit" class="chat-send" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg></button>
         </div>
       </form>
+      ${empty ? `<div class="chat-suggest">${SUGGEST.map(([t, k, ic]) => `<button type="button" class="chat-sg" data-say="${esc(t)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ic}"/></svg>${esc(k)}</button>`).join("")}</div>` : ""}
     </div>`;
   }
 

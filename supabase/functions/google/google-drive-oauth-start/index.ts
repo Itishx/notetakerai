@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getRequestUser } from "../../_shared/require-user.ts";
+import { buildSignedOAuthState } from "../../_shared/google-calendar.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +22,20 @@ serve(async (req) => {
       });
     }
 
+    const user = await getRequestUser(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Not signed in." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (userIdentifier !== user.id) {
+      return new Response(JSON.stringify({ error: "User mismatch." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
     const redirectUri = Deno.env.get("GOOGLE_DRIVE_REDIRECT_URI");
     if (!clientId || !redirectUri) {
@@ -29,7 +45,7 @@ serve(async (req) => {
       });
     }
 
-    const state = btoa(JSON.stringify({ userIdentifier }));
+    const state = await buildSignedOAuthState(user.id, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "");
 
     const scope = [
       "https://www.googleapis.com/auth/drive",

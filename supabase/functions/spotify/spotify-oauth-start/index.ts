@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, createSpotifyAdmin, json, requireAuthedSpotifyUser, requireSpotifyEnv } from "../../_shared/spotify.ts";
+import { buildSignedOAuthState } from "../../_shared/google-calendar.ts";
 
 const SPOTIFY_SCOPES = [
   "streaming",
@@ -36,10 +37,7 @@ serve(async (req) => {
       .eq("user_identifier", user.id)
       .maybeSingle();
 
-    const state = btoa(JSON.stringify({
-      userIdentifier: user.id,
-      hasExistingConnection: Boolean(existing?.id),
-    }));
+    const state = await buildSignedOAuthState(user.id, env.serviceRoleKey);
 
     const params = new URLSearchParams({
       client_id: env.clientId,
