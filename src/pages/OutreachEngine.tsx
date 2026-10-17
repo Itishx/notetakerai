@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Download, PenLine, LayoutGrid, Rows3, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Download, PenLine, LayoutGrid, Rows3, Home as HomeIcon, Package, Settings as SettingsIcon, Building2, Store, Users, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { supabase } from "@/integrations/supabase/client";
@@ -148,6 +148,17 @@ function OutreachApp() {
   const [sellOpen, setSellOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(false);
+  // Home (the summary) is where you land; New search is the composer.
+  const [homeOpen, setHomeOpen] = useState(true);
+  const [railQ, setRailQ] = useState("");
+  /* One way to move between screens, so no two are ever open at once. */
+  const go = (to: { search?: string; product?: string; inbox?: boolean; voice?: boolean; settings?: boolean; products?: boolean; home?: boolean }) => {
+    setHomeOpen(Boolean(to.home));
+    setActiveId(to.search || ""); setProductView(to.product || ""); setInboxOpen(Boolean(to.inbox));
+    setVoiceOpen(Boolean(to.voice)); setSettingsOpen(Boolean(to.settings)); setProductsOpen(Boolean(to.products));
+  };
   const [overview, setOverview] = useState<Overview | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
@@ -207,7 +218,7 @@ function OutreachApp() {
   return (
     <main className="oas" data-theme={theme || undefined}>
       <header className="oas-bar">
-        <Link to="/outreach/app" className="oas-mark" onClick={() => { setActiveId(""); setProductView(""); }}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
+        <Link to="/outreach/app" className="oas-mark" onClick={() => go({ home: true })}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
         <div className="oas-sources" aria-label="Data sources">
           {[["exa", "Exa"], ["apollo", "Apollo"], ["hunter", "Hunter"], ["model", "Model"]].map(([k, label]) => (
             <span key={k} className={`oas-src ${sources[k] ? "is-on" : ""}`} title={sources[k] ? `${label} is on` : `${label} is off: add its key`}><i />{label}</span>
@@ -219,49 +230,55 @@ function OutreachApp() {
         </button>
       </header>
       <div className="oas-shell">
-        <nav className="oas-rail">
-          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); setVoiceOpen(false); }}><Plus size={15} /> New search</button>
-          <button type="button" className={`oas-sell-row oas-inbox-row ${inboxOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setVoiceOpen(false); setInboxOpen(true); }}>
-            <InboxIcon size={14} /><span>Inbox</span>{needsCount ? <em className="oas-badge">{needsCount}</em> : null}
-          </button>
-          {/* One row; your products fold out beneath it. */}
-          <button type="button" className={`oas-sell-row ${sellOpen ? "is-open" : ""}`} aria-expanded={sellOpen} onClick={() => setSellOpen((o) => !o)}>
-            <ChevronRight size={14} className="oas-sell-chev" /><span>What you sell</span>
-            {!sellOpen && products[0] ? <small>{products.length > 1 ? `${products.length} products` : (products[0].name || products[0].report?.name)}</small> : null}
-          </button>
-          {sellOpen && (
-            <div className="oas-sell-list">
-              {products.map((p) => (
-                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setVoiceOpen(false); setProductView(p.id); }}>
-                  {p.name || p.report?.name || "Untitled"}{p.status !== "ready" ? <small>needs details</small> : null}
-                </button>
-              ))}
-              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setVoiceOpen(false); setProductView("new"); }}><Plus size={12} /> Add a product</button>
+        <nav className="oas-rail oas-rail2">
+          <button className="oas-new" type="button" onClick={() => go({})}><Plus size={15} /> New search</button>
+          <div className="oas-nav">
+            <button type="button" className={homeOpen ? "is-on" : ""} onClick={() => go({ home: true })}><HomeIcon size={16} /><span>Home</span></button>
+            <button type="button" className={inboxOpen ? "is-on" : ""} onClick={() => go({ inbox: true })}><InboxIcon size={16} /><span>Inbox</span>{needsCount ? <em className="oas-badge">{needsCount}</em> : null}</button>
+            <button type="button" className={productsOpen || productView ? "is-on" : ""} onClick={() => go({ products: true })}><Package size={16} /><span>What you sell</span>{products.length ? <small>{products.length}</small> : null}</button>
+            <button type="button" className={voiceOpen ? "is-on" : ""} onClick={() => go({ voice: true })}><PenLine size={16} /><span>Your voice</span></button>
+          </div>
+          <div className="oas-rail-sec">
+            <h6>Searches <small>{briefs.length}</small></h6>
+            {briefs.length > 4 && <input className="oas-rail-q" value={railQ} onChange={(e) => setRailQ(e.target.value)} placeholder="Find a search" />}
+            <div className="oas-rail-list">
+              {briefs.filter((b) => !railQ.trim() || (b.title || "").toLowerCase().includes(railQ.trim().toLowerCase())).map((b) => {
+                const T = b.icp?.target === "companies" ? Building2 : b.icp?.target === "local" ? Store : Users;
+                return (
+                  <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => go({ search: b.id })}>
+                    <b><T size={13} /> {b.title || "Untitled"}</b>
+                    <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} found` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
+                  </button>
+                );
+              })}
+              {!briefs.length && <p className="oas-note" style={{ padding: "0 10px" }}>Your searches show up here.</p>}
             </div>
-          )}
-          <button type="button" className={`oas-sell-row oas-inbox-row ${voiceOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); setVoiceOpen(true); }}>
-            <PenLine size={14} /><span>Your voice</span>
-          </button>
-          <h6>Searches</h6>
-          {briefs.map((b) => (
-            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setInboxOpen(false); setVoiceOpen(false); setActiveId(b.id); }}>
-              <b>{b.title || "Untitled"}</b>
-              <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} people` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
-            </button>
-          ))}
-          {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Your searches show up here.</p>}
+          </div>
+          <div className="oas-rail-foot">
+            <button type="button" className={settingsOpen ? "is-on" : ""} onClick={() => go({ settings: true })}><SettingsIcon size={16} /><span>Settings</span></button>
+            <div className="oas-me">
+              <span className="oas-me-av">{String(user?.email || "I").slice(0, 1).toUpperCase()}</span>
+              <span className="oas-me-txt"><b>{(user?.email || "Founder mode").split("@")[0]}</b><small>{DEV_KEY && !user ? "Testing on this Mac" : "Signed in"}</small></span>
+            </div>
+          </div>
         </nav>
         <section className="oas-main">
-          {voiceOpen
+          {homeOpen
+            ? <HomeView name={(user?.email || "").split("@")[0]} overview={overview} briefsCount={briefs.length} onNew={() => go({})} onOpenSearch={(id) => go({ search: id })} onOpenInbox={() => go({ inbox: true })} onChanged={loadOverview} say={say} />
+            : settingsOpen
+            ? <SettingsView say={say} sources={sources} theme={theme} setTheme={setTheme} />
+            : voiceOpen
             ? <VoiceView say={say} />
             : inboxOpen
             ? <InboxView say={say} />
+            : productsOpen
+            ? <ProductsView products={products} onOpen={(id) => go({ product: id })} />
             : productView
             ? <ProductView key={productView} product={products.find((p) => p.id === productView) || null}
-                onSaved={async (p) => { await loadProducts(); setProductView(p.id); }} say={say} />
+                onSaved={async (p) => { await loadProducts(); go({ product: p.id }); }} say={say} />
             : active
               ? <Thread key={active.id} brief={active} leads={leads} onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
-              : <Start products={products} overview={overview} onOpenSearch={(id) => setActiveId(id)} onOpenInbox={() => { setActiveId(""); setProductView(""); setVoiceOpen(false); setInboxOpen(true); }} onAddProduct={() => setProductView("new")} onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
+              : <Start products={products} overview={overview} onOpenSearch={(id) => go({ search: id })} onOpenInbox={() => go({ inbox: true })} onAddProduct={() => go({ product: "new" })} onCreated={async (b) => { await loadBriefs(); go({ search: b.id }); }} />}
         </section>
       </div>
       {toast && <div className="oas-toast" role="status">{toast}</div>}
@@ -286,13 +303,15 @@ function Start({ products, onCreated, onAddProduct, overview, onOpenSearch, onOp
   useEffect(() => { try { localStorage.setItem("oas-product", productId); } catch (_) { /* fine */ } }, [productId]);
   const selling = ready.find((p) => p.id === productId);
   const [ask, setAsk] = useState("");
+  const [target, setTarget] = useState<Target>(() => { try { return (localStorage.getItem("oas-target") as Target) || "people"; } catch (_) { return "people"; } });
+  useEffect(() => { try { localStorage.setItem("oas-target", target); } catch (_) { /* fine */ } }, [target]);
   const [offer, setOffer] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {
     if (!ask.trim() || busy) return;
     setBusy(true); setErr("");
-    try { const r = await call("refine", { ask, offer, product_id: selling?.id || null }); onCreated(r.brief); }
+    try { const r = await call("refine", { ask, offer, product_id: selling?.id || null, target }); onCreated(r.brief); }
     catch (e) { setErr((e as Error).message); setBusy(false); }
   };
   if (busy) {
@@ -307,7 +326,7 @@ function Start({ products, onCreated, onAddProduct, overview, onOpenSearch, onOp
     <div className="oas-start">
       <h1 className="oas-hello">Who do we want to sell to?</h1>
       <div className="oas-box">
-        <textarea rows={2} value={ask} autoFocus onChange={(e) => setAsk(e.target.value)} placeholder="Who do we want to sell to? e.g. founders of D2C skincare brands in India"
+        <textarea rows={2} value={ask} autoFocus onChange={(e) => setAsk(e.target.value)} placeholder={TARGETS[target].example}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
         <div className="oas-box-rule" />
         <textarea rows={1} value={offer} onChange={(e) => setOffer(e.target.value)} placeholder={selling ? `Anything specific about this pitch for ${selling.name}? (optional)` : "What do we sell, or what problem do we solve?"}
@@ -315,6 +334,7 @@ function Start({ products, onCreated, onAddProduct, overview, onOpenSearch, onOp
         <div className="oas-box-foot">
           <span className="oas-note">Nothing is searched or sent until you say so.</span>
           <div className="oas-foot-right">
+            <TargetPicker target={target} setTarget={setTarget} />
             <SellPicker ready={ready} productId={productId} setProductId={setProductId} onAddProduct={onAddProduct} />
           <button type="button" className="oas-send" aria-label="Send" disabled={!ask.trim()} onClick={() => void go()}><ArrowUp size={17} /></button>
           </div>
@@ -328,7 +348,6 @@ function Start({ products, onCreated, onAddProduct, overview, onOpenSearch, onOp
           </button>
         ))}
       </div>
-      {overview && overview.totals.people > 0 && <Dashboard o={overview} onOpenSearch={onOpenSearch} onOpenInbox={onOpenInbox} />}
     </div>
   );
 }
@@ -342,10 +361,11 @@ type Overview = {
   totals: { people: number; with_email: number; verified_email: number; written: number; sent: number; replied: number; booked: number; spend_usd: number };
   needs: { replies: number; interested: number; followups_due: number; ready_to_send: number };
   searches: { id: string; title: string; status: string; updated_at: string; people: number; reach: number[]; sent: number; replied: number; top_score: number }[];
+  people?: (Lead & { search: string; reply_text?: string })[];
 };
 const REACH_TONES = ["var(--o-good)", "var(--o-accent)", "var(--o-warn)", "var(--o-ink-faint)", "var(--o-line-strong)"];
 
-function Dashboard({ o, onOpenSearch, onOpenInbox }: { o: Overview; onOpenSearch: (id: string) => void; onOpenInbox: () => void }) {
+function Dashboard({ o, onOpenSearch, onOpenInbox, onChanged, say }: { o: Overview; onOpenSearch: (id: string) => void; onOpenInbox: () => void; onChanged?: () => Promise<void>; say?: (t: string) => void }) {
   const t = o.totals;
   const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "–");
   const kpis: { k: string; v: string | number; sub: string; goal?: boolean }[] = [
@@ -378,19 +398,7 @@ function Dashboard({ o, onOpenSearch, onOpenInbox }: { o: Overview; onOpenSearch
           {needs.map((x) => <button key={x.label} type="button" onClick={x.go}><b>{x.n}</b> {x.label} <ArrowUpRight size={13} /></button>)}
         </div>
       )}
-      <div className="oas-dash-head"><span className="oas-dash-label">Your searches</span><span className="oas-dash-legend">{["verified email", "email", "phone", "LinkedIn", "none"].map((l, i) => <span key={l}><i style={{ background: REACH_TONES[i] }} />{l}</span>)}</span></div>
-      <div className="oas-dash-cards">
-        {o.searches.map((s) => (
-          <button key={s.id} type="button" className="oas-scard" onClick={() => onOpenSearch(s.id)}>
-            <div className="oas-scard-top"><b>{s.title || "Untitled"}</b><ScoreRing score={s.top_score} size={34} /></div>
-            <div className="oas-scard-bar" aria-label="How reachable these people are">
-              {s.reach.map((n, i) => n ? <i key={i} style={{ flex: n, background: REACH_TONES[i] }} /> : null)}
-            </div>
-            <div className="oas-scard-meta"><span><b>{s.people}</b> people</span><span><b>{s.reach[0] + s.reach[1]}</b> email</span><span><b>{s.sent}</b> sent</span><span><b>{s.replied}</b> replied</span></div>
-            <small className="oas-soft">{ago(s.updated_at)}</small>
-          </button>
-        ))}
-      </div>
+      <PeopleGrid people={o.people || []} onChanged={onChanged} say={say} />
     </section>
   );
 }
@@ -453,7 +461,12 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
       ...(extra ? [{ q: "Anything else to change?", a: extra }] : []),
     ].filter((a) => a.a.trim()),
   }));
-  const hunt = () => run("hunt", async () => { await call("hunt", { brief_id: brief.id }); });
+  const hunt = () => run("hunt", async () => {
+    // Local businesses: the map is read from this browser (map servers turn cloud servers away).
+    const finds = icp.target === "local" ? await localFindsInBrowser(icp) : undefined;
+    if (icp.target === "local" && !finds?.length) throw new Error("The map found no matching businesses there. Try a wider area or a different kind of business.");
+    await call("hunt", { brief_id: brief.id, finds });
+  });
   const draftAll = () => run("draft", async () => { const r = await call("draft", { brief_id: brief.id, limit: 12 }); say(`${r.drafted} messages written`); });
   const gmail = useGmail();
   const ready = leads.filter((l) => !l.discarded && l.status === "drafted" && l.email && (l.message?.variants?.email?.body || (l.message?.channel === "email" && l.message?.body)));
@@ -1458,5 +1471,235 @@ function Board({ leads, onOpen, openId }: { leads: Lead[]; onOpen: (id: string) 
         );
       })}
     </div>
+  );
+}
+
+/* ── What we are looking for ─────────────────────────────────────────── */
+type Target = "people" | "companies" | "local";
+const TARGETS: Record<Target, { label: string; icon: typeof Users; example: string; note: string }> = {
+  people: { label: "People", icon: Users, example: "Who do we want to sell to? e.g. founders of D2C skincare brands in India", note: "Decision makers, with their reasons and emails" },
+  companies: { label: "Companies", icon: Building2, example: "Which companies? e.g. logistics startups in the US that raised a Series A", note: "Organisations, their sites and contacts" },
+  local: { label: "Local businesses", icon: Store, example: "Which businesses, and where? e.g. cafés in Indiranagar, Bangalore without a website", note: "Shops near a place, from the map" },
+};
+function TargetPicker({ target, setTarget }: { target: Target; setTarget: (t: Target) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener("mousedown", off);
+    return () => window.removeEventListener("mousedown", off);
+  }, [open]);
+  const T = TARGETS[target];
+  return (
+    <div className="oas-picker" ref={ref}>
+      <button type="button" className="oas-picker-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}><T.icon size={14} /> {T.label} <ChevronDown size={13} /></button>
+      {open && (
+        <div className="oas-picker-menu" role="menu">
+          {(Object.keys(TARGETS) as Target[]).map((k) => { const X = TARGETS[k]; return (
+            <button key={k} type="button" role="menuitem" onClick={() => { setTarget(k); setOpen(false); }}>
+              <span className="oas-pick-row"><X.icon size={15} /><span><b>{X.label}</b><small>{X.note}</small></span></span>{k === target ? <Check size={14} /> : null}
+            </button>
+          ); })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Local businesses from OpenStreetMap, read in the browser. Same listing text
+   the engine expects; Google Places takes over once a Maps key is set. */
+async function localFindsInBrowser(icp: any) {
+  const loc = icp?.local || {};
+  const place = String(loc.place || (icp?.locations || [])[0] || "").trim();
+  if (!place) return [];
+  const g = await fetch(`https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(place)}`).then((r) => r.json()).catch(() => null);
+  const c = g?.features?.[0]?.geometry?.coordinates;
+  if (!Array.isArray(c)) return [];
+  const [lon, lat] = c;
+  const radius = Math.max(500, Math.min(15000, Math.round((Number(loc.radius_km) || 3) * 1000)));
+  const tags = (Array.isArray(loc.osm_tags) ? loc.osm_tags : []).map(String).filter((t: string) => /^[a-z_:]+=[\w*|-]+$/i.test(t)).slice(0, 6);
+  if (!tags.length) return [];
+  // One statement per key (amenity cafe|restaurant together), which the free
+  // servers answer; one statement per tag times two was too heavy for them.
+  const byKey = new Map<string, string[]>();
+  for (const t of tags) { const [k, v] = t.split("="); byKey.set(k, [...(byKey.get(k) || []), v]); }
+  const sel = [...byKey].map(([k, vs]) => (vs.includes("*") ? `nwr["${k}"](around:${radius},${lat},${lon});` : `nwr["${k}"~"^(${vs.join("|")})$"](around:${radius},${lat},${lon});`)).join("");
+  const q = `[out:json][timeout:45];(${sel});out tags center 200;`;
+  // Every mirror at once; the first good answer wins.
+  const hosts = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+  const d: any = await Promise.any(hosts.map(async (host) => {
+    const r = await fetch(host, { method: "POST", body: new URLSearchParams({ data: q }), signal: AbortSignal.timeout(55000) });
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json();
+    if (!Array.isArray(j?.elements)) throw new Error("bad");
+    return j;
+  })).catch(() => null);
+  const els = (d?.elements || []).filter((e: any) => e?.tags?.name);
+  els.sort((a: any, b: any) => Number(Boolean(b.tags.phone || b.tags["contact:phone"])) - Number(Boolean(a.tags.phone || a.tags["contact:phone"])));
+  return els.slice(0, 90).map((e: any) => {
+    const t = e.tags;
+    const site = t.website || t["contact:website"] || "";
+    const phone = t.phone || t["contact:phone"] || "";
+    const addr = [t["addr:housenumber"], t["addr:street"], t["addr:suburb"] || t["addr:neighbourhood"], t["addr:city"]].filter(Boolean).join(", ");
+    const kind = t.amenity || t.shop || t.office || t.craft || t.leisure || t.healthcare || "";
+    return {
+      url: site || `https://www.openstreetmap.org/${e.type}/${e.id}`,
+      title: `${t.name} (${kind})`,
+      text: `Business: ${t.name}; kind: ${kind}; ${t.cuisine ? `cuisine: ${t.cuisine}; ` : ""}address: ${addr || place}; phone: ${phone || "none listed"}; website: ${site || "NONE LISTED"}; instagram: ${t["contact:instagram"] || "-"}; opening hours: ${t.opening_hours || "-"}`.slice(0, 600),
+    };
+  });
+}
+
+/* ── What you sell: your products as cards, opened on the right ───────── */
+function ProductsView({ products, onOpen }: { products: Product[]; onOpen: (id: string) => void }) {
+  return (
+    <div className="oas-thread oas-product">
+      <div>
+        <div className="oas-kicker">What you sell</div>
+        <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 6px" }}>Your products.</h1>
+        <p className="oas-soft" style={{ margin: 0, fontFamily: "var(--o-serif)", fontSize: 18 }}>Every search and every message reads these, so Braino never has to guess what you sell.</p>
+      </div>
+      <div className="oas-pgrid">
+        {products.map((p) => (
+          <button key={p.id} type="button" className="oas-pcard" onClick={() => onOpen(p.id)}>
+            <span className="oas-pcard-mark">{(p.name || p.report?.name || "?").slice(0, 1).toUpperCase()}</span>
+            <b>{p.name || p.report?.name || "Untitled"}</b>
+            <p>{p.report?.one_liner || "No report yet."}</p>
+            <span className="oas-pcard-meta">
+              <span className={`oas-dot-s ${p.status === "ready" ? "is-ok" : ""}`} />{p.status === "ready" ? "Report ready" : p.status === "reading" ? "Reading…" : "Needs details"}
+              {p.website ? <> · {p.website.replace(/^https?:\/\//, "")}</> : null}
+              {(p.questions || []).length ? <> · {p.questions.length} open questions</> : null}
+            </span>
+          </button>
+        ))}
+        <button type="button" className="oas-pcard is-add" onClick={() => onOpen("new")}><Plus size={22} /><b>Add a product</b><p>Give a website, some notes or a document. Braino writes the report.</p></button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Settings ─────────────────────────────────────────────────────────── */
+function SettingsView({ say, sources, theme, setTheme }: { say: (t: string) => void; sources: Record<string, boolean>; theme: string; setTheme: (t: any) => void }) {
+  const gmail = useGmail();
+  const [s, setS] = useState<any>(null);
+  const [name, setName] = useState(""); const [booking, setBooking] = useState(""); const [cap, setCap] = useState(20);
+  useEffect(() => { void call("gmail_status").then((r) => { const x = r?.settings || {}; setS(x); setName(x.from_name || ""); setBooking(x.booking_url || ""); setCap(x.daily_cap || 20); }).catch(() => {}); }, []);
+  const save = async () => {
+    const r = await call("settings", { from_name: name, booking_url: booking, daily_cap: cap }).catch((e) => { say((e as Error).message); return null; });
+    if (r) { setS(r.settings); say("Settings saved"); void refreshGmail(); }
+  };
+  const dirty = s && (name !== (s.from_name || "") || booking !== (s.booking_url || "") || cap !== (s.daily_cap || 20));
+  const srcs: [string, string, string][] = [["exa", "Exa", "Finds people, companies and news"], ["model", "AI model", "Reads, ranks and writes"], ["apollo", "Apollo", "People database (key not set)"], ["hunter", "Hunter", "Email finder (key not set)"]];
+  return (
+    <div className="oas-thread oas-product">
+      <div>
+        <div className="oas-kicker">Settings</div>
+        <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 6px" }}>How Outreach works for you.</h1>
+      </div>
+      <section className="oas-set">
+        <h5>Sending</h5>
+        <div className="oas-set-row"><span><b>Gmail</b><small>{gmail?.connected ? `Sending from ${gmail.email}` : "Not connected for sending"}</small></span>
+          {gmail?.connected ? <span className="oas-pill is-on">Connected</span> : <button type="button" className="oas-btn is-small is-primary" onClick={() => void connectGmail()}><Mail /> Connect Gmail</button>}</div>
+        <div className="oas-set-row"><span><b>Your name on emails</b><small>How you sign off and what people see</small></span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Itish Pande" /></div>
+        <div className="oas-set-row"><span><b>Booking link</b><small>Added to answers when someone is interested</small></span><input value={booking} onChange={(e) => setBooking(e.target.value)} placeholder="https://calendar.app.google/…" /></div>
+        <div className="oas-set-row"><span><b>Daily limit</b><small>Starts at 10 and rises 5 a day up to this, so Gmail stays healthy. Today: {gmail?.cap_today ?? 10}</small></span><input type="number" min={1} max={100} value={cap} onChange={(e) => setCap(Number(e.target.value) || 20)} style={{ width: 90 }} /></div>
+        {dirty && <div style={{ padding: "12px 18px" }}><button type="button" className="oas-btn is-small is-ink" onClick={() => void save()}>Save changes</button></div>}
+      </section>
+      <section className="oas-set">
+        <h5>Data sources</h5>
+        {srcs.map(([k, label, note]) => (
+          <div key={k} className="oas-set-row"><span><b>{label}</b><small>{note}</small></span><span className={`oas-pill ${sources[k] ? "is-on" : ""}`}>{sources[k] ? "On" : "Off"}</span></div>
+        ))}
+        <div className="oas-set-row"><span><b>Prospeo</b><small>Verified emails, about 1 cent each, only when found</small></span><span className="oas-pill is-on">On</span></div>
+        <div className="oas-set-row"><span><b>Local businesses</b><small>OpenStreetMap now. Add a Google Maps key for phones, ratings and reviews.</small></span><span className="oas-pill">Free map</span></div>
+      </section>
+      <section className="oas-set">
+        <h5>Appearance</h5>
+        <div className="oas-set-row"><span><b>Theme</b><small>Follow your Mac, or pick one</small></span>
+          <div className="oas-seg">{[["", "Auto"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => <button key={k} type="button" className={theme === k ? "is-on" : ""} onClick={() => setTheme(k)}>{l}</button>)}</div></div>
+      </section>
+    </div>
+  );
+}
+
+/* ── Home: everything that has happened so far ───────────────────────── */
+function HomeView({ name, overview, briefsCount, onNew, onOpenSearch, onOpenInbox, onChanged, say }: {
+  name: string; overview: Overview | null; briefsCount: number; onNew: () => void; onOpenSearch: (id: string) => void; onOpenInbox: () => void;
+  onChanged: () => Promise<void>; say: (t: string) => void;
+}) {
+  const hour = new Date().getHours();
+  const hello = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const first = name ? name.replace(/[^a-z]/gi, " ").trim().split(/\s+/)[0] : "";
+  const who = first ? first[0].toUpperCase() + first.slice(1).replace(/\d+$/, "") : "";
+  const t = overview?.totals;
+  const line = !t || !t.people
+    ? "Nothing yet. Start a search and everything you find, send and hear back lands here."
+    : `You have found ${t.people} people across ${briefsCount} search${briefsCount === 1 ? "" : "es"}, can email ${t.with_email} of them, sent ${t.sent}, and heard back from ${t.replied}.${t.booked ? ` ${t.booked} booked a call.` : ""}`;
+  return (
+    <div className="oas-home">
+      <div className="oas-home-head">
+        <div>
+          <div className="oas-kicker">Home</div>
+          <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 8px" }}>{hello}{who ? `, ${who}` : ""}.</h1>
+          <p className="oas-home-line">{line}</p>
+        </div>
+        <button type="button" className="oas-btn is-primary" onClick={onNew}><Plus /> New search</button>
+      </div>
+      {overview && overview.totals.people > 0 ? <Dashboard o={overview} onOpenSearch={onOpenSearch} onOpenInbox={onOpenInbox} onChanged={onChanged} say={say} /> : !overview ? <Braino><p>Gathering your numbers…</p><Dots /></Braino> : null}
+    </div>
+  );
+}
+
+/* ── Home: the people to get in touch with, as a tagged grid ─────────── */
+const NEXT: { key: string; label: string; match: (l: Lead) => boolean }[] = [
+  { key: "all", label: "All", match: () => true },
+  { key: "replied", label: "Replied", match: (l) => l.status === "replied" },
+  { key: "send", label: "Ready to send", match: (l) => l.status === "drafted" && Boolean(l.email) },
+  { key: "write", label: "Needs a message", match: (l) => l.status === "new" },
+  { key: "noemail", label: "No email yet", match: (l) => !l.email && l.status !== "replied" },
+];
+function nextStep(l: Lead) {
+  if (l.status === "replied") return { text: l.reply_kind === "interested" ? "Interested, answer now" : "Replied, answer", tone: "good" };
+  if (l.status === "sent") return { text: "Sent, waiting", tone: "" };
+  if (l.status === "drafted" && l.email) return { text: "Ready to send", tone: "accent" };
+  if (l.status === "drafted") return { text: "Written, no email", tone: "" };
+  return { text: "Needs a message", tone: "" };
+}
+function PeopleGrid({ people, onChanged, say }: { people: (Lead & { search: string; reply_text?: string })[]; onChanged?: () => Promise<void>; say?: (t: string) => void }) {
+  const [f, setF] = useState("all");
+  const [open, setOpen] = useState("");
+  const list = people.filter(NEXT.find((x) => x.key === f)!.match);
+  const lead = people.find((l) => l.id === open) || null;
+  return (
+    <>
+      <div className="oas-dash-head">
+        <span className="oas-dash-label">People to get in touch with</span>
+        <div className="oas-seg">{NEXT.map((x) => { const n = people.filter(x.match).length; return n || x.key === "all" ? <button key={x.key} type="button" className={f === x.key ? "is-on" : ""} onClick={() => setF(x.key)}>{x.label} <span className="oas-soft">{n}</span></button> : null; })}</div>
+      </div>
+      {list.length ? (
+        <div className="oas-pgrid2">
+          {list.map((l) => {
+            const n = nextStep(l);
+            return (
+              <button key={l.id} type="button" className="oas-pcard2" onClick={() => setOpen(l.id)}>
+                <div className="oas-pcard2-top">
+                  <Avatar name={l.name} src={l.photo_url} size={44} />
+                  <div><b>{l.name}</b><small>{[l.title, l.company].filter(Boolean).join(" · ")}</small></div>
+                  <ScoreRing score={l.score} size={38} />
+                </div>
+                <p>{l.status === "replied" && l.reply_text ? `“${String(l.reply_text).slice(0, 110)}”` : (l.reasons || [])[0] || l.summary}</p>
+                <div className="oas-tagrow">
+                  <span className={`oas-tg t-${n.tone}`}>{n.text}</span>
+                  <ContactIcons l={l} />
+                  {l.search ? <span className="oas-tg t-search" title={l.search}>{l.search}</span> : null}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : <div className="oas-empty">Nobody in this group right now.</div>}
+      {lead && onChanged && say && <LeadSheet lead={lead} onClose={() => setOpen("")} onChanged={onChanged} say={say} />}
+    </>
   );
 }

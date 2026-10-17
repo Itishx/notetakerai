@@ -120,8 +120,14 @@ Return JSON only:
   "exclude_traits": ["traits that disqualify"],
   "pain": "the problem the offer solves for them, in their words",
   "search_queries": ["4-6 natural-language web searches that would surface matching PEOPLE or COMPANIES, each specific"],
-  "questions": ["at most 3 short questions whose answers would change who gets picked. Empty if the brief is already precise."]
+  "questions": ["at most 3 short questions whose answers would change who gets picked. Empty if the brief is already precise."],
+  "local": {"place": "neighbourhood, city", "radius_km": 3, "osm_tags": ["amenity=cafe", "shop=bakery"], "need": ["what makes a local business a good lead, e.g. no website"]}
 }
+
+The search is for one of three targets, given to you as TARGET:
+- people: individuals (decision makers). search_queries find PEOPLE.
+- companies: organisations. search_queries find COMPANIES (their sites, directories, news), not people.
+- local: shops and local businesses near a place. Fill "local" with the place, a sensible radius, and OpenStreetMap tags (key=value, e.g. amenity=restaurant, shop=clothes, amenity=dentist, leisure=fitness_centre, office=company, craft=*). Leave "local" out for the other targets.
 
 Rules: be specific, never invent constraints the founder did not imply, prefer the decision maker over the user of the product, and write plainly with no em dashes.`;
 
@@ -266,7 +272,9 @@ async function refine(userId: string, body: any, spend: Spend) {
   const client = db();
   const productId = body.product_id ? String(body.product_id) : null;
   const product = productBrief(await productFor(client, userId, productId));
-  const icp = await ai("refine", REFINE_SYSTEM, `Who they want to sell to:\n${ask}\n\nWhat they sell:\n${offer || "(see the product report)"}\n${product ? `\nThe product, in detail:\n${product}\n` : ""}${answers ? `\nTheir answers so far:\n${answers}` : ""}`, spend, 2500);
+  const target = ["people", "companies", "local"].includes(body.target) ? body.target : "people";
+  const icpRaw = await ai("refine", REFINE_SYSTEM, `TARGET: ${target}\n\nWho they want to sell to:\n${ask}\n\nWhat they sell:\n${offer || "(see the product report)"}\n${product ? `\nThe product, in detail:\n${product}\n` : ""}${answers ? `\nTheir answers so far:\n${answers}` : ""}`, spend, 2500);
+  const icp = { ...icpRaw, target };
   const questions = answers ? [] : (Array.isArray(icp.questions) ? icp.questions.slice(0, 3) : []);
   const row = { user_id: userId, title: clip(icp.title, 80) || clip(ask, 60), ask, offer, icp, questions, status: "draft", product_id: productId, updated_at: new Date().toISOString() };
   const q = body.brief_id
@@ -774,6 +782,72 @@ function dedupeKey(l: any) {
   return lower(l.linkedin_url).replace(/\/$/, "") || lower(l.email) || `${lower(l.name)}|${lower(l.company)}`;
 }
 
+/* ── Local businesses, free: OpenStreetMap around a place ─────────────────
+   Geocode the place (Nominatim), then ask Overpass for businesses with the
+   tags the profile chose, within the radius. Coverage of phones in India is
+   thin (about 7% in a 2 km test around Indiranagar), so the website scan
+   fills in contacts where a site exists. Google Places replaces this when a
+   GOOGLE_MAPS_API_KEY is set. */
+const OSM_UA = "braino-outreach/0.1 (itishpande21@gmail.com)";
+async function geocode(place: string) {
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(place)}`, { headers: { "User-Agent": OSM_UA }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+  const d = res?.ok ? await res.json().catch(() => []) : [];
+  if (d?.[0]) return { lat: Number(d[0].lat), lon: Number(d[0].lon) };
+  // Nominatim sometimes turns cloud servers away; Photon reads the same map.
+  const p = await fetch(`https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(place)}`, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+  const pd = p?.ok ? await p.json().catch(() => ({})) : {};
+  const c = pd?.features?.[0]?.geometry?.coordinates;
+  return Array.isArray(c) ? { lat: Number(c[1]), lon: Number(c[0]) } : null;
+}
+async function localFinds(icp: any): Promise<Find[]> {
+  const loc = icp.local || {};
+  const place = String(loc.place || (icp.locations || [])[0] || "").trim();
+  const at = place ? await geocode(place) : null;
+  if (!at) return [];
+  const radius = Math.max(500, Math.min(15000, Math.round((Number(loc.radius_km) || 3) * 1000)));
+  const tags = (Array.isArray(loc.osm_tags) ? loc.osm_tags : []).map((t: string) => String(t)).filter((t: string) => /^[a-z_:]+=[\w*|-]+$/i.test(t)).slice(0, 6);
+  if (!tags.length) return [];
+  const byKey = new Map<string, string[]>();
+  for (const t of tags) { const [k, v] = t.split("="); byKey.set(k, [...(byKey.get(k) || []), v]); }
+  const sel = [...byKey].map(([k, vs]) => (vs.includes("*") ? `nwr["${k}"](around:${radius},${at.lat},${at.lon});` : `nwr["${k}"~"^(${vs.join("|")})$"](around:${radius},${at.lat},${at.lon});`)).join("");
+  const q = `[out:json][timeout:45];(${sel});out tags center 200;`;
+  // The main Overpass server is often at capacity; the public mirrors carry the same data.
+  let d: any = {};
+  for (const host of ["https://overpass.kumi.systems/api/interpreter", "https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]) {
+    const res = await fetch(host, { method: "POST", headers: { "User-Agent": OSM_UA, "Content-Type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(q)}`, signal: AbortSignal.timeout(20000) }).catch(() => null);
+    if (!res?.ok) continue;
+    d = await res.json().catch(() => ({}));
+    if (Array.isArray(d?.elements)) break;
+  }
+  const els = (d?.elements || []).filter((e: any) => e?.tags?.name);
+  // Ones with a way to reach them first, then the rest, capped for the model.
+  els.sort((a: any, b: any) => Number(Boolean(b.tags.phone || b.tags["contact:phone"])) - Number(Boolean(a.tags.phone || a.tags["contact:phone"])));
+  return els.slice(0, 90).map((e: any) => {
+    const t = e.tags;
+    const site = t.website || t["contact:website"] || "";
+    const phone = t.phone || t["contact:phone"] || "";
+    const addr = [t["addr:housenumber"], t["addr:street"], t["addr:suburb"] || t["addr:neighbourhood"], t["addr:city"]].filter(Boolean).join(", ");
+    const kind = t.amenity || t.shop || t.office || t.craft || t.leisure || t.healthcare || "";
+    return {
+      source: "openstreetmap", url: site || `https://www.openstreetmap.org/${e.type}/${e.id}`,
+      title: `${t.name} (${kind})`,
+      text: clip(`Business: ${t.name}; kind: ${kind}; ${t.cuisine ? `cuisine: ${t.cuisine}; ` : ""}address: ${addr || place}; phone: ${phone || "none listed"}; website: ${site || "NONE LISTED"}; instagram: ${t["contact:instagram"] || "-"}; opening hours: ${t.opening_hours || "-"}`, 600),
+      date: null,
+    };
+  });
+}
+
+/* A map listing's own phone and website go into the person's contacts. */
+function withListingContacts(contacts: any, used: Find[]) {
+  const c = { ...(contacts || {}) };
+  for (const f of used) {
+    if (f.source !== "openstreetmap") continue;
+    const phone = (f.text.match(/phone: ([^;]+)/) || [])[1] || "";
+    if (phone && !/none listed/i.test(phone)) c.phones = [...new Set([...(c.phones || []), ...phone.split(/[;,]/).map((x) => x.replace(/[^\d+]/g, "")).filter((x) => x.length >= 8)])].slice(0, 4);
+  }
+  return c;
+}
+
 async function hunt(userId: string, body: any, spend: Spend) {
   const client = db();
   const { data: brief, error } = await client.from("outreach_briefs").select("*").eq("id", body.brief_id).eq("user_id", userId).single();
@@ -782,13 +856,25 @@ async function hunt(userId: string, body: any, spend: Spend) {
   await client.from("outreach_briefs").update({ status: "hunting", updated_at: new Date().toISOString() }).eq("id", brief.id);
 
   try {
-    // Search wide, in parallel: people pages, company pages, and fresh news for signals.
+    // Search wide, in parallel. What gets searched depends on the target:
+    // people (profiles + companies + news), companies (company pages + news),
+    // or local businesses (OpenStreetMap around a place).
+    const target = icp.target || "people";
     const queries: string[] = (icp.search_queries || []).slice(0, 6);
     const signalQuery = [...(icp.signals || []).slice(0, 2), ...(icp.industries || []).slice(0, 1), ...(icp.locations || []).slice(0, 1)].join(" ");
     const jobs: Promise<Find[]>[] = [];
-    queries.forEach((q, i) => jobs.push(exaSearch(q, i % 2 === 0 ? "people" : "company", 10, spend)));
-    if (signalQuery) jobs.push(exaSearch(signalQuery, "news", 10, spend, 180));
-    jobs.push(apolloSearch(icp, spend));
+    if (target === "local") {
+      // Map servers turn cloud servers away, so the founder's browser reads
+      // the map and sends the listings; the server only falls back to trying.
+      const given = (Array.isArray(body.finds) ? body.finds : []).slice(0, 90)
+        .filter((f: any) => f && typeof f.title === "string" && typeof f.text === "string")
+        .map((f: any) => ({ source: "openstreetmap", url: clip(f.url, 300), title: clip(f.title, 160), text: clip(f.text, 600), date: null }));
+      jobs.push(given.length ? Promise.resolve(given) : localFinds(icp));
+    } else {
+      queries.forEach((q, i) => jobs.push(exaSearch(q, target === "companies" ? "company" : (i % 2 === 0 ? "people" : "company"), 10, spend)));
+      if (signalQuery) jobs.push(exaSearch(signalQuery, "news", 10, spend, 180));
+      if (target === "people") jobs.push(apolloSearch(icp, spend));
+    }
     const found = (await Promise.all(jobs)).flat().filter((f) => f.url || f.text);
     const seen = new Set<string>();
     const finds = found.filter((f) => { const k = f.url || f.title; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 70);
@@ -798,7 +884,12 @@ async function hunt(userId: string, body: any, spend: Spend) {
     }
 
     const numbered = finds.map((f, i) => `[${i + 1}] (${f.source}${f.date ? `, ${String(f.date).slice(0, 10)}` : ""}) ${f.title}\n${f.url}\n${f.text}`).join("\n\n");
-    const extracted = await ai("extract", EXTRACT_SYSTEM, `Target profile:\n${JSON.stringify(icp)}\n\nWhat they sell:\n${brief.offer || "(not given)"}\n\nSearch results:\n${numbered}`, spend, 9000);
+    const targetNote = target === "companies"
+      ? "TARGET IS COMPANIES: one lead per company. name = the company's name, company = the same name, title = what the company does in a few words, seniority = \"company\". If a result names a decision maker there, put them in the summary as \"Decision maker: <name>, <role>\". Match role by whether the company is the right kind of buyer.\n\n"
+      : target === "local"
+      ? "TARGET IS LOCAL BUSINESSES from a map listing: one lead per business. name = the business name, company = the same name, title = the kind of business, seniority = \"business\", location = its address. Use the listing's website and phone. Signals come from the listing, e.g. kind \"other\" with text \"No website listed\" when it has none. Prefer the businesses that best match the need. Do not drop a business only because it lacks a person's name.\n\n"
+      : "";
+    const extracted = await ai("extract", EXTRACT_SYSTEM, `${targetNote}Target profile:\n${JSON.stringify(icp)}\n\nWhat they sell:\n${brief.offer || "(not given)"}\n\nSearch results:\n${numbered}`, spend, 9000);
     const leads: any[] = Array.isArray(extracted?.leads) ? extracted.leads.filter((l: any) => clip(l?.name, 80)) : [];
 
     // Past wins for this user, across every brief: the learning part.
@@ -840,7 +931,7 @@ async function hunt(userId: string, body: any, spend: Spend) {
         name: clip(l.name, 120), title: clip(l.title, 160), seniority: clip(l.seniority, 30),
         company: clip(l.company, 160), company_domain: lower(l.company_domain).slice(0, 120),
         industry: clip(l.industry, 120), company_size: clip(l.company_size, 40), location: clip(l.location, 120),
-        email: clip(l.email, 160), email_status: l.email ? (l.email_status || "guessed") : "unknown", email_source: clip(l.email_source, 160), contacts: l.contacts || {},
+        email: clip(l.email, 160), email_status: l.email ? (l.email_status || "guessed") : "unknown", email_source: clip(l.email_source, 160), contacts: withListingContacts(l.contacts || {}, used),
         linkedin_url: clip(l.linkedin_url, 300), website: clip(l.website, 300), summary: clip(l.summary, 400), photo_url: photoFrom(used),
         signals: (l.signals || []).slice(0, 6), sources: sourcesUsed.slice(0, 6), features: r.features,
         score: r.score, score_parts: r.parts, reasons: r.reasons, discarded: Boolean(discard), discard_reason: discard,
@@ -1288,7 +1379,7 @@ async function syncUser(userId: string, spend: Spend) {
 async function overview(userId: string) {
   const client = db();
   const [{ data: leads }, { data: briefs }, { data: due }] = await Promise.all([
-    client.from("outreach_leads").select("brief_id, status, discarded, email, email_status, linkedin_url, contacts, reply_kind, reply_draft, score, updated_at").eq("user_id", userId).limit(5000),
+    client.from("outreach_leads").select("*").eq("user_id", userId).limit(5000),
     client.from("outreach_briefs").select("id, title, status, stats, updated_at, product_id").eq("user_id", userId).order("updated_at", { ascending: false }).limit(50),
     client.from("outreach_sends").select("id").eq("user_id", userId).eq("status", "queued").lte("scheduled_for", new Date().toISOString()),
   ]);
@@ -1320,7 +1411,15 @@ async function overview(userId: string) {
       top_score: mine.reduce((m: number, l: any) => Math.max(m, Number(l.score) || 0), 0),
     };
   });
-  return json({ totals, needs, searches });
+  /* The people worth contacting next, across every search: anyone who replied
+     first, then the most reachable, then the best fit. Tagged with their search. */
+  const titleOf = new Map((briefs || []).map((b: any) => [b.id, b.title]));
+  const people = all
+    .filter((l: any) => ["new", "drafted", "replied", "sent"].includes(l.status))
+    .sort((a: any, b: any) => Number(b.status === "replied") - Number(a.status === "replied") || reach(a) - reach(b) || (Number(b.score) || 0) - (Number(a.score) || 0))
+    .slice(0, 36)
+    .map((l: any) => ({ ...l, search: titleOf.get(l.brief_id) || "" }));
+  return json({ totals, needs, searches, people });
 }
 
 async function inbox(userId: string) {
