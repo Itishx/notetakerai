@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Download, PenLine, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Download, PenLine, LayoutGrid, Rows3, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,7 +29,7 @@ type Lead = {
   signals: { kind: string; text: string; date?: string; url?: string }[];
   sources: { name: string; url: string; title?: string }[];
   score: number; score_parts: any; reasons: string[]; discarded: boolean; discard_reason: string;
-  status: string; message: { channel?: string; subject?: string; body?: string; followups?: string[]; variants?: Record<string, Variant> };
+  status: string; reply_kind?: string; message: { channel?: string; subject?: string; body?: string; followups?: string[]; variants?: Record<string, Variant> };
 };
 type Variant = { subject?: string; body: string; followups?: string[] };
 type Product = {
@@ -148,6 +148,7 @@ function OutreachApp() {
   const [sellOpen, setSellOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
@@ -161,6 +162,9 @@ function OutreachApp() {
 
   // Reads go through the engine, so the personal key works without a session.
   const canUse = Boolean(user || DEV_KEY);
+  const loadOverview = useCallback(async () => { const r = await call("overview").catch(() => null); if (r) setOverview(r); }, []);
+  useEffect(() => { if (canUse) void loadOverview(); }, [canUse, activeId, inboxOpen, loadOverview]);
+  const needsCount = overview ? overview.needs.replies + overview.needs.followups_due : 0;
   const loadBriefs = useCallback(async () => {
     const r = await call("list_briefs").catch(() => ({ briefs: [] }));
     setBriefs(r.briefs || []);
@@ -218,7 +222,7 @@ function OutreachApp() {
         <nav className="oas-rail">
           <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); setVoiceOpen(false); }}><Plus size={15} /> New search</button>
           <button type="button" className={`oas-sell-row oas-inbox-row ${inboxOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setVoiceOpen(false); setInboxOpen(true); }}>
-            <InboxIcon size={14} /><span>Inbox</span>
+            <InboxIcon size={14} /><span>Inbox</span>{needsCount ? <em className="oas-badge">{needsCount}</em> : null}
           </button>
           {/* One row; your products fold out beneath it. */}
           <button type="button" className={`oas-sell-row ${sellOpen ? "is-open" : ""}`} aria-expanded={sellOpen} onClick={() => setSellOpen((o) => !o)}>
@@ -257,7 +261,7 @@ function OutreachApp() {
                 onSaved={async (p) => { await loadProducts(); setProductView(p.id); }} say={say} />
             : active
               ? <Thread key={active.id} brief={active} leads={leads} onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
-              : <Start products={products} onAddProduct={() => setProductView("new")} onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
+              : <Start products={products} overview={overview} onOpenSearch={(id) => setActiveId(id)} onOpenInbox={() => { setActiveId(""); setProductView(""); setVoiceOpen(false); setInboxOpen(true); }} onAddProduct={() => setProductView("new")} onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
         </section>
       </div>
       {toast && <div className="oas-toast" role="status">{toast}</div>}
@@ -267,7 +271,10 @@ function OutreachApp() {
 
 /* ── The empty chat ──────────────────────────────────────────────────── */
 
-function Start({ products, onCreated, onAddProduct }: { products: Product[]; onCreated: (b: Brief) => void; onAddProduct: () => void }) {
+function Start({ products, onCreated, onAddProduct, overview, onOpenSearch, onOpenInbox }: {
+  products: Product[]; onCreated: (b: Brief) => void; onAddProduct: () => void;
+  overview: Overview | null; onOpenSearch: (id: string) => void; onOpenInbox: () => void;
+}) {
   const ready = products.filter((p) => p.status === "ready");
   const [productId, setProductId] = useState<string>(() => {
     try { return localStorage.getItem("oas-product") || ""; } catch (_) { return ""; }
@@ -321,7 +328,85 @@ function Start({ products, onCreated, onAddProduct }: { products: Product[]; onC
           </button>
         ))}
       </div>
+      {overview && overview.totals.people > 0 && <Dashboard o={overview} onOpenSearch={onOpenSearch} onOpenInbox={onOpenInbox} />}
     </div>
+  );
+}
+
+/* ── Home dashboard ──────────────────────────────────────────────────────
+   Everything at a glance, nothing to decode: six numbers that read as a
+   sentence left to right (found → reachable → sent → replied → booked, and
+   what it cost), what needs you right now, and every search as a card whose
+   bar shows how reachable its people are. */
+type Overview = {
+  totals: { people: number; with_email: number; verified_email: number; written: number; sent: number; replied: number; booked: number; spend_usd: number };
+  needs: { replies: number; interested: number; followups_due: number; ready_to_send: number };
+  searches: { id: string; title: string; status: string; updated_at: string; people: number; reach: number[]; sent: number; replied: number; top_score: number }[];
+};
+const REACH_TONES = ["var(--o-good)", "var(--o-accent)", "var(--o-warn)", "var(--o-ink-faint)", "var(--o-line-strong)"];
+
+function Dashboard({ o, onOpenSearch, onOpenInbox }: { o: Overview; onOpenSearch: (id: string) => void; onOpenInbox: () => void }) {
+  const t = o.totals;
+  const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "–");
+  const kpis: { k: string; v: string | number; sub: string; goal?: boolean }[] = [
+    { k: "People found", v: t.people, sub: `${o.searches.length} search${o.searches.length === 1 ? "" : "es"}` },
+    { k: "Reachable by email", v: t.with_email, sub: `${t.verified_email} verified · ${pct(t.with_email, t.people)}` },
+    { k: "Sent", v: t.sent, sub: `${t.written} written` },
+    { k: "Replied", v: t.replied, sub: `${pct(t.replied, t.sent)} reply rate` },
+    { k: "Calls booked", v: t.booked, sub: `${pct(t.booked, t.replied)} of replies`, goal: true },
+    { k: "Spent", v: `$${t.spend_usd.toFixed(2)}`, sub: t.booked ? `$${(t.spend_usd / t.booked).toFixed(2)} per call` : "on search and writing" },
+  ];
+  const needs: { n: number; label: string; go: () => void }[] = [
+    { n: o.needs.interested, label: o.needs.interested === 1 ? "person is interested" : "people are interested", go: onOpenInbox },
+    { n: o.needs.replies, label: o.needs.replies === 1 ? "reply to answer" : "replies to answer", go: onOpenInbox },
+    { n: o.needs.followups_due, label: o.needs.followups_due === 1 ? "follow-up is due" : "follow-ups are due", go: onOpenInbox },
+    { n: o.needs.ready_to_send, label: "emails written, ready to send", go: () => o.searches[0] && onOpenSearch(o.searches[0].id) },
+  ].filter((x) => x.n > 0);
+  return (
+    <section className="oas-dash" aria-label="Your outreach at a glance">
+      <div className="oas-dash-kpis">
+        {kpis.map((x, i) => (
+          <div key={x.k} className={`oas-kpi ${x.goal ? "is-goal" : ""}`}>
+            <span>{x.k}</span><b>{x.v}</b><small>{x.sub}</small>
+            {i < kpis.length - 2 ? <i className="oas-kpi-arrow" aria-hidden="true">→</i> : null}
+          </div>
+        ))}
+      </div>
+      {needs.length > 0 && (
+        <div className="oas-dash-needs">
+          <span className="oas-dash-label">Needs you</span>
+          {needs.map((x) => <button key={x.label} type="button" onClick={x.go}><b>{x.n}</b> {x.label} <ArrowUpRight size={13} /></button>)}
+        </div>
+      )}
+      <div className="oas-dash-head"><span className="oas-dash-label">Your searches</span><span className="oas-dash-legend">{["verified email", "email", "phone", "LinkedIn", "none"].map((l, i) => <span key={l}><i style={{ background: REACH_TONES[i] }} />{l}</span>)}</span></div>
+      <div className="oas-dash-cards">
+        {o.searches.map((s) => (
+          <button key={s.id} type="button" className="oas-scard" onClick={() => onOpenSearch(s.id)}>
+            <div className="oas-scard-top"><b>{s.title || "Untitled"}</b><ScoreRing score={s.top_score} size={34} /></div>
+            <div className="oas-scard-bar" aria-label="How reachable these people are">
+              {s.reach.map((n, i) => n ? <i key={i} style={{ flex: n, background: REACH_TONES[i] }} /> : null)}
+            </div>
+            <div className="oas-scard-meta"><span><b>{s.people}</b> people</span><span><b>{s.reach[0] + s.reach[1]}</b> email</span><span><b>{s.sent}</b> sent</span><span><b>{s.replied}</b> replied</span></div>
+            <small className="oas-soft">{ago(s.updated_at)}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* A score as a ring: the eye reads a circle's fill faster than a bar's length. */
+function ScoreRing({ score, size = 40 }: { score: number; size?: number }) {
+  const r = (size - 6) / 2, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, Number(score) || 0));
+  const tone = v >= 70 ? "var(--o-good)" : v >= 50 ? "var(--o-accent)" : "var(--o-ink-faint)";
+  return (
+    <span className="oas-ring" style={{ width: size, height: size }} title={`${v} out of 100`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--o-line)" strokeWidth="3" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={tone} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(v / 100) * c} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      </svg>
+      <b style={{ fontSize: Math.round(size * 0.32) }}>{v}</b>
+    </span>
   );
 }
 
@@ -525,7 +610,16 @@ function Funnel({ leads }: { leads: Lead[] }) {
     ["Kept", live.length], ["Written", n(["drafted", ...after])], ["Sent", n(after)],
     ["Replied", n(["replied", "booked"])], ["Calls booked", n(["booked"]), true],
   ];
-  return <div className="oas-funnel">{stages.map(([k, v, goal]) => <div key={k} className={`oas-stage ${goal ? "is-goal" : ""}`}><b>{v}</b><span>{k}</span></div>)}</div>;
+  return (
+    <div className="oas-funnel">
+      {stages.map(([k, v, goal], i) => (
+        <div key={k} className={`oas-stage ${goal ? "is-goal" : ""}`}>
+          <b>{v}</b><span>{k}</span>
+          {i > 0 && stages[i - 1][1] ? <em className="oas-conv">{Math.round((v / stages[i - 1][1]) * 100)}%</em> : null}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* How reachable someone is, best first. A person with a verified email is
@@ -566,6 +660,8 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
   const [minScore, setMinScore] = useState(0);
   const [sort, setSort] = useState<"reach" | "fit">("reach");
   const [tier, setTier] = useState<number | null>(null);
+  const [view, setView] = useState<"table" | "board">(() => { try { return (localStorage.getItem("oas-view") as any) || "table"; } catch (_) { return "table"; } });
+  useEffect(() => { try { localStorage.setItem("oas-view", view); } catch (_) { /* fine */ } }, [view]);
   const base = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return leads.filter((l) => {
@@ -578,6 +674,11 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
     });
   }, [leads, filter, q, minScore]);
   const counts = useMemo(() => TIERS.map((_, k) => base.filter((l) => tierOf(l) === k).length), [base]);
+  // The board shows every stage at once, so it ignores the status filter.
+  const boardLeads = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return leads.filter((l) => !l.discarded && l.score >= minScore && (!needle || `${l.name} ${l.title} ${l.company} ${l.industry} ${l.location} ${l.email}`.toLowerCase().includes(needle)));
+  }, [leads, q, minScore]);
   const shown = useMemo(() => {
     const list = tier === null ? base : base.filter((l) => tierOf(l) === tier);
     return [...list].sort((a, b) => (sort === "reach" ? tierOf(a) - tierOf(b) : 0) || b.score - a.score);
@@ -594,6 +695,10 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
       </div>
       <div className="oas-tools">
         <div className="oas-seg" role="tablist">{FILTERS.map(([k, label]) => <button key={k} type="button" className={filter === k ? "is-on" : ""} onClick={() => setFilter(k)}>{label}</button>)}</div>
+        <div className="oas-seg" aria-label="View">
+          <button type="button" className={view === "table" ? "is-on" : ""} onClick={() => setView("table")} title="Table"><Rows3 size={14} /></button>
+          <button type="button" className={view === "board" ? "is-on" : ""} onClick={() => setView("board")} title="Pipeline board"><LayoutGrid size={14} /></button>
+        </div>
         <div className="oas-seg" aria-label="Sort">
           <button type="button" className={sort === "reach" ? "is-on" : ""} onClick={() => setSort("reach")}>Most reachable</button>
           <button type="button" className={sort === "fit" ? "is-on" : ""} onClick={() => setSort("fit")}>Best fit</button>
@@ -601,7 +706,7 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
         <input className="oas-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, place" />
         <label className="oas-range">Score ≥ {minScore}<input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} /></label>
       </div>
-      {shown.length ? (
+      {view === "board" ? <Board leads={boardLeads} onOpen={onOpen} openId={openId} /> : shown.length ? (
         <div style={{ overflowX: "auto" }}>
           <table className="oas-table">
             <thead><tr><th>#</th><th>Person</th><th>Company</th><th>Contact</th><th>Score</th><th className="oas-why-h">Why</th><th>Status</th></tr></thead>
@@ -612,7 +717,7 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
                   <td className="oas-person"><div className="oas-who"><Avatar name={l.name} src={l.photo_url} /><div><b>{l.name}</b><small>{l.title}</small></div></div></td>
                   <td className="oas-co"><b>{l.company}</b><small>{[l.industry, l.location].filter(Boolean).join(" · ")}</small></td>
                   <td><ContactIcons l={l} /></td>
-                  <td className="oas-score"><div className={`oas-meter ${l.score >= 70 ? "is-high" : ""}`}><b>{l.score}</b><i style={{ ["--w" as any]: `${l.score}%` }} /></div></td>
+                  <td className="oas-score"><ScoreRing score={l.score} size={38} /></td>
                   <td className="oas-why">{l.discarded ? l.discard_reason : (l.reasons || [])[0] || l.summary}</td>
                   <td><span className={`oas-status s-${l.status}`}>{l.discarded ? "Set aside" : STATUS_LABEL[l.status] || l.status}</span></td>
                 </tr>
@@ -1319,6 +1424,39 @@ function VoiceView({ say }: { say: (t: string) => void }) {
           <ReportBlock title="Unmistakably you">{list(p.examples).length ? <ul>{list(p.examples).map((x: string) => <li key={x}>“{x}”</li>)}</ul> : null}</ReportBlock>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Pipeline board: the same people, as cards moving left to right ────── */
+const BOARD: { key: string; label: string; match: (l: Lead) => boolean }[] = [
+  { key: "reach", label: "Ready to write", match: (l) => l.status === "new" && !l.discarded },
+  { key: "drafted", label: "Ready to send", match: (l) => l.status === "drafted" && !l.discarded },
+  { key: "sent", label: "Sent, waiting", match: (l) => l.status === "sent" },
+  { key: "replied", label: "Replied", match: (l) => l.status === "replied" },
+  { key: "booked", label: "Call booked", match: (l) => l.status === "booked" },
+];
+function Board({ leads, onOpen, openId }: { leads: Lead[]; onOpen: (id: string) => void; openId: string }) {
+  return (
+    <div className="oas-board">
+      {BOARD.map((col) => {
+        const items = leads.filter(col.match).sort((a, b) => tierOf(a) - tierOf(b) || b.score - a.score);
+        return (
+          <div key={col.key} className={`oas-col c-${col.key}`}>
+            <div className="oas-col-head"><span>{col.label}</span><b>{items.length}</b></div>
+            <div className="oas-col-body">
+              {items.map((l) => (
+                <button key={l.id} type="button" className={`oas-card ${openId === l.id ? "is-on" : ""}`} onClick={() => onOpen(l.id)}>
+                  <div className="oas-card-top"><Avatar name={l.name} src={l.photo_url} size={30} /><div><b>{l.name}</b><small>{l.company}</small></div><ScoreRing score={l.score} size={32} /></div>
+                  <p>{l.status === "replied" && l.reply_kind ? `“${String((l as any).reply_text || "").slice(0, 90)}”` : (l.reasons || [])[0] || l.summary}</p>
+                  <ContactIcons l={l} />
+                </button>
+              ))}
+              {!items.length && <div className="oas-col-empty">Nobody here yet</div>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

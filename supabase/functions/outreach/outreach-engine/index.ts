@@ -1283,6 +1283,46 @@ async function syncUser(userId: string, spend: Spend) {
 }
 
 /* Everyone contacted, with why, for what, what was sent and what came back. */
+/* The home dashboard, in one call: totals, reach, what needs the founder,
+   and each search's shape. Read only. */
+async function overview(userId: string) {
+  const client = db();
+  const [{ data: leads }, { data: briefs }, { data: due }] = await Promise.all([
+    client.from("outreach_leads").select("brief_id, status, discarded, email, email_status, linkedin_url, contacts, reply_kind, reply_draft, score, updated_at").eq("user_id", userId).limit(5000),
+    client.from("outreach_briefs").select("id, title, status, stats, updated_at, product_id").eq("user_id", userId).order("updated_at", { ascending: false }).limit(50),
+    client.from("outreach_sends").select("id").eq("user_id", userId).eq("status", "queued").lte("scheduled_for", new Date().toISOString()),
+  ]);
+  const all = (leads || []).filter((l: any) => !l.discarded);
+  const reach = (l: any) => l.email && ["verified", "found"].includes(l.email_status) ? 0 : l.email ? 1 : ((l.contacts?.phones || []).length || (l.contacts?.whatsapp || []).length) ? 2 : l.linkedin_url ? 3 : 4;
+  const after = ["sent", "replied", "booked", "not_interested", "opted_out"];
+  const totals = {
+    people: all.length,
+    with_email: all.filter((l: any) => reach(l) <= 1).length,
+    verified_email: all.filter((l: any) => reach(l) === 0).length,
+    written: all.filter((l: any) => l.status === "drafted" || after.includes(l.status)).length,
+    sent: all.filter((l: any) => after.includes(l.status)).length,
+    replied: all.filter((l: any) => ["replied", "booked"].includes(l.status)).length,
+    booked: all.filter((l: any) => l.status === "booked").length,
+    spend_usd: +(briefs || []).reduce((n: number, b: any) => n + (Number(b.stats?.cost_usd) || 0), 0).toFixed(2),
+  };
+  const needs = {
+    replies: all.filter((l: any) => l.status === "replied" && l.reply_draft).length,
+    interested: all.filter((l: any) => l.status === "replied" && l.reply_kind === "interested").length,
+    followups_due: (due || []).length,
+    ready_to_send: all.filter((l: any) => l.status === "drafted" && l.email).length,
+  };
+  const searches = (briefs || []).map((b: any) => {
+    const mine = all.filter((l: any) => l.brief_id === b.id);
+    return {
+      id: b.id, title: b.title, status: b.status, updated_at: b.updated_at,
+      people: mine.length, reach: [0, 1, 2, 3, 4].map((t) => mine.filter((l: any) => reach(l) === t).length),
+      sent: mine.filter((l: any) => after.includes(l.status)).length, replied: mine.filter((l: any) => ["replied", "booked"].includes(l.status)).length,
+      top_score: mine.reduce((m: number, l: any) => Math.max(m, Number(l.score) || 0), 0),
+    };
+  });
+  return json({ totals, needs, searches });
+}
+
 async function inbox(userId: string) {
   const client = db();
   const { data: leads } = await client.from("outreach_leads").select("*").eq("user_id", userId).in("status", ["sent", "replied", "booked", "not_interested", "opted_out"]).order("updated_at", { ascending: false }).limit(300);
@@ -1377,6 +1417,7 @@ serve(async (req) => {
     else if (step === "reply_send") res = await replySend(user.id, body);
     else if (step === "sync") res = json({ ok: true, ...(await syncUser(user.id, spend)) });
     else if (step === "inbox") res = await inbox(user.id);
+    else if (step === "overview") res = await overview(user.id);
     else if (step === "find_emails") res = await findEmails(user.id, body, spend);
     else if (step === "voice_get") res = await voiceGet(user.id);
     else if (step === "voice_build") res = await voiceBuild(user.id, body, spend);
