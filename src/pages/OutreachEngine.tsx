@@ -516,38 +516,90 @@ function Funnel({ leads }: { leads: Lead[] }) {
   return <div className="oas-funnel">{stages.map(([k, v, goal]) => <div key={k} className={`oas-stage ${goal ? "is-goal" : ""}`}><b>{v}</b><span>{k}</span></div>)}</div>;
 }
 
+/* How reachable someone is, best first. A person with a verified email is
+   worth more today than a better fit we cannot reach. */
+const TIERS = [
+  { key: "email", label: "with an email" },
+  { key: "inbox", label: "company inbox or guessed email" },
+  { key: "phone", label: "phone or WhatsApp only" },
+  { key: "linkedin", label: "LinkedIn only" },
+  { key: "none", label: "no contact yet" },
+] as const;
+function tierOf(l: Lead) {
+  const c = l.contacts || {};
+  if (l.email && ["verified", "found"].includes(l.email_status)) return 0;
+  if (l.email) return 1;
+  if ((c.phones || []).length || (c.whatsapp || []).length) return 2;
+  if (l.linkedin_url) return 3;
+  return 4;
+}
+
+function ContactIcons({ l }: { l: Lead }) {
+  const c = l.contacts || {};
+  const phone = (c.phones || []).length > 0, wa = (c.whatsapp || []).length > 0;
+  return (
+    <span className="oas-ci">
+      {l.email ? <span className={`oas-ci-mail s-${l.email_status}`} title={`${l.email} · ${l.email_source || l.email_status}`}><Mail size={12} />{EMAIL_TRUST[l.email_status] || "email"}</span> : null}
+      {phone ? <span title={(c.phones || []).join(", ")}>☎</span> : null}
+      {wa ? <span title={`WhatsApp ${(c.whatsapp || []).join(", ")}`}>WA</span> : null}
+      {l.linkedin_url ? <span title="LinkedIn">in</span> : null}
+      {!l.email && !phone && !wa && !l.linkedin_url ? <span className="oas-soft">none yet</span> : null}
+    </span>
+  );
+}
+
 function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOpen: (id: string) => void }) {
   const [filter, setFilter] = useState<string>("ready");
   const [q, setQ] = useState("");
   const [minScore, setMinScore] = useState(0);
-  const shown = useMemo(() => {
+  const [sort, setSort] = useState<"reach" | "fit">("reach");
+  const [tier, setTier] = useState<number | null>(null);
+  const base = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return leads.filter((l) => {
       if (filter === "discarded" ? !l.discarded : (filter !== "all" && l.discarded)) return false;
       if (filter === "ready" && !["new", "drafted"].includes(l.status)) return false;
       if (["drafted", "sent", "replied", "booked"].includes(filter) && l.status !== filter) return false;
       if (l.score < minScore) return false;
-      if (needle && !`${l.name} ${l.title} ${l.company} ${l.industry} ${l.location}`.toLowerCase().includes(needle)) return false;
+      if (needle && !`${l.name} ${l.title} ${l.company} ${l.industry} ${l.location} ${l.email}`.toLowerCase().includes(needle)) return false;
       return true;
     });
   }, [leads, filter, q, minScore]);
+  const counts = useMemo(() => TIERS.map((_, k) => base.filter((l) => tierOf(l) === k).length), [base]);
+  const shown = useMemo(() => {
+    const list = tier === null ? base : base.filter((l) => tierOf(l) === tier);
+    return [...list].sort((a, b) => (sort === "reach" ? tierOf(a) - tierOf(b) : 0) || b.score - a.score);
+  }, [base, tier, sort]);
   return (
     <div className="oas-people">
+      <div className="oas-reach">
+        <b>{counts[0] + counts[1]}</b> of {base.length} have an email
+        <span className="oas-reach-chips">
+          {TIERS.map((t, k) => counts[k] ? (
+            <button key={t.key} type="button" className={`oas-reach-chip t${k} ${tier === k ? "is-on" : ""}`} onClick={() => setTier(tier === k ? null : k)}>{counts[k]} {t.label}</button>
+          ) : null)}
+        </span>
+      </div>
       <div className="oas-tools">
         <div className="oas-seg" role="tablist">{FILTERS.map(([k, label]) => <button key={k} type="button" className={filter === k ? "is-on" : ""} onClick={() => setFilter(k)}>{label}</button>)}</div>
+        <div className="oas-seg" aria-label="Sort">
+          <button type="button" className={sort === "reach" ? "is-on" : ""} onClick={() => setSort("reach")}>Most reachable</button>
+          <button type="button" className={sort === "fit" ? "is-on" : ""} onClick={() => setSort("fit")}>Best fit</button>
+        </div>
         <input className="oas-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, place" />
         <label className="oas-range">Score ≥ {minScore}<input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} /></label>
       </div>
       {shown.length ? (
         <div style={{ overflowX: "auto" }}>
           <table className="oas-table">
-            <thead><tr><th>#</th><th>Person</th><th>Company</th><th>Score</th><th className="oas-why-h">Why</th><th>Status</th></tr></thead>
+            <thead><tr><th>#</th><th>Person</th><th>Company</th><th>Contact</th><th>Score</th><th className="oas-why-h">Why</th><th>Status</th></tr></thead>
             <tbody>
               {shown.map((l, i) => (
-                <tr key={l.id} className={`${l.id === openId ? "is-on" : ""} ${l.discarded ? "is-out" : ""}`} onClick={() => onOpen(l.id)}>
+                <tr key={l.id} className={`${l.id === openId ? "is-on" : ""} ${l.discarded ? "is-out" : ""} ${sort === "reach" && i > 0 && tierOf(shown[i - 1]) !== tierOf(l) ? "oas-tier-break" : ""}`} onClick={() => onOpen(l.id)}>
                   <td className="oas-rank">{i + 1}</td>
                   <td className="oas-person"><div className="oas-who"><Avatar name={l.name} src={l.photo_url} /><div><b>{l.name}</b><small>{l.title}</small></div></div></td>
                   <td className="oas-co"><b>{l.company}</b><small>{[l.industry, l.location].filter(Boolean).join(" · ")}</small></td>
+                  <td><ContactIcons l={l} /></td>
                   <td className="oas-score"><div className={`oas-meter ${l.score >= 70 ? "is-high" : ""}`}><b>{l.score}</b><i style={{ ["--w" as any]: `${l.score}%` }} /></div></td>
                   <td className="oas-why">{l.discarded ? l.discard_reason : (l.reasons || [])[0] || l.summary}</td>
                   <td><span className={`oas-status s-${l.status}`}>{l.discarded ? "Set aside" : STATUS_LABEL[l.status] || l.status}</span></td>

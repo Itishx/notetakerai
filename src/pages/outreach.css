@@ -477,3 +477,18 @@
 .oas-mail.s-verified em, .oas-mail.s-found em { background: var(--o-good-soft); color: var(--o-good); }
 .oas-mail.s-guessed em { background: var(--o-accent-soft); color: var(--o-accent); }
 button.oas-link { cursor: pointer; font: inherit; font-size: 12px; }
+
+/* Reachability: the count line, the filter chips, the contact column. */
+.oas-reach { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--o-line); font-size: 14px; color: var(--o-ink-soft); }
+.oas-reach > b { font-size: 20px; color: var(--o-ink); font-variant-numeric: tabular-nums; }
+.oas-reach-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.oas-reach-chip { height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--o-line); background: transparent; font-size: 12.5px; color: var(--o-ink-soft); cursor: pointer; }
+.oas-reach-chip.t0 { border-color: var(--o-good); color: var(--o-good); background: var(--o-good-soft); }
+.oas-reach-chip.t1 { border-color: var(--o-accent); color: var(--o-accent); }
+.oas-reach-chip.is-on { box-shadow: 0 0 0 2px var(--o-ink); color: var(--o-ink); }
+.oas-ci { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
+.oas-ci > span { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--o-line); color: var(--o-ink-soft); white-space: nowrap; }
+.oas-ci-mail.s-verified, .oas-ci-mail.s-found { border-color: var(--o-good) !important; color: var(--o-good) !important; background: var(--o-good-soft); }
+.oas-ci-mail.s-guessed, .oas-ci-mail.s-company { border-color: var(--o-accent) !important; color: var(--o-accent) !important; }
+.oas-ci > span.oas-soft { border: 0; padding: 0; font-weight: 500; }
+.oas-table tr.oas-tier-break td { border-top: 2px solid var(--o-line-strong); }
