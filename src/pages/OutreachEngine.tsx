@@ -49,7 +49,7 @@ const EXAMPLES = [
    not, or when the link has expired (LinkedIn's do). */
 function Avatar({ name, src, size = 34 }: { name: string; src?: string; size?: number }) {
   const [broken, setBroken] = useState(false);
-  const initials = String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const initials = String(name || "?").replace(/\(.*?\)/g, "").split(/\s+/).filter((w) => /^[\p{L}]/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
   return (
     <span className="oas-av" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }} aria-hidden="true">
       {src && !broken ? <img src={src} alt="" referrerPolicy="no-referrer" loading="lazy" onError={() => setBroken(true)} /> : initials}
@@ -446,11 +446,15 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
         )}
 
         {hasPeople && busy !== "hunt" && (
-          <Braino wide>
+          <>
+          <Braino>
             <p>
               I read {brief.stats?.searched ?? "the"} results and found <b>{leads.length} people</b>. <b>{kept.length}</b> fit; I set {leads.length - kept.length} aside and say why.
-              {brief.stats?.learned_from ? ` Ranked using ${brief.stats.learned_from} of your past wins.` : ""} Click anyone to see why they are here and what to send.
+              {brief.stats?.learned_from ? ` Ranked using ${brief.stats.learned_from} of your past wins.` : ""} The people I can reach are at the top. Click anyone to see why they are here and what to send.
             </p>
+          </Braino>
+          {/* The results step out of the chat column: a table this wide does not fit a message. */}
+          <div className="oas-wide">
             <Funnel leads={leads} />
             <People leads={leads} openId={open} onOpen={setOpen} />
             <div className="oas-row" style={{ marginTop: 14 }}>
@@ -462,7 +466,8 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
               <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Search again</button>
               {brief.stats?.cost_usd != null && <span className="oas-note">This search ≈ ${Number(brief.stats.cost_usd).toFixed(2)}</span>}
             </div>
-          </Braino>
+          </div>
+          </>
         )}
 
         {confirmAll && (

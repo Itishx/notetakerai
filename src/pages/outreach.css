@@ -492,3 +492,22 @@ button.oas-link { cursor: pointer; font: inherit; font-size: 12px; }
 .oas-ci-mail.s-guessed, .oas-ci-mail.s-company { border-color: var(--o-accent) !important; color: var(--o-accent) !important; }
 .oas-ci > span.oas-soft { border: 0; padding: 0; font-weight: 500; }
 .oas-table tr.oas-tier-break td { border-top: 2px solid var(--o-line-strong); }
+
+/* ── Results step out of the chat column (2026-10-17) ──────────────────
+   The thread is 820px; the table gets nearly the whole main area, centred on
+   the same axis, so names, companies and reasons stop stacking word by word. */
+.oas-wide { width: min(1320px, calc(100vw - 248px - 56px)); margin-left: 50%; transform: translateX(-50%); font-family: var(--o-sans); font-size: 14px; }
+.oas-wide .oas-funnel { margin-top: 0; border-radius: 16px 16px 0 0; border-bottom: 0; }
+.oas-wide .oas-people { margin-top: 0; border-radius: 0 0 16px 16px; overflow: hidden; }
+.oas-wide .oas-table { table-layout: auto; }
+.oas-wide .oas-table th, .oas-wide .oas-table td { padding: 14px 14px; }
+.oas-wide .oas-person { min-width: 200px; }
+.oas-wide .oas-person b { white-space: nowrap; }
+.oas-wide .oas-co { min-width: 180px; }
+.oas-wide .oas-co b { white-space: nowrap; }
+.oas-wide .oas-score { min-width: 104px; }
+.oas-wide .oas-why { min-width: 220px; max-width: 380px; line-height: 1.5; }
+.oas-wide td:has(.oas-ci) { min-width: 140px; }
+.oas-wide .oas-rank { width: 44px; }
+@media (max-width: 820px) { .oas-wide { width: calc(100vw - 32px); } }
+.oas-wide .oas-status { white-space: nowrap; }
