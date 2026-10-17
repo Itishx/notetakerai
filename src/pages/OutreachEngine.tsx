@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { supabase } from "@/integrations/supabase/client";
@@ -79,6 +79,32 @@ async function call(step: string, body: Record<string, unknown> = {}) {
   return data;
 }
 
+/* Gmail status, read once per page and refreshed after connecting. */
+type GmailState = { connected: boolean; email: string; reason?: string; cap_today: number; sent_today: number; settings?: any };
+let gmailCache: GmailState | null = null;
+const gmailListeners = new Set<(g: GmailState) => void>();
+async function refreshGmail() {
+  const g = await call("gmail_status").catch(() => null);
+  if (g) { gmailCache = g; gmailListeners.forEach((f) => f(g)); }
+  return g as GmailState | null;
+}
+function useGmail() {
+  const [g, setG] = useState<GmailState | null>(gmailCache);
+  useEffect(() => {
+    gmailListeners.add(setG);
+    if (!gmailCache) void refreshGmail();
+    // Coming back from Google's permission screen: look again.
+    const onFocus = () => void refreshGmail();
+    window.addEventListener("focus", onFocus);
+    return () => { gmailListeners.delete(setG); window.removeEventListener("focus", onFocus); };
+  }, []);
+  return g;
+}
+async function connectGmail() {
+  const r = await call("gmail_connect");
+  if (r?.authUrl) window.open(r.authUrl, "_blank", "noopener");
+}
+
 function gmailUrl(to: string, subject: string, body: string) {
   const p = new URLSearchParams({ view: "cm", fs: "1", to, su: subject, body });
   return `https://mail.google.com/mail/?${p.toString()}`;
@@ -119,6 +145,7 @@ function OutreachApp() {
   // "" = new search, "new" = add a product, otherwise a product id being viewed.
   const [productView, setProductView] = useState<string>("");
   const [sellOpen, setSellOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
@@ -187,7 +214,10 @@ function OutreachApp() {
       </header>
       <div className="oas-shell">
         <nav className="oas-rail">
-          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); }}><Plus size={15} /> New search</button>
+          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); }}><Plus size={15} /> New search</button>
+          <button type="button" className={`oas-sell-row oas-inbox-row ${inboxOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(true); }}>
+            <InboxIcon size={14} /><span>Inbox</span>
+          </button>
           {/* One row; your products fold out beneath it. */}
           <button type="button" className={`oas-sell-row ${sellOpen ? "is-open" : ""}`} aria-expanded={sellOpen} onClick={() => setSellOpen((o) => !o)}>
             <ChevronRight size={14} className="oas-sell-chev" /><span>What you sell</span>
@@ -196,16 +226,16 @@ function OutreachApp() {
           {sellOpen && (
             <div className="oas-sell-list">
               {products.map((p) => (
-                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(p.id); }}>
+                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setProductView(p.id); }}>
                   {p.name || p.report?.name || "Untitled"}{p.status !== "ready" ? <small>needs details</small> : null}
                 </button>
               ))}
-              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView("new"); }}><Plus size={12} /> Add a product</button>
+              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setProductView("new"); }}><Plus size={12} /> Add a product</button>
             </div>
           )}
           <h6>Searches</h6>
           {briefs.map((b) => (
-            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setActiveId(b.id); }}>
+            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setInboxOpen(false); setActiveId(b.id); }}>
               <b>{b.title || "Untitled"}</b>
               <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} people` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
             </button>
@@ -213,7 +243,9 @@ function OutreachApp() {
           {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Your searches show up here.</p>}
         </nav>
         <section className="oas-main">
-          {productView
+          {inboxOpen
+            ? <InboxView say={say} />
+            : productView
             ? <ProductView key={productView} product={products.find((p) => p.id === productView) || null}
                 onSaved={async (p) => { await loadProducts(); setProductView(p.id); }} say={say} />
             : active
@@ -331,6 +363,18 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
   }));
   const hunt = () => run("hunt", async () => { await call("hunt", { brief_id: brief.id }); });
   const draftAll = () => run("draft", async () => { const r = await call("draft", { brief_id: brief.id, limit: 12 }); say(`${r.drafted} messages written`); });
+  const gmail = useGmail();
+  const ready = leads.filter((l) => !l.discarded && l.status === "drafted" && l.email && (l.message?.variants?.email?.body || (l.message?.channel === "email" && l.message?.body)));
+  const [confirmAll, setConfirmAll] = useState(false);
+  const sendAll = async () => {
+    setConfirmAll(false);
+    await run("draft", async () => {
+      const r = await call("send", { lead_ids: ready.map((l) => l.id) });
+      const failed = (r.results || []).filter((x: any) => !x.ok);
+      say(`${r.sent} sent${failed.length ? `, ${failed.length} not sent: ${failed[0].why}` : ""}`);
+      void refreshGmail();
+    });
+  };
   const sendNote = () => { const t = note.trim(); if (!t || busy) return; setNote(""); void refine(t); };
 
   const hasPeople = leads.length > 0;
@@ -393,13 +437,25 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
             <Funnel leads={leads} />
             <People leads={leads} openId={open} onOpen={setOpen} />
             <div className="oas-row" style={{ marginTop: 14 }}>
-              <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void draftAll()}><Sparkles /> {busy === "draft" ? "Writing…" : "Write messages for the top 12"}</button>
+              <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void draftAll()}><Sparkles /> {busy === "draft" ? "Working…" : "Write messages for the top 12"}</button>
+              {ready.length > 0 && (gmail?.connected
+                ? <button type="button" className="oas-btn is-small is-ink" disabled={!!busy} onClick={() => setConfirmAll(true)}><Send /> Email all {ready.length} with Gmail</button>
+                : <button type="button" className="oas-btn is-small" onClick={() => void connectGmail()}><Mail /> Connect Gmail to send</button>)}
               <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Search again</button>
               {brief.stats?.cost_usd != null && <span className="oas-note">This search ≈ ${Number(brief.stats.cost_usd).toFixed(2)}</span>}
             </div>
           </Braino>
         )}
 
+        {confirmAll && (
+          <Braino>
+            <p>Send the first email to <b>{Math.min(ready.length, Math.max(0, (gmail?.cap_today ?? 10) - (gmail?.sent_today ?? 0)))}</b> people from <b>{gmail?.email}</b>? Today's limit is {gmail?.cap_today ?? 10}; anyone past it waits for tomorrow. Follow-ups are prepared but only go when you send them from the Inbox.</p>
+            <div className="oas-row">
+              <button type="button" className="oas-btn is-small is-primary" onClick={() => void sendAll()}><Send /> Yes, send</button>
+              <button type="button" className="oas-btn is-small" onClick={() => setConfirmAll(false)}>Not yet</button>
+            </div>
+          </Braino>
+        )}
         {busy === "refine" && <Braino><p>Updating the profile…</p><Dots /></Braino>}
         {busy === "draft" && <Braino><p>Writing one message per person, from their real moment…</p><Dots /></Braino>}
         {(err || (brief.status === "failed" && brief.stats?.error)) && <Braino><p className="oas-err" style={{ margin: 0 }}>{err || brief.stats.error}</p></Braino>}
@@ -529,6 +585,16 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
     const text = msg.channel === "email" && msg.subject ? `Subject: ${msg.subject}\n\n${msg.body}` : msg.body;
     try { await navigator.clipboard.writeText(text); say("Copied"); } catch (_) { say("Could not copy"); }
   };
+  const gmail = useGmail();
+  const sendNow = async () => {
+    if (dirty) await call("edit", { lead_id: lead.id, message: msg }).catch(() => null);
+    await act("send", async () => {
+      const r = await call("send", { lead_ids: [lead.id] });
+      const res = (r.results || [])[0];
+      if (!res?.ok) throw new Error(res?.why || "Not sent.");
+      void refreshGmail();
+    }, `Sent to ${lead.name.split(" ")[0]} from ${gmail?.email || "Gmail"}`);
+  };
   const openGmail = async () => {
     if (dirty) await call("edit", { lead_id: lead.id, message: msg }).catch(() => null);
     window.open(gmailUrl(lead.email, msg.subject, msg.body), "_blank", "noopener");
@@ -604,7 +670,10 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
                       <textarea className="is-follow" value={f} onChange={(e) => setMsg({ ...msg, followups: msg.followups.map((x, j) => (j === i ? e.target.value : x)) })} /></div>
                   ))}
                   <div className="oas-row">
-                    {msg.channel === "email" && lead.email && <button type="button" className="oas-btn is-primary is-small" onClick={() => void openGmail()}><Mail /> Open in Gmail</button>}
+                    {msg.channel === "email" && lead.email && !["sent", "replied", "booked", "opted_out"].includes(lead.status) && (gmail?.connected
+                      ? <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void sendNow()}><Send /> {busy === "send" ? "Sending…" : "Send with Gmail"}</button>
+                      : <button type="button" className="oas-btn is-primary is-small" onClick={() => void connectGmail()}><Mail /> Connect Gmail to send</button>)}
+                    {msg.channel === "email" && lead.email && <button type="button" className="oas-btn is-small" onClick={() => void openGmail()}>Open in Gmail</button>}
                     {msg.channel === "linkedin" && lead.linkedin_url && <a className="oas-btn is-primary is-small" style={{ textDecoration: "none" }} href={lead.linkedin_url} target="_blank" rel="noreferrer" onClick={() => void copy()}>Copy + open LinkedIn <ArrowUpRight /></a>}
                     <button type="button" className="oas-btn is-small" onClick={() => void copy()}><Copy /> Copy</button>
                     {dirty && <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void save()}>Save</button>}
@@ -894,6 +963,166 @@ function OutreachLanding({ onOpen }: { onOpen: () => void }) {
           <button type="button" className="oas-ao-btn is-ink" onClick={onOpen}>Open Outreach</button>
         </div>
       </article>
+    </div>
+  );
+}
+
+/* ── Inbox: everyone contacted, why, for what, and what came back ────────
+   Grouped by what needs you: replies to answer and follow-ups that are due
+   first, then people you are waiting on, then finished conversations. Every
+   send here is a click; nothing goes on its own. */
+
+type SendRow = { id: string; step: number; status: string; scheduled_for: string; sent_at?: string; subject: string; body: string };
+type InboxItem = Lead & { search: string; product: string; sends: SendRow[]; reply_text?: string; reply_kind?: string; reply_draft?: string; replied_at?: string; contacted_at?: string };
+
+const REPLY_LABEL: Record<string, string> = { interested: "Interested", question: "Has a question", not_now: "Not now", wrong_person: "Wrong person", unsubscribe: "Unsubscribed", other: "Replied" };
+const when = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
+
+function InboxView({ say }: { say: (t: string) => void }) {
+  const gmail = useGmail();
+  const [items, setItems] = useState<InboxItem[]>([]);
+  const [settings, setSettings] = useState<any>({});
+  const [loaded, setLoaded] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [openId, setOpenId] = useState("");
+  const [booking, setBooking] = useState("");
+  const [fromName, setFromName] = useState("");
+
+  const load = useCallback(async () => {
+    const r = await call("inbox").catch(() => ({ items: [], settings: {} }));
+    setItems(r.items || []); setSettings(r.settings || {}); setBooking(r.settings?.booking_url || ""); setFromName(r.settings?.from_name || ""); setLoaded(true);
+  }, []);
+  const check = useCallback(async (quiet = false) => {
+    setChecking(true);
+    try { const r = await call("sync"); if (!quiet) say(r.replies ? `${r.replies} new ${r.replies === 1 ? "reply" : "replies"}` : "No new replies"); }
+    catch (e) { if (!quiet) say((e as Error).message); }
+    finally { setChecking(false); await load(); }
+  }, [load, say]);
+  useEffect(() => { void load().then(() => check(true)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const now = Date.now();
+  const dueOf = (it: InboxItem) => it.status === "sent" ? it.sends.find((x) => x.status === "queued" && Date.parse(x.scheduled_for) <= now) : undefined;
+  const needs = items.filter((it) => (it.status === "replied" && it.reply_draft) || dueOf(it));
+  const waiting = items.filter((it) => it.status === "sent" && !dueOf(it));
+  const done = items.filter((it) => !needs.includes(it) && !waiting.includes(it));
+
+  const saveSettings = async () => {
+    const r = await call("settings", { booking_url: booking, from_name: fromName }).catch((e) => { say((e as Error).message); return null; });
+    if (r) { setSettings(r.settings); say("Saved"); }
+  };
+
+  return (
+    <div className="oas-thread oas-inbox">
+      <div>
+        <div className="oas-kicker">Inbox</div>
+        <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 6px" }}>Everyone you have reached out to.</h1>
+        <p className="oas-soft" style={{ margin: 0, fontFamily: "var(--o-serif)", fontSize: 18 }}>Who, why you picked them, what you sent, and what they said back. Nothing is sent without your click.</p>
+      </div>
+
+      <div className="oas-form oas-inbox-bar">
+        <div className="oas-row" style={{ justifyContent: "space-between" }}>
+          <span className="oas-gmail">
+            <i className={gmail?.connected ? "is-on" : ""} />
+            {gmail?.connected ? <>Sending from <b>{gmail.email}</b> · {Math.max(0, (gmail.cap_today ?? 10) - (gmail.sent_today ?? 0))} of {gmail.cap_today} left today</> : <>Gmail is not connected for sending</>}
+          </span>
+          <div className="oas-row">
+            {!gmail?.connected && <button type="button" className="oas-btn is-small is-primary" onClick={() => void connectGmail()}><Mail /> Connect Gmail</button>}
+            <button type="button" className="oas-btn is-small" disabled={checking} onClick={() => void check()}><RefreshCw /> {checking ? "Checking…" : "Check for replies"}</button>
+          </div>
+        </div>
+        <div className="oas-form-row">
+          <label><span>Your name on emails</span><input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Itish Pande" /></label>
+          <label><span>Booking link, added when someone is interested</span><input value={booking} onChange={(e) => setBooking(e.target.value)} placeholder="https://calendar.app.google/…" /></label>
+        </div>
+        {(booking !== (settings.booking_url || "") || fromName !== (settings.from_name || "")) && <div><button type="button" className="oas-btn is-small is-ink" onClick={() => void saveSettings()}>Save</button></div>}
+      </div>
+
+      {!loaded ? <Braino><p>Opening your inbox…</p><Dots /></Braino> : !items.length ? (
+        <div className="oas-empty">Nobody contacted yet. Open a search, write the messages, and press <b>Send with Gmail</b>.</div>
+      ) : (
+        <>
+          <InboxGroup title="Needs you" items={needs} openId={openId} setOpenId={setOpenId} dueOf={dueOf} reload={load} say={say} />
+          <InboxGroup title="Waiting on them" items={waiting} openId={openId} setOpenId={setOpenId} dueOf={dueOf} reload={load} say={say} />
+          <InboxGroup title="Finished" items={done} openId={openId} setOpenId={setOpenId} dueOf={dueOf} reload={load} say={say} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function InboxGroup({ title, items, openId, setOpenId, dueOf, reload, say }: {
+  title: string; items: InboxItem[]; openId: string; setOpenId: (id: string) => void;
+  dueOf: (it: InboxItem) => SendRow | undefined; reload: () => Promise<void>; say: (t: string) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <section className="oas-ibox">
+      <h5>{title} <span>{items.length}</span></h5>
+      {items.map((it) => (
+        <InboxRow key={it.id} it={it} open={openId === it.id} onToggle={() => setOpenId(openId === it.id ? "" : it.id)} due={dueOf(it)} reload={reload} say={say} />
+      ))}
+    </section>
+  );
+}
+
+function InboxRow({ it, open, onToggle, due, reload, say }: { it: InboxItem; open: boolean; onToggle: () => void; due?: SendRow; reload: () => Promise<void>; say: (t: string) => void }) {
+  const [draft, setDraft] = useState(it.reply_draft || "");
+  const [fu, setFu] = useState(due?.body || "");
+  const [busy, setBusy] = useState("");
+  useEffect(() => { setDraft(it.reply_draft || ""); }, [it.reply_draft]);
+  useEffect(() => { setFu(due?.body || ""); }, [due?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const act = async (label: string, fn: () => Promise<any>, done: string) => {
+    setBusy(label);
+    try { await fn(); say(done); void refreshGmail(); await reload(); }
+    catch (e) { say((e as Error).message); }
+    finally { setBusy(""); }
+  };
+  const nextQueued = it.sends.find((x) => x.status === "queued");
+  const state = it.status === "replied" ? (REPLY_LABEL[it.reply_kind || "other"] || "Replied")
+    : it.status === "sent" ? (due ? `Follow-up ${due.step} due` : nextQueued ? `Follow-up ${nextQueued.step} on ${when(nextQueued.scheduled_for)}` : "Waiting")
+    : STATUS_LABEL[it.status] || it.status;
+  const sent = it.sends.filter((x) => x.status === "sent").sort((a, b) => Date.parse(a.sent_at || a.scheduled_for) - Date.parse(b.sent_at || b.scheduled_for));
+
+  return (
+    <div className={`oas-irow ${open ? "is-open" : ""}`}>
+      <button type="button" className="oas-irow-head" onClick={onToggle} aria-expanded={open}>
+        <Avatar name={it.name} src={it.photo_url} />
+        <span className="oas-irow-who"><b>{it.name}</b><small>{[it.title, it.company].filter(Boolean).join(" at ")}</small></span>
+        <span className="oas-irow-for"><small>For</small>{it.product || "—"}<small className="oas-soft"> · {it.search}</small></span>
+        <span className={`oas-status s-${it.status} ${it.reply_kind === "interested" ? "s-booked" : ""}`}>{state}</span>
+        <span className="oas-irow-when">{when(it.replied_at || it.contacted_at)}</span>
+      </button>
+      {open && (
+        <div className="oas-irow-body">
+          <div className="oas-irow-why"><h5>Why you picked them</h5><ul className="oas-reasons">{(it.reasons || []).slice(0, 3).map((r) => <li key={r}>{r}</li>)}</ul></div>
+          <div className="oas-convo">
+            {sent.map((x) => (
+              <div key={x.id} className="oas-msgb is-you"><small>You · {x.step === 0 ? "First email" : x.step === 9 ? "Reply" : `Follow-up ${x.step}`} · {when(x.sent_at)}</small><p>{x.body}</p></div>
+            ))}
+            {it.reply_text && <div className="oas-msgb is-them"><small>{it.name.split(" ")[0]} · {when(it.replied_at)}</small><p>{it.reply_text}</p></div>}
+            {it.status === "replied" && it.reply_draft !== undefined && (draft || it.reply_draft) ? (
+              <div className="oas-msgb is-draft">
+                <small>Braino's suggested answer · edit, then send</small>
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
+                <div className="oas-row">
+                  <button type="button" className="oas-btn is-small is-primary" disabled={!!busy || !draft.trim()} onClick={() => void act("reply", () => call("reply_send", { lead_id: it.id, body: draft }), "Reply sent")}><Send /> {busy === "reply" ? "Sending…" : "Send reply"}</button>
+                  <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void act("booked", () => call("outcome", { lead_id: it.id, kind: "booked" }), "Call booked. Braino learns from this one.")}>Booked a call</button>
+                </div>
+              </div>
+            ) : null}
+            {due && (
+              <div className="oas-msgb is-draft">
+                <small>Follow-up {due.step} is due · it only goes when you send it</small>
+                <textarea value={fu} onChange={(e) => setFu(e.target.value)} />
+                <div className="oas-row">
+                  <button type="button" className="oas-btn is-small is-primary" disabled={!!busy || !fu.trim()} onClick={() => void act("fu", () => call("send_followup", { send_id: due.id, body: fu }), "Follow-up sent")}><Send /> {busy === "fu" ? "Sending…" : "Send follow-up"}</button>
+                  <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void act("stop", () => call("outcome", { lead_id: it.id, kind: "not_interested" }), "Stopped. No more follow-ups.")}>Stop here</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

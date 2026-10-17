@@ -27,10 +27,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { getRequestUser } from "../../_shared/require-user.ts";
 import { BRAINO_TEXT_MODEL } from "../../_shared/openai-models.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import { buildCalendarOAuthState, getCalendarConnection, getCalendarOAuthEnv, getValidCalendarAccessToken } from "../../_shared/google-calendar.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-outreach-key",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-outreach-key, x-outreach-cron",
 };
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -610,7 +611,7 @@ function variantFrom(d: any, ch: string) {
   const v = d?.[ch] || {};
   const body = String(v.body || "").replace(/[—–]/g, ",").trim().slice(0, 2000);
   if (!body) return null;
-  return { subject: ch === "email" ? clip(v.subject, 120) : "", body, followups: (Array.isArray(v.followups) ? v.followups : []).slice(0, 2).map((f: any) => clip(String(f).replace(/[—–]/g, ","), 400)) };
+  return { subject: ch === "email" ? clip(v.subject, 120) : "", body, followups: (Array.isArray(v.followups) ? v.followups : []).slice(0, 2).map((f: any) => clip(String(f).replace(/[—–]/g, ",").replace(/^\s*(?:day\s*\d+|follow[- ]?up\s*\d*)\s*[:,.-]\s*/i, ""), 400)) };
 }
 
 async function draft(userId: string, body: any, spend: Spend) {
@@ -682,6 +683,304 @@ async function edit(userId: string, body: any) {
   return json({ ok: true });
 }
 
+
+/* ── Sending, human in the loop (2026-10-17) ─────────────────────────────
+   Nothing is ever sent without a click. Email goes through the founder's own
+   Gmail (the Google connection the calendar already has, widened with
+   gmail.send and gmail.readonly) only when they press Send, Send follow-up or
+   Send reply. Follow-ups are prepared and marked due on day 3 and day 7, and
+   wait for that click. The scheduled check only READS: it looks for replies
+   in contacted threads, sorts them, drafts an answer, and retires follow-ups
+   for anyone who answered. It never sends. Pace: a daily cap that starts low
+   and rises with each day of sending; every address gets a mail-server check
+   first. Other channels stay copy-and-open. */
+
+const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
+const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+
+async function gmailConnect(userId: string) {
+  const env = getCalendarOAuthEnv();
+  const state = await buildCalendarOAuthState(userId, env.serviceRoleKey);
+  const scope = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile", "openid", ...GMAIL_SCOPES].join(" ");
+  const params = new URLSearchParams({ client_id: env.clientId, redirect_uri: env.redirectUri, response_type: "code", scope, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state });
+  return json({ authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+}
+
+async function gmailToken(userId: string) {
+  const env = getCalendarOAuthEnv();
+  const admin = db();
+  const connection = await getCalendarConnection(admin as any, userId).catch(() => null);
+  if (!connection) return { token: "", email: "", canSend: false, reason: "Connect Gmail first." };
+  const scope = String(connection.scope || "");
+  const token = await getValidCalendarAccessToken({ admin: admin as any, userId, env, connection, logPrefix: "outreach-gmail" });
+  return { token, email: String(connection.google_email || ""), canSend: scope.includes("gmail.send"), canRead: scope.includes("gmail.readonly") || scope.includes("gmail.modify"), reason: scope.includes("gmail.send") ? "" : "Gmail is not connected for sending yet. Connect Gmail." };
+}
+
+async function getSettings(userId: string) {
+  const { data } = await db().from("outreach_settings").select("*").eq("user_id", userId).maybeSingle();
+  return data || { user_id: userId, booking_url: "", daily_cap: 20, from_name: "", first_send_at: null };
+}
+async function saveSettings(userId: string, body: any) {
+  const row: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString() };
+  if (body.booking_url !== undefined) row.booking_url = clip(body.booking_url, 300);
+  if (body.from_name !== undefined) row.from_name = clip(body.from_name, 80);
+  if (body.daily_cap !== undefined) row.daily_cap = Math.max(1, Math.min(100, Number(body.daily_cap) || 20));
+  const { data, error } = await db().from("outreach_settings").upsert(row, { onConflict: "user_id" }).select().single();
+  if (error) throw error;
+  return json({ settings: data });
+}
+/* Warm-up: 10 a day on the first day of sending, +5 a day after, up to the cap. */
+function capToday(settings: any) {
+  const cap = Number(settings?.daily_cap) || 20;
+  if (!settings?.first_send_at) return Math.min(cap, 10);
+  const days = Math.floor((Date.now() - Date.parse(settings.first_send_at)) / 864e5);
+  return Math.min(cap, 10 + 5 * days);
+}
+async function sentTodayCount(userId: string) {
+  const since = new Date(); since.setUTCHours(0, 0, 0, 0);
+  const { count } = await db().from("outreach_sends").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "sent").gte("sent_at", since.toISOString());
+  return count || 0;
+}
+async function gmailStatus(userId: string) {
+  const t: any = await gmailToken(userId).catch((e) => ({ token: "", email: "", canSend: false, reason: clip((e as Error).message, 200) }));
+  const settings = await getSettings(userId);
+  return json({ connected: Boolean(t.token && t.canSend), email: t.email, reason: t.reason, settings, sent_today: await sentTodayCount(userId), cap_today: capToday(settings) });
+}
+
+/* The address's domain must accept mail at all (an MX record), checked free
+   over DNS-over-HTTPS. Catches typos and dead domains before they bounce. */
+const mxCache = new Map<string, boolean>();
+async function domainTakesMail(email: string) {
+  const domain = lower(email.split("@")[1] || "");
+  if (!domain || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return false;
+  if (mxCache.has(domain)) return mxCache.get(domain)!;
+  const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`).catch(() => null);
+  const data = res?.ok ? await res.json().catch(() => ({})) : {};
+  const ok = Array.isArray(data?.Answer) && data.Answer.some((a: any) => a?.type === 15);
+  mxCache.set(domain, ok);
+  return ok;
+}
+
+function b64url(text: string) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function mimeHeader(v: string) {
+  return /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(v)))}?=`;
+}
+async function gmailSend(token: string, o: { from: string; fromName: string; to: string; subject: string; body: string; threadId?: string; inReplyTo?: string }) {
+  const headers = [
+    `From: ${o.fromName ? `${mimeHeader(o.fromName)} <${o.from}>` : o.from}`, `To: ${o.to}`, `Subject: ${mimeHeader(o.subject)}`,
+    "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit",
+    ...(o.inReplyTo ? [`In-Reply-To: ${o.inReplyTo}`, `References: ${o.inReplyTo}`] : []),
+  ];
+  const res = await fetch(`${GMAIL}/messages/send`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: b64url(`${headers.join("\r\n")}\r\n\r\n${o.body}`), ...(o.threadId ? { threadId: o.threadId } : {}) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Gmail ${res.status}: ${clip(data?.error?.message || "", 200)}`);
+  return { id: String(data.id || ""), threadId: String(data.threadId || "") };
+}
+async function messageIdHeader(token: string, gmailId: string) {
+  if (!gmailId) return "";
+  const res = await fetch(`${GMAIL}/messages/${gmailId}?format=metadata&metadataHeaders=Message-ID`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+  const data = res?.ok ? await res.json().catch(() => ({})) : {};
+  return String((data?.payload?.headers || []).find((x: any) => lower(x.name) === "message-id")?.value || "");
+}
+
+const DAY = 864e5;
+
+/* One clicked send: the first email now, follow-ups prepared and marked due
+   (they wait for their own click). */
+async function sendLead(userId: string, lead: any, gm: any, settings: any) {
+  const client = db();
+  const variant = lead.message?.variants?.email || (lead.message?.channel === "email" ? lead.message : null);
+  if (!lead.email) return { ok: false, why: "No email for this person." };
+  if (!variant?.body) return { ok: false, why: "No email written yet." };
+  if (lead.discarded) return { ok: false, why: "Set aside." };
+  if (["sent", "replied", "booked", "opted_out", "not_interested"].includes(lead.status)) return { ok: false, why: "Already contacted." };
+  const { data: sup } = await client.from("outreach_suppression").select("key").eq("user_id", userId).in("key", [lower(lead.email), lower(lead.email).split("@")[1] || "-"]);
+  if (sup?.length) return { ok: false, why: "On your do-not-contact list." };
+  if (!(await domainTakesMail(lead.email))) {
+    await client.from("outreach_leads").update({ email_status: "unknown", updated_at: new Date().toISOString() }).eq("id", lead.id);
+    return { ok: false, why: "That address's domain does not accept email." };
+  }
+  const subject = clip(variant.subject, 120) || `quick question, ${String(lead.name || "").split(" ")[0]}`;
+  const sent = await gmailSend(gm.token, { from: gm.email, fromName: settings.from_name || "", to: lead.email, subject, body: variant.body });
+  const now = new Date().toISOString();
+  await client.from("outreach_sends").insert({ user_id: userId, lead_id: lead.id, brief_id: lead.brief_id, channel: "email", step: 0, status: "sent", scheduled_for: now, sent_at: now, subject, body: variant.body, provider_message_id: sent.id, thread_id: sent.threadId });
+  const fus = (variant.followups || []).filter(Boolean).slice(0, 2);
+  if (fus.length) await client.from("outreach_sends").insert(fus.map((f: string, i: number) => ({ user_id: userId, lead_id: lead.id, brief_id: lead.brief_id, channel: "email", step: i + 1, status: "queued", scheduled_for: new Date(Date.now() + (i === 0 ? 3 : 7) * DAY).toISOString(), subject: `Re: ${subject}`, body: f, thread_id: sent.threadId })));
+  await client.from("outreach_leads").update({ status: "sent", thread_id: sent.threadId, contacted_at: now, updated_at: now }).eq("id", lead.id);
+  await client.from("outreach_events").insert({ user_id: userId, lead_id: lead.id, kind: "sent", note: "gmail" });
+  if (!settings.first_send_at) { settings.first_send_at = now; await client.from("outreach_settings").upsert({ user_id: userId, first_send_at: now, updated_at: now }, { onConflict: "user_id" }); }
+  return { ok: true };
+}
+
+/* Send what the founder just clicked: one person, or the ones they ticked. */
+async function send(userId: string, body: any) {
+  const ids = (Array.isArray(body.lead_ids) ? body.lead_ids : []).slice(0, 50);
+  if (!ids.length) return json({ error: "Pick who to send to." }, 400);
+  const gm: any = await gmailToken(userId);
+  if (!gm.token || !gm.canSend) return json({ error: gm.reason || "Connect Gmail first.", need_gmail: true }, 400);
+  const settings = await getSettings(userId);
+  let room = capToday(settings) - (await sentTodayCount(userId));
+  const { data: leads } = await db().from("outreach_leads").select("*").eq("user_id", userId).in("id", ids);
+  const results: any[] = [];
+  for (const lead of leads || []) {
+    if (room <= 0) { results.push({ id: lead.id, name: lead.name, ok: false, why: "Today's limit reached. Send the rest tomorrow." }); continue; }
+    try { const r = await sendLead(userId, lead, gm, settings); if (r.ok) room -= 1; results.push({ id: lead.id, name: lead.name, ...r }); }
+    catch (e) { results.push({ id: lead.id, name: lead.name, ok: false, why: clip((e as Error).message, 200) }); }
+  }
+  return json({ ok: true, sent: results.filter((r) => r.ok).length, results, left_today: Math.max(0, room) });
+}
+
+/* A follow-up the founder clicked, in the same thread. Never sent if they replied. */
+async function sendFollowup(userId: string, body: any) {
+  const client = db();
+  const { data: item } = await client.from("outreach_sends").select("*").eq("id", body.send_id).eq("user_id", userId).single();
+  if (!item || item.status !== "queued") return json({ error: "That follow-up is not waiting." }, 400);
+  const { data: lead } = await client.from("outreach_leads").select("*").eq("id", item.lead_id).single();
+  if (!lead || lead.status !== "sent") {
+    await client.from("outreach_sends").update({ status: "cancelled" }).eq("id", item.id);
+    return json({ error: "They already replied, so this follow-up was dropped." }, 400);
+  }
+  const gm: any = await gmailToken(userId);
+  if (!gm.token || !gm.canSend) return json({ error: gm.reason || "Connect Gmail first.", need_gmail: true }, 400);
+  const settings = await getSettings(userId);
+  if (capToday(settings) - (await sentTodayCount(userId)) <= 0) return json({ error: "Today's limit reached." }, 429);
+  const { data: first } = await client.from("outreach_sends").select("provider_message_id").eq("lead_id", lead.id).eq("step", 0).eq("status", "sent").maybeSingle();
+  const text = String(body.body || item.body).slice(0, 4000);
+  const sent = await gmailSend(gm.token, { from: gm.email, fromName: settings.from_name || "", to: lead.email, subject: item.subject, body: text, threadId: item.thread_id, inReplyTo: await messageIdHeader(gm.token, first?.provider_message_id || "") });
+  await client.from("outreach_sends").update({ status: "sent", sent_at: new Date().toISOString(), provider_message_id: sent.id, body: text }).eq("id", item.id);
+  return json({ ok: true });
+}
+
+async function replySend(userId: string, body: any) {
+  const gm: any = await gmailToken(userId);
+  if (!gm.token || !gm.canSend) return json({ error: gm.reason || "Connect Gmail first.", need_gmail: true }, 400);
+  const client = db();
+  const { data: lead } = await client.from("outreach_leads").select("*").eq("id", body.lead_id).eq("user_id", userId).single();
+  if (!lead?.thread_id) return json({ error: "No conversation to reply to." }, 400);
+  const text = String(body.body || lead.reply_draft || "").trim().slice(0, 4000);
+  if (!text) return json({ error: "Nothing to send." }, 400);
+  const settings = await getSettings(userId);
+  const { data: first } = await client.from("outreach_sends").select("subject, provider_message_id").eq("lead_id", lead.id).eq("step", 0).maybeSingle();
+  const subject = first?.subject ? `Re: ${String(first.subject).replace(/^re:\s*/i, "")}` : "Re:";
+  const sent = await gmailSend(gm.token, { from: gm.email, fromName: settings.from_name || "", to: lead.email, subject, body: text, threadId: lead.thread_id, inReplyTo: await messageIdHeader(gm.token, first?.provider_message_id || "") });
+  const now = new Date().toISOString();
+  await client.from("outreach_sends").insert({ user_id: userId, lead_id: lead.id, brief_id: lead.brief_id, channel: "email", step: 9, status: "sent", scheduled_for: now, sent_at: now, subject, body: text, provider_message_id: sent.id, thread_id: sent.threadId });
+  await client.from("outreach_leads").update({ reply_draft: "", updated_at: now }).eq("id", lead.id);
+  return json({ ok: true });
+}
+
+/* ── Replies: read only ───────────────────────────────────────────────── */
+
+const REPLY_SYSTEM = `You read a reply to a founder's cold outreach and help them answer it.
+
+Return JSON only:
+{"kind": "interested|question|not_now|wrong_person|unsubscribe|other", "summary": "one short line of what they said", "draft": "the founder's answer"}
+
+Rules for the draft:
+- interested: warm, short, propose a call. If a booking link is given, put it on its own line.
+- question: answer from the product report only. Never invent facts. Offer a call.
+- not_now: thank them, ask if a note in a few months is fine. No pressure.
+- wrong_person: thank them, ask who would be right.
+- unsubscribe: empty draft.
+- 2-5 sentences, plain, no em dashes, no exclamation marks. Sign off with the founder's first name if known.`;
+
+function decodeB64url(data: string) {
+  try { const bin = atob(String(data || "").replace(/-/g, "+").replace(/_/g, "/")); return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))); }
+  catch (_) { return ""; }
+}
+function plainBody(payload: any): string {
+  if (!payload) return "";
+  if (payload.mimeType === "text/plain" && payload.body?.data) return decodeB64url(payload.body.data);
+  for (const part of payload.parts || []) { const t = plainBody(part); if (t) return t; }
+  return "";
+}
+function stripQuoted(text: string) {
+  const cut = text.split(/\r?\n(?:On .+wrote:|-----Original Message-----|From: )/)[0];
+  return cut.split(/\r?\n/).filter((l) => !l.startsWith(">")).join("\n").trim().slice(0, 4000);
+}
+
+/* For one user: read every contacted thread for replies. Never sends. */
+async function syncUser(userId: string, spend: Spend) {
+  const client = db();
+  const gm: any = await gmailToken(userId).catch(() => ({ token: "", email: "" }));
+  if (!gm.token || !gm.canRead) return { replies: 0, skipped: "gmail" };
+  const settings = await getSettings(userId);
+  let replies = 0;
+  const { data: open } = await client.from("outreach_leads").select("*").eq("user_id", userId).eq("status", "sent").neq("thread_id", "").limit(200);
+  for (const lead of open || []) {
+    const res = await fetch(`${GMAIL}/threads/${lead.thread_id}?format=full`, { headers: { Authorization: `Bearer ${gm.token}` } }).catch(() => null);
+    if (!res?.ok) continue;
+    const thread = await res.json().catch(() => ({}));
+    const fromOf = (m: any) => lower((m.payload?.headers || []).find((h: any) => lower(h.name) === "from")?.value || "");
+    const theirs = (thread.messages || []).filter((m: any) => fromOf(m) && !fromOf(m).includes(lower(gm.email)));
+    if (!theirs.length) continue;
+    const last = theirs[theirs.length - 1];
+    const bounced = /mailer-daemon|postmaster/.test(fromOf(last));
+    await client.from("outreach_sends").update({ status: "cancelled" }).eq("lead_id", lead.id).eq("status", "queued");
+    if (bounced) {
+      await client.from("outreach_leads").update({ status: "drafted", email_status: "unknown", updated_at: new Date().toISOString() }).eq("id", lead.id);
+      await client.from("outreach_events").insert({ user_id: userId, lead_id: lead.id, kind: "bounced", note: "gmail" });
+      await client.from("outreach_suppression").upsert({ user_id: userId, key: lower(lead.email), reason: "bounced" }, { onConflict: "user_id,key" });
+      continue;
+    }
+    const text = stripQuoted(plainBody(last.payload) || String(last.snippet || ""));
+    let kind = "other", draftText = "", summary = "";
+    try {
+      const { data: brief } = await client.from("outreach_briefs").select("product_id, offer").eq("id", lead.brief_id).single();
+      const product = productBrief(await productFor(client, userId, brief?.product_id));
+      const firstName = String(settings.from_name || "").split(/\s+/)[0];
+      const r = await ai("reply", REPLY_SYSTEM, `The product:\n${product || brief?.offer || ""}\n\nBooking link: ${settings.booking_url || "(none)"}\nFounder's first name: ${firstName || "(unknown)"}\n\nWhat the founder sent:\n${lead.message?.variants?.email?.body || lead.message?.body || ""}\n\nTheir reply:\n${text}`, spend, 1200);
+      kind = ["interested", "question", "not_now", "wrong_person", "unsubscribe", "other"].includes(r.kind) ? r.kind : "other";
+      draftText = String(r.draft || "").replace(/[—–]/g, ",").slice(0, 2000);
+      summary = clip(r.summary, 200);
+    } catch (_) { /* keep the reply even if sorting failed */ }
+    const status = kind === "unsubscribe" ? "opted_out" : "replied";
+    await client.from("outreach_leads").update({ status, replied_at: new Date(Number(last.internalDate) || Date.now()).toISOString(), reply_text: text, reply_kind: kind, reply_draft: kind === "unsubscribe" ? "" : draftText, updated_at: new Date().toISOString() }).eq("id", lead.id);
+    await client.from("outreach_events").insert({ user_id: userId, lead_id: lead.id, kind: status === "opted_out" ? "opted_out" : "replied", note: summary || kind });
+    if (kind === "unsubscribe") await client.from("outreach_suppression").upsert({ user_id: userId, key: lower(lead.email), reason: "opted_out" }, { onConflict: "user_id,key" });
+    replies += 1;
+  }
+  return { replies };
+}
+
+/* Everyone contacted, with why, for what, what was sent and what came back. */
+async function inbox(userId: string) {
+  const client = db();
+  const { data: leads } = await client.from("outreach_leads").select("*").eq("user_id", userId).in("status", ["sent", "replied", "booked", "not_interested", "opted_out"]).order("updated_at", { ascending: false }).limit(300);
+  const ids = (leads || []).map((l: any) => l.id);
+  const briefIds = [...new Set((leads || []).map((l: any) => l.brief_id))];
+  const [{ data: sends }, { data: briefs }] = await Promise.all([
+    ids.length ? client.from("outreach_sends").select("*").in("lead_id", ids).order("scheduled_for") : Promise.resolve({ data: [] as any[] }),
+    briefIds.length ? client.from("outreach_briefs").select("id, title, product_id").in("id", briefIds) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const productIds = [...new Set((briefs || []).map((b: any) => b.product_id).filter(Boolean))];
+  const { data: products } = productIds.length ? await client.from("product_contexts").select("id, name").in("id", productIds) : { data: [] as any[] };
+  const briefBy = new Map((briefs || []).map((b: any) => [b.id, b]));
+  const productBy = new Map((products || []).map((p: any) => [p.id, p.name]));
+  const items = (leads || []).map((l: any) => {
+    const b: any = briefBy.get(l.brief_id) || {};
+    return { ...l, search: b.title || "", product: productBy.get(b.product_id) || "", sends: (sends || []).filter((x: any) => x.lead_id === l.id) };
+  });
+  return json({ items, settings: await getSettings(userId) });
+}
+
+/* The scheduled check: read replies for everyone with an open thread. */
+async function tick(spend: Spend) {
+  const { data } = await db().from("outreach_leads").select("user_id").eq("status", "sent").neq("thread_id", "").limit(1000);
+  const users = [...new Set((data || []).map((r: any) => r.user_id).filter(Boolean))];
+  const out: any[] = [];
+  for (const u of users.slice(0, 50)) out.push({ user: u, ...(await syncUser(u, spend).catch((e) => ({ error: clip((e as Error).message, 200) }))) });
+  return json({ ok: true, users: out.length, out });
+}
+
 /* ── The founder's personal key (testing mode) ──────────────────────────
    Localhost, no sign-in screen: the dev page sends OUTREACH_DEV_TOKEN in a
    header and the engine acts as OUTREACH_DEV_USER_ID. Still a lock, just one
@@ -721,6 +1020,9 @@ serve(async (req) => {
   const spend = newSpend();
   let step = "";
   try {
+    // The scheduled reply check (read only) carries its own secret.
+    const CRON_SECRET = env("OUTREACH_CRON_SECRET");
+    if (CRON_SECRET.length >= 32 && sameSecret(req.headers.get("x-outreach-cron") || "", CRON_SECRET)) return await tick(spend);
     const owner = await requestOwner(req);
     if (!owner) return json({ error: "Sign in to use outreach." }, 401);
     const user = { id: owner };
@@ -736,6 +1038,14 @@ serve(async (req) => {
     else if (step === "outcome") res = await outcome(user.id, body);
     else if (step === "edit") res = await edit(user.id, body);
     else if (step === "product_list") res = await productList(user.id);
+    else if (step === "gmail_connect") res = await gmailConnect(user.id);
+    else if (step === "gmail_status") res = await gmailStatus(user.id);
+    else if (step === "settings") res = await saveSettings(user.id, body);
+    else if (step === "send") res = await send(user.id, body);
+    else if (step === "send_followup") res = await sendFollowup(user.id, body);
+    else if (step === "reply_send") res = await replySend(user.id, body);
+    else if (step === "sync") res = json({ ok: true, ...(await syncUser(user.id, spend)) });
+    else if (step === "inbox") res = await inbox(user.id);
     else if (step === "product_build") res = await productBuild(user.id, body, spend);
     else res = json({ error: "Unknown step." }, 400);
     if (["refine", "hunt", "draft", "product_build"].includes(step)) {
