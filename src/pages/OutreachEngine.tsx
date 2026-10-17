@@ -26,8 +26,14 @@ type Lead = {
   signals: { kind: string; text: string; date?: string; url?: string }[];
   sources: { name: string; url: string; title?: string }[];
   score: number; score_parts: any; reasons: string[]; discarded: boolean; discard_reason: string;
-  status: string; message: { channel?: string; subject?: string; body?: string; followups?: string[] };
+  status: string; message: { channel?: string; subject?: string; body?: string; followups?: string[]; variants?: Record<string, Variant> };
 };
+type Variant = { subject?: string; body: string; followups?: string[] };
+type Product = {
+  id: string; name: string; website: string; notes: string; docs: { name: string; text: string }[];
+  answers: { q: string; a: string }[]; report: any; questions: string[]; status: string; updated_at: string;
+};
+const CHANNEL_LABEL: Record<string, string> = { email: "Email", linkedin: "LinkedIn", whatsapp: "WhatsApp", x: "X", instagram: "Instagram" };
 
 const EXAMPLES = [
   { tag: "India · D2C", title: "Skincare founders hiring their first marketer", ask: "Founders of D2C skincare brands in India doing ₹1-10 crore, who are hiring their first marketer" },
@@ -96,6 +102,9 @@ export default function OutreachEngine() {
   const [sources, setSources] = useState<Record<string, boolean>>({});
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [activeId, setActiveId] = useState<string>("");
+  const [products, setProducts] = useState<Product[]>([]);
+  // "" = new search, "new" = add a product, otherwise a product id being viewed.
+  const [productView, setProductView] = useState<string>("");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
@@ -119,11 +128,17 @@ export default function OutreachEngine() {
     const r = await call("list_leads", { brief_id: briefId }).catch(() => ({ leads: [] }));
     setLeads(r.leads || []);
   }, []);
+  const loadProducts = useCallback(async () => {
+    const r = await call("product_list").catch(() => ({ products: [] }));
+    setProducts(r.products || []);
+    return (r.products || []) as Product[];
+  }, []);
   useEffect(() => {
     if (!canUse) return;
     void loadBriefs();
+    void loadProducts();
     call("sources").then(setSources).catch(() => setSources({}));
-  }, [canUse, loadBriefs]);
+  }, [canUse, loadBriefs, loadProducts]);
   useEffect(() => { void loadLeads(activeId); }, [activeId, loadLeads]);
 
   const active = briefs.find((b) => b.id === activeId) || null;
@@ -145,7 +160,7 @@ export default function OutreachEngine() {
   return (
     <main className="oas" data-theme={theme || undefined}>
       <header className="oas-bar">
-        <Link to="/outreach" className="oas-mark" onClick={() => setActiveId("")}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
+        <Link to="/outreach" className="oas-mark" onClick={() => { setActiveId(""); setProductView(""); }}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
         <div className="oas-sources" aria-label="Data sources">
           {[["exa", "Exa"], ["apollo", "Apollo"], ["hunter", "Hunter"], ["model", "Model"]].map(([k, label]) => (
             <span key={k} className={`oas-src ${sources[k] ? "is-on" : ""}`} title={sources[k] ? `${label} is on` : `${label} is off: add its key`}><i />{label}</span>
@@ -158,10 +173,18 @@ export default function OutreachEngine() {
       </header>
       <div className="oas-shell">
         <nav className="oas-rail">
-          <button className="oas-new" type="button" onClick={() => setActiveId("")}><Plus size={15} /> New search</button>
+          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); }}><Plus size={15} /> New search</button>
+          <h6>What you sell</h6>
+          {products.map((p) => (
+            <button key={p.id} type="button" className={`oas-brief-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(p.id); }}>
+              <b>{p.name || p.report?.name || "Untitled product"}</b>
+              <small>{p.status === "ready" ? "Report ready" : p.status === "reading" ? "Reading…" : "Needs details"} · {ago(p.updated_at)}</small>
+            </button>
+          ))}
+          <button type="button" className={`oas-brief-item oas-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView("new"); }}><b><Plus size={13} /> Add a product</b></button>
           <h6>Searches</h6>
           {briefs.map((b) => (
-            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => setActiveId(b.id)}>
+            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setActiveId(b.id); }}>
               <b>{b.title || "Untitled"}</b>
               <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} people` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
             </button>
@@ -169,9 +192,12 @@ export default function OutreachEngine() {
           {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Your searches show up here.</p>}
         </nav>
         <section className="oas-main">
-          {active
-            ? <Thread key={active.id} brief={active} leads={leads} onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
-            : <Start onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
+          {productView
+            ? <ProductView key={productView} product={products.find((p) => p.id === productView) || null}
+                onSaved={async (p) => { await loadProducts(); setProductView(p.id); }} say={say} />
+            : active
+              ? <Thread key={active.id} brief={active} leads={leads} onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
+              : <Start products={products} onAddProduct={() => setProductView("new")} onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
         </section>
       </div>
       {toast && <div className="oas-toast" role="status">{toast}</div>}
@@ -181,7 +207,17 @@ export default function OutreachEngine() {
 
 /* ── The empty chat ──────────────────────────────────────────────────── */
 
-function Start({ onCreated }: { onCreated: (b: Brief) => void }) {
+function Start({ products, onCreated, onAddProduct }: { products: Product[]; onCreated: (b: Brief) => void; onAddProduct: () => void }) {
+  const ready = products.filter((p) => p.status === "ready");
+  const [productId, setProductId] = useState<string>(() => {
+    try { return localStorage.getItem("oas-product") || ""; } catch (_) { return ""; }
+  });
+  useEffect(() => {
+    if (productId && !ready.some((p) => p.id === productId)) setProductId(ready[0]?.id || "");
+    else if (!productId && ready[0]) setProductId(ready[0].id);
+  }, [ready.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { localStorage.setItem("oas-product", productId); } catch (_) { /* fine */ } }, [productId]);
+  const selling = ready.find((p) => p.id === productId);
   const [ask, setAsk] = useState("");
   const [offer, setOffer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -189,13 +225,13 @@ function Start({ onCreated }: { onCreated: (b: Brief) => void }) {
   const go = async () => {
     if (!ask.trim() || busy) return;
     setBusy(true); setErr("");
-    try { const r = await call("refine", { ask, offer }); onCreated(r.brief); }
+    try { const r = await call("refine", { ask, offer, product_id: selling?.id || null }); onCreated(r.brief); }
     catch (e) { setErr((e as Error).message); setBusy(false); }
   };
   if (busy) {
     return (
       <div className="oas-thread">
-        <Bubble ask={ask} offer={offer} />
+        <Bubble ask={ask} offer={offer || (selling ? selling.name : "")} />
         <Braino><p>Okay. Working out exactly who that is…</p><Dots /></Braino>
       </div>
     );
@@ -203,11 +239,18 @@ function Start({ onCreated }: { onCreated: (b: Brief) => void }) {
   return (
     <div className="oas-start">
       <h1 className="oas-hello">Who do we want to sell to?</h1>
+      <div className="oas-selling">
+        <span>Selling</span>
+        {ready.map((p) => (
+          <button key={p.id} type="button" className={`oas-pill ${p.id === productId ? "is-on" : ""}`} onClick={() => setProductId(p.id === productId ? "" : p.id)}>{p.name || p.report?.name}</button>
+        ))}
+        <button type="button" className="oas-pill is-add" onClick={onAddProduct}><Plus size={13} /> {ready.length ? "Add" : "Tell Braino what you sell"}</button>
+      </div>
       <div className="oas-box">
         <textarea rows={2} value={ask} autoFocus onChange={(e) => setAsk(e.target.value)} placeholder="Who do we want to sell to? e.g. founders of D2C skincare brands in India"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
         <div className="oas-box-rule" />
-        <textarea rows={1} value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="What do we sell, or what problem do we solve?"
+        <textarea rows={1} value={offer} onChange={(e) => setOffer(e.target.value)} placeholder={selling ? `Anything specific about this pitch for ${selling.name}? (optional)` : "What do we sell, or what problem do we solve?"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
         <div className="oas-box-foot">
           <span className="oas-note">Nothing is searched or sent until you say so.</span>
@@ -430,18 +473,30 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
 /* ── One person, full sheet ──────────────────────────────────────────── */
 
 function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () => void; onChanged: () => Promise<void>; say: (t: string) => void }) {
-  const [msg, setMsg] = useState({ channel: lead.message?.channel || (lead.email ? "email" : "linkedin"), subject: lead.message?.subject || "", body: lead.message?.body || "", followups: lead.message?.followups || [] });
+  const initial = () => {
+    const m = lead.message || {};
+    const variants: Record<string, Variant> = { ...(m.variants || {}) };
+    const ch = m.channel || (lead.email ? "email" : "linkedin");
+    if (m.body && !variants[ch]) variants[ch] = { subject: m.subject || "", body: m.body, followups: m.followups || [] };
+    return { channel: ch, variants };
+  };
+  const [state, setState] = useState(initial);
+  const cur: Variant = state.variants[state.channel] || { subject: "", body: "", followups: [] };
+  const msg = { channel: state.channel, subject: cur.subject || "", body: cur.body || "", followups: cur.followups || [], variants: state.variants };
+  const setMsg = (next: { channel: string; subject: string; body: string; followups: string[] }) => setState((s) => (
+    next.channel !== s.channel ? { ...s, channel: next.channel }
+      : { ...s, variants: { ...s.variants, [s.channel]: { subject: next.subject, body: next.body, followups: next.followups } } }));
   const [busy, setBusy] = useState("");
   useEffect(() => {
-    setMsg({ channel: lead.message?.channel || (lead.email ? "email" : "linkedin"), subject: lead.message?.subject || "", body: lead.message?.body || "", followups: lead.message?.followups || [] });
+    setState(initial());
   }, [lead.id, lead.message?.body]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  const dirty = msg.body !== (lead.message?.body || "") || msg.subject !== (lead.message?.subject || "")
-    || JSON.stringify(msg.followups) !== JSON.stringify(lead.message?.followups || []);
+  const dirty = JSON.stringify(state.variants) !== JSON.stringify(initial().variants);
+  const hasAny = Object.values(state.variants).some((v) => v?.body);
   const parts = lead.score_parts || {};
 
   const act = async (label: string, fn: () => Promise<any>, done?: string) => {
@@ -512,14 +567,18 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
           <div className="oas-sheet-col oas-msg">
             <section className="oas-dsec">
               <h5>The message</h5>
-              {!msg.body ? (
+              {!hasAny ? (
                 <button type="button" className="oas-btn is-primary" disabled={!!busy || lead.discarded} onClick={() => void draftOne()}><Sparkles /> {busy === "draft" ? "Writing…" : "Write it"}</button>
               ) : (
                 <>
-                  <label>Channel</label>
-                  <select value={msg.channel} onChange={(e) => setMsg({ ...msg, channel: e.target.value })}>
-                    {["email", "linkedin", "whatsapp", "x", "instagram"].map((c) => <option key={c} value={c}>{c === "x" ? "X" : c[0].toUpperCase() + c.slice(1)}</option>)}
-                  </select>
+                  <div className="oas-chan" role="tablist" aria-label="Channel">
+                    {Object.keys(CHANNEL_LABEL).map((c) => (
+                      <button key={c} type="button" role="tab" aria-selected={msg.channel === c}
+                        className={`${msg.channel === c ? "is-on" : ""} ${state.variants[c]?.body ? "" : "is-empty"}`}
+                        onClick={() => setMsg({ ...msg, channel: c })}>{CHANNEL_LABEL[c]}{c === (lead.message?.channel || "") ? <i title="Best channel for them" /> : null}</button>
+                    ))}
+                  </div>
+                  {!msg.body && <p className="oas-note">No {CHANNEL_LABEL[msg.channel]} version yet. Press Rewrite to write all five.</p>}
                   {msg.channel === "email" && <><label>Subject</label><input value={msg.subject} onChange={(e) => setMsg({ ...msg, subject: e.target.value })} /></>}
                   <label>Message</label>
                   <textarea value={msg.body} onChange={(e) => setMsg({ ...msg, body: e.target.value })} />
@@ -554,4 +613,115 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
       </div>
     </div>
   );
+}
+
+/* ── What you sell: the product report every search and message reads ── */
+
+const TEXT_FILES = ".txt,.md,.markdown,.csv,.json,.html,.htm,.rtf";
+
+function ProductView({ product, onSaved, say }: { product: Product | null; onSaved: (p: Product) => void; say: (t: string) => void }) {
+  const [name, setName] = useState(product?.name || "");
+  const [website, setWebsite] = useState(product?.website || "");
+  const [notes, setNotes] = useState(product?.notes || "");
+  const [docs, setDocs] = useState<{ name: string; text: string }[]>(product?.docs || []);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const r = product?.report || {};
+  const hasReport = Boolean(product && Object.keys(r).length);
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files) return;
+    const next: { name: string; text: string }[] = [];
+    for (const f of Array.from(files).slice(0, 8)) {
+      if (/\.pdf$/i.test(f.name)) { say("PDFs are not read yet: paste the text into the notes"); continue; }
+      if (f.size > 2_000_000) { say(`${f.name} is too big`); continue; }
+      try { next.push({ name: f.name, text: (await f.text()).slice(0, 30000) }); } catch (_) { say(`Could not read ${f.name}`); }
+    }
+    setDocs((d) => [...d, ...next].slice(0, 8));
+  };
+  const build = async (withAnswers = false) => {
+    setBusy(true); setErr("");
+    try {
+      const extra = withAnswers ? (product?.questions || []).map((q) => ({ q, a: answers[q] || "" })).filter((a) => a.a.trim()) : [];
+      const res = await call("product_build", {
+        product_id: product?.id, name, website, notes, docs,
+        ...(withAnswers ? { answers: [...(product?.answers || []), ...extra] } : {}),
+      });
+      say(withAnswers ? "Report updated" : "Report written");
+      setAnswers({});
+      onSaved(res.product);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const list = (xs: any) => (Array.isArray(xs) ? xs : []).filter(Boolean);
+
+  return (
+    <div className="oas-thread oas-product">
+      <div>
+        <div className="oas-kicker">What you sell</div>
+        <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 6px" }}>{hasReport ? (r.name || name) : "Tell Braino what you sell"}</h1>
+        <p className="oas-soft" style={{ margin: 0, fontFamily: "var(--o-serif)", fontSize: 18 }}>
+          {hasReport ? r.one_liner : "He reads your website, your notes and documents, and writes a detailed report. Every search and every message uses it."}
+        </p>
+      </div>
+
+      <div className="oas-form">
+        <div className="oas-form-row">
+          <label><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Braino" /></label>
+          <label><span>Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="trybraino.com" /></label>
+        </div>
+        <label><span>Anything the website does not say</span>
+          <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Who buys it, pricing, traction, what makes it different, what you never want to claim…" /></label>
+        <div className="oas-files">
+          <label className="oas-pill is-add" style={{ cursor: "pointer" }}><Plus size={13} /> Add documents
+            <input type="file" multiple accept={TEXT_FILES} style={{ display: "none" }} onChange={(e) => { void addFiles(e.target.files); e.currentTarget.value = ""; }} /></label>
+          {docs.map((d, i) => <span key={`${d.name}-${i}`} className="oas-pill is-file">{d.name}<button type="button" aria-label={`Remove ${d.name}`} onClick={() => setDocs((x) => x.filter((_, j) => j !== i))}><X size={12} /></button></span>)}
+          <span className="oas-note">Text files for now: .txt, .md, .csv, .html</span>
+        </div>
+        <div className="oas-row">
+          <button type="button" className="oas-btn is-primary" disabled={busy || (!website.trim() && !notes.trim() && !docs.length)} onClick={() => void build(false)}>
+            <Sparkles /> {busy ? "Reading everything…" : hasReport ? "Read it again" : "Read it and write the report"}
+          </button>
+          {err && <span className="oas-err" style={{ margin: 0 }}>{err}</span>}
+        </div>
+      </div>
+
+      {busy && <Braino><p>Reading your website and everything you gave me…</p><Dots /></Braino>}
+
+      {hasReport && !busy && (
+        <>
+          {list(product?.questions).length > 0 && (
+            <Braino>
+              <p>A few things I could not find. Answers make every message sharper.</p>
+              <div className="oas-asks">
+                {list(product?.questions).map((q: string) => (
+                  <label key={q}><span>{q}</span><input value={answers[q] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [q]: e.target.value }))} placeholder="Your answer" /></label>
+                ))}
+              </div>
+              <button type="button" className="oas-btn is-small is-primary" disabled={busy || !Object.values(answers).some((a) => a.trim())} onClick={() => void build(true)}>Update the report</button>
+            </Braino>
+          )}
+          <div className="oas-report">
+            <ReportBlock title="What it is"><p>{r.what_it_is}</p></ReportBlock>
+            <ReportBlock title="The problem it removes"><p>{r.problem}</p></ReportBlock>
+            <ReportBlock title="Who it is for">{list(r.who_its_for).length ? <div className="oas-tags">{list(r.who_its_for).map((x: string) => <span key={x} className="oas-tag">{x}</span>)}</div> : null}</ReportBlock>
+            <ReportBlock title="How it works">{list(r.how_it_works).length ? <ol>{list(r.how_it_works).map((x: string) => <li key={x}>{x}</li>)}</ol> : null}</ReportBlock>
+            <ReportBlock title="Features">{list(r.features).length ? <dl>{list(r.features).map((f: any) => <div key={f.name}><dt>{f.name}</dt><dd>{f.detail}</dd></div>)}</dl> : null}</ReportBlock>
+            <ReportBlock title="What changes for them">{list(r.outcomes).length ? <ul>{list(r.outcomes).map((x: string) => <li key={x}>{x}</li>)}</ul> : null}</ReportBlock>
+            <ReportBlock title="Proof">{list(r.proof).length ? <ul>{list(r.proof).map((x: string) => <li key={x}>{x}</li>)}</ul> : <p className="oas-soft">None found. Messages will not claim any.</p>}</ReportBlock>
+            <ReportBlock title="Why this over the alternatives">{list(r.differentiators).length ? <ul>{list(r.differentiators).map((x: string) => <li key={x}>{x}</li>)}</ul> : null}</ReportBlock>
+            <ReportBlock title="Objections">{list(r.objections).length ? <dl>{list(r.objections).map((o: any) => <div key={o.objection}><dt>{o.objection}</dt><dd>{o.answer}</dd></div>)}</dl> : null}</ReportBlock>
+            <ReportBlock title="Pricing and status"><p>{[r.pricing || "Pricing not stated", r.status ? `Status: ${r.status}` : ""].filter(Boolean).join(" · ")}</p></ReportBlock>
+            <ReportBlock title="Voice"><p>{r.tone}</p>{list(r.words_to_avoid).length ? <p className="oas-soft">Never say: {list(r.words_to_avoid).join(", ")}</p> : null}</ReportBlock>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReportBlock({ title, children }: { title: string; children: ReactNode }) {
+  if (!children || (Array.isArray(children) && !children.some(Boolean))) return null;
+  return <section className="oas-rblock"><h5>{title}</h5><div>{children}</div></section>;
 }

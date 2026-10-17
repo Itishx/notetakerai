@@ -123,15 +123,150 @@ Return JSON only:
 
 Rules: be specific, never invent constraints the founder did not imply, prefer the decision maker over the user of the product, and write plainly with no em dashes.`;
 
+/* ── Product context: what is being sold, down to the detail ────────────
+   Read from the founder's website (the page and its main subpages), their
+   notes, uploaded text documents, and answers to Braino's questions. Every
+   search and every message reads this, and Distra's posts will read the same
+   record, so a message never has to guess what the product is. */
+
+const PRODUCT_SYSTEM = `You write the definitive internal report on a product, for the people who will sell and market it. Be specific and concrete; quote real details from the sources. Never invent features, prices, customers or numbers: if something is not in the sources, leave it empty and ask about it.
+
+Return JSON only:
+{
+  "name": "product name",
+  "one_liner": "what it is in one plain sentence",
+  "what_it_is": "3-5 sentences: what it does and how, in plain words",
+  "who_its_for": ["specific buyer types"],
+  "problem": "the pain it removes, in the buyer's words",
+  "how_it_works": ["step by step, as the user experiences it"],
+  "features": [{"name": "...", "detail": "what it actually does"}],
+  "outcomes": ["what changes for the buyer after using it"],
+  "proof": ["real traction, customers, numbers, testimonials, press: only from sources"],
+  "pricing": "plans and prices if stated, else empty",
+  "differentiators": ["why this over the alternatives"],
+  "alternatives": ["what buyers use today instead"],
+  "objections": [{"objection": "...", "answer": "..."}],
+  "tone": "how the brand sounds, from its own writing",
+  "words_to_use": ["phrases the brand uses"],
+  "words_to_avoid": ["claims not to make, or jargon the brand avoids"],
+  "call_to_action": "what a prospect should do next",
+  "status": "live, beta, waitlist, or unknown, from the sources",
+  "gaps": ["at most 5 short questions whose answers would most improve outreach, e.g. pricing, proof, who buys"]
+}
+
+Plain words, no em dashes.`;
+
+async function exaContents(url: string, spend: Spend) {
+  if (!EXA_KEY || !url) return "";
+  spend.exa_calls += 1;
+  const res = await fetch("https://api.exa.ai/contents", {
+    method: "POST", headers: { "x-api-key": EXA_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ urls: [url], text: { maxCharacters: 9000 }, subpages: 6, subpageTarget: ["about", "pricing", "features", "product", "customers", "faq"], livecrawl: "preferred" }),
+  }).catch(() => null);
+  if (!res?.ok) return "";
+  const data = await res.json().catch(() => ({}));
+  const pages: string[] = [];
+  for (const r of data?.results || []) {
+    pages.push(`PAGE ${r.url}\n${clip(r.text, 9000)}`);
+    for (const sp of r.subpages || []) pages.push(`PAGE ${sp.url}\n${clip(sp.text, 5000)}`);
+  }
+  spend.exa_pages += pages.length;
+  return pages.join("\n\n").slice(0, 45000);
+}
+
+function normalUrl(u: string) {
+  const t = String(u || "").trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+async function productList(userId: string) {
+  const { data, error } = await db().from("product_contexts").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(20);
+  if (error) throw error;
+  return json({ products: data || [] });
+}
+
+/* Save what they gave, then read it all and write the report. */
+async function productBuild(userId: string, body: any, spend: Spend) {
+  const client = db();
+  const docs = (Array.isArray(body.docs) ? body.docs : []).slice(0, 8).map((d: any) => ({ name: clip(d.name, 120), text: String(d.text || "").slice(0, 30000) })).filter((d: any) => d.text);
+  const fields: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString(), status: "reading" };
+  if (body.name !== undefined) fields.name = clip(body.name, 120);
+  if (body.website !== undefined) fields.website = normalUrl(body.website).slice(0, 300);
+  if (body.notes !== undefined) fields.notes = String(body.notes || "").slice(0, 20000);
+  if (body.docs !== undefined) fields.docs = docs;
+  if (body.answers !== undefined) fields.answers = (Array.isArray(body.answers) ? body.answers : []).map((a: any) => ({ q: clip(a.q, 300), a: clip(a.a, 1500) })).filter((a: any) => a.a);
+  const saved = body.product_id
+    ? await client.from("product_contexts").update(fields).eq("id", body.product_id).eq("user_id", userId).select().single()
+    : await client.from("product_contexts").insert(fields).select().single();
+  if (saved.error || !saved.data) throw saved.error || new Error("Could not save the product.");
+  const p = saved.data;
+  try {
+    const site = await exaContents(p.website, spend);
+    if (!site && !p.notes && !(p.docs || []).length && !(p.answers || []).length) {
+      await client.from("product_contexts").update({ status: "draft" }).eq("id", p.id);
+      return json({ error: "Give me a website, some notes, or a document to read." }, 400);
+    }
+    const parts = [
+      p.name ? `Product name: ${p.name}` : "",
+      site ? `WEBSITE\n${site}` : (p.website ? `(Website ${p.website} could not be read.)` : ""),
+      p.notes ? `FOUNDER'S NOTES\n${p.notes}` : "",
+      ...(p.docs || []).map((d: any) => `DOCUMENT ${d.name}\n${String(d.text).slice(0, 20000)}`),
+      (p.answers || []).length ? `FOUNDER'S ANSWERS\n${(p.answers || []).map((a: any) => `Q: ${a.q}\nA: ${a.a}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n\n");
+    const report = await ai("product", PRODUCT_SYSTEM, parts.slice(0, 90000), spend, 6000);
+    const answered = new Set((p.answers || []).map((a: any) => lower(a.q)));
+    const questions = (Array.isArray(report.gaps) ? report.gaps : []).filter((q: string) => !answered.has(lower(q))).slice(0, 5);
+    const { data, error } = await client.from("product_contexts").update({
+      report, questions, status: "ready", name: p.name || clip(report.name, 120), updated_at: new Date().toISOString(),
+    }).eq("id", p.id).select().single();
+    if (error) throw error;
+    return json({ product: data, cost_usd: costUsd(spend) });
+  } catch (e) {
+    await client.from("product_contexts").update({ status: "failed" }).eq("id", p.id);
+    throw e;
+  }
+}
+
+/* What a prompt needs to know about the product, compact. */
+function productBrief(report: any) {
+  if (!report || !Object.keys(report).length) return "";
+  const r = report;
+  const list = (xs: any) => (Array.isArray(xs) ? xs.map((x: any) => (typeof x === "string" ? x : Object.values(x).join(": "))).join("; ") : "");
+  return [
+    `Product: ${r.name || ""}. ${r.one_liner || ""}`,
+    r.what_it_is ? `What it is: ${r.what_it_is}` : "",
+    r.problem ? `Problem it removes: ${r.problem}` : "",
+    list(r.who_its_for) ? `For: ${list(r.who_its_for)}` : "",
+    list(r.features) ? `Features: ${list(r.features)}` : "",
+    list(r.outcomes) ? `Outcomes: ${list(r.outcomes)}` : "",
+    list(r.proof) ? `Proof: ${list(r.proof)}` : "Proof: none stated, so claim none.",
+    r.pricing ? `Pricing: ${r.pricing}` : "",
+    list(r.differentiators) ? `Why this: ${list(r.differentiators)}` : "",
+    r.status ? `Status: ${r.status}` : "",
+    r.tone ? `Tone: ${r.tone}` : "",
+    list(r.words_to_avoid) ? `Never say: ${list(r.words_to_avoid)}` : "",
+    r.call_to_action ? `Ask for: ${r.call_to_action}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+async function productFor(client: any, userId: string, productId: string | null | undefined) {
+  if (!productId) return null;
+  const { data } = await client.from("product_contexts").select("report").eq("id", productId).eq("user_id", userId).single();
+  return data?.report || null;
+}
+
 async function refine(userId: string, body: any, spend: Spend) {
   const ask = clip(body.ask, 3000);
   const offer = clip(body.offer, 2000);
   const answers = Array.isArray(body.answers) ? body.answers.map((a: any) => `Q: ${clip(a.q, 200)}\nA: ${clip(a.a, 400)}`).join("\n") : "";
   if (!ask) return json({ error: "Say who you want to sell to." }, 400);
-  const icp = await ai("refine", REFINE_SYSTEM, `Who they want to sell to:\n${ask}\n\nWhat they sell:\n${offer || "(not given)"}\n${answers ? `\nTheir answers so far:\n${answers}` : ""}`, spend, 2500);
-  const questions = answers ? [] : (Array.isArray(icp.questions) ? icp.questions.slice(0, 3) : []);
   const client = db();
-  const row = { user_id: userId, title: clip(icp.title, 80) || clip(ask, 60), ask, offer, icp, questions, status: "draft", updated_at: new Date().toISOString() };
+  const productId = body.product_id ? String(body.product_id) : null;
+  const product = productBrief(await productFor(client, userId, productId));
+  const icp = await ai("refine", REFINE_SYSTEM, `Who they want to sell to:\n${ask}\n\nWhat they sell:\n${offer || "(see the product report)"}\n${product ? `\nThe product, in detail:\n${product}\n` : ""}${answers ? `\nTheir answers so far:\n${answers}` : ""}`, spend, 2500);
+  const questions = answers ? [] : (Array.isArray(icp.questions) ? icp.questions.slice(0, 3) : []);
+  const row = { user_id: userId, title: clip(icp.title, 80) || clip(ask, 60), ask, offer, icp, questions, status: "draft", product_id: productId, updated_at: new Date().toISOString() };
   const q = body.brief_id
     ? client.from("outreach_briefs").update(row).eq("id", body.brief_id).eq("user_id", userId).select().single()
     : client.from("outreach_briefs").insert(row).select().single();
@@ -443,19 +578,40 @@ async function hunt(userId: string, body: any, spend: Spend) {
 
 /* ── Step 5: draft ─────────────────────────────────────────────────────── */
 
-const DRAFT_SYSTEM = `You write first-touch outreach for a founder. Each message is for one real person and must read like the founder wrote it to them alone.
+const CHANNELS = ["email", "linkedin", "whatsapp", "x", "instagram"] as const;
+
+/* Every channel is written separately, because a LinkedIn note, a WhatsApp
+   message and a cold email are different things. All five come back at once,
+   so switching channel on the page is instant and costs nothing. */
+const DRAFT_SYSTEM = `You write first-touch outreach for a founder. Each person gets a separate message for each channel, and each must read like the founder wrote it to them alone, natively for that channel.
 
 Return JSON only:
-{"drafts": [{"id": "lead id", "channel": "email|linkedin|whatsapp|x|instagram", "subject": "email subject, under 7 words, lowercase is fine, empty for non-email", "body": "the message", "followups": ["day 3 nudge", "day 7 last note"]}]}
+{"drafts": [{
+  "id": "lead id",
+  "best": "email|linkedin|whatsapp|x|instagram",
+  "email": {"subject": "under 7 words, lowercase is fine", "body": "50-90 words", "followups": ["day 3, under 40 words", "day 7, under 40 words"]},
+  "linkedin": {"body": "connection note, under 280 characters", "followups": ["after they accept, under 60 words"]},
+  "whatsapp": {"body": "2-3 short lines, conversational, like texting someone you were introduced to", "followups": ["one gentle nudge"]},
+  "x": {"body": "DM, under 240 characters, casual, no pitchy opener", "followups": []},
+  "instagram": {"body": "DM, under 200 characters, warm and light", "followups": []}
+}]}
 
-How to write:
+How to write, every channel:
 - Open with their real moment: a signal, their role, something they said or built. Never "I hope this finds you well".
-- Tie the offer to the pain that moment implies. One idea. One small ask (a 15-minute call, or a yes/no question).
-- 50-90 words for email, under 300 characters for LinkedIn. Follow-ups under 40 words, each adding something new.
-- Plain, warm, direct. No buzzwords, no flattery, no em dashes, no exclamation marks.
-- Email ends with one short line letting them opt out (e.g. "If this is not for you, just say so and I will not write again.").
-- Channel: email when an email is known, otherwise linkedin when a profile is known, otherwise email to the company.
-- Never invent facts about them. Use only what the lead record says.`;
+- Tie the product to the pain that moment implies. One idea, one small ask (a 15-minute call, or a yes/no question).
+- Use the product report for every claim. If the report has no proof, claim none. Respect its status (never imply it is live if it is a waitlist).
+- Match the product's tone. Plain, warm, direct. No buzzwords, no flattery, no em dashes, no exclamation marks.
+- Email ends with one short opt-out line (e.g. "If this is not for you, just say so and I will not write again.").
+- Each channel must differ in length, rhythm and opener, not just be trimmed.
+- best: email when an email is known, otherwise linkedin when a profile is known, otherwise email.
+- Never invent facts about the person. Use only what the lead record says.`;
+
+function variantFrom(d: any, ch: string) {
+  const v = d?.[ch] || {};
+  const body = String(v.body || "").replace(/[—–]/g, ",").trim().slice(0, 2000);
+  if (!body) return null;
+  return { subject: ch === "email" ? clip(v.subject, 120) : "", body, followups: (Array.isArray(v.followups) ? v.followups : []).slice(0, 2).map((f: any) => clip(String(f).replace(/[—–]/g, ","), 400)) };
+}
 
 async function draft(userId: string, body: any, spend: Spend) {
   const client = db();
@@ -465,18 +621,27 @@ async function draft(userId: string, body: any, spend: Spend) {
   q = Array.isArray(body.lead_ids) && body.lead_ids.length ? q.in("id", body.lead_ids.slice(0, 25)) : q.eq("status", "new").order("score", { ascending: false }).limit(Math.min(25, Number(body.limit) || 12));
   const { data: leads } = await q;
   if (!leads?.length) return json({ ok: true, drafted: 0 });
+  const product = productBrief(await productFor(client, userId, brief.product_id));
+  const context = `The product, in detail:\n${product || `${brief.offer || "(not given)"}\nThe pain it solves: ${brief.icp?.pain || ""}`}\n\nWho this search is for: ${brief.icp?.summary || brief.ask}`;
   const compact = leads.map((l: any) => ({
     id: l.id, name: l.name, title: l.title, company: l.company, industry: l.industry, location: l.location,
     has_email: Boolean(l.email), has_linkedin: Boolean(l.linkedin_url), summary: l.summary,
     signals: (l.signals || []).slice(0, 3), why_picked: (l.reasons || []).slice(0, 3),
   }));
-  const out = await ai("draft", DRAFT_SYSTEM, `The founder sells:\n${brief.offer || brief.icp?.pain || "(not given)"}\n\nThe pain it solves:\n${brief.icp?.pain || ""}\n\nWrite to each of these people:\n${JSON.stringify(compact)}`, spend, 8000);
-  const byId = new Map((out?.drafts || []).map((d: any) => [String(d.id), d]));
+  // Five channels per person is long output, so people go in small batches, in parallel.
+  const batches: any[][] = [];
+  for (let i = 0; i < compact.length; i += 4) batches.push(compact.slice(i, i + 4));
+  const outs = await Promise.all(batches.map((b) => ai("draft", DRAFT_SYSTEM, `${context}\n\nWrite to each of these people:\n${JSON.stringify(b)}`, spend, 9000).catch(() => ({ drafts: [] }))));
+  const byId = new Map(outs.flatMap((o: any) => o?.drafts || []).map((d: any) => [String(d.id), d]));
   let drafted = 0;
   for (const l of leads) {
     const d: any = byId.get(String(l.id));
-    if (!d?.body) continue;
-    const message = { channel: clip(d.channel, 20) || (l.email ? "email" : "linkedin"), subject: clip(d.subject, 120), body: String(d.body).replace(/[—–]/g, ",").trim().slice(0, 2000), followups: (d.followups || []).slice(0, 2).map((f: any) => clip(f, 400)) };
+    if (!d) continue;
+    const variants: Record<string, any> = {};
+    for (const ch of CHANNELS) { const v = variantFrom(d, ch); if (v) variants[ch] = v; }
+    if (!Object.keys(variants).length) continue;
+    const best = (CHANNELS as readonly string[]).includes(d.best) && variants[d.best] ? d.best : (l.email && variants.email ? "email" : Object.keys(variants)[0]);
+    const message = { channel: best, ...variants[best], variants };
     await client.from("outreach_leads").update({ message, status: l.status === "new" ? "drafted" : l.status, updated_at: new Date().toISOString() }).eq("id", l.id);
     drafted += 1;
   }
@@ -507,7 +672,11 @@ async function outcome(userId: string, body: any) {
 
 async function edit(userId: string, body: any) {
   const m = body.message || {};
-  const message = { channel: clip(m.channel, 20), subject: clip(m.subject, 120), body: String(m.body || "").slice(0, 2000), followups: (m.followups || []).slice(0, 2).map((f: any) => clip(f, 400)) };
+  const clean = (v: any) => ({ subject: clip(v?.subject, 120), body: String(v?.body || "").slice(0, 2000), followups: (Array.isArray(v?.followups) ? v.followups : []).slice(0, 2).map((f: any) => clip(f, 400)) });
+  const variants: Record<string, any> = {};
+  for (const ch of CHANNELS) if (m.variants?.[ch]?.body) variants[ch] = clean(m.variants[ch]);
+  const channel = (CHANNELS as readonly string[]).includes(m.channel) ? m.channel : "email";
+  const message = { channel, ...(variants[channel] || clean(m)), variants };
   const { error } = await db().from("outreach_leads").update({ message, updated_at: new Date().toISOString() }).eq("id", body.lead_id).eq("user_id", userId);
   if (error) throw error;
   return json({ ok: true });
@@ -566,8 +735,10 @@ serve(async (req) => {
     else if (step === "draft") res = await draft(user.id, body, spend);
     else if (step === "outcome") res = await outcome(user.id, body);
     else if (step === "edit") res = await edit(user.id, body);
+    else if (step === "product_list") res = await productList(user.id);
+    else if (step === "product_build") res = await productBuild(user.id, body, spend);
     else res = json({ error: "Unknown step." }, 400);
-    if (["refine", "hunt", "draft"].includes(step)) {
+    if (["refine", "hunt", "draft", "product_build"].includes(step)) {
       logEngineRun({ engine: `outreach-${step}`, command: clip(body.ask || body.brief_id || "", 300), response: { status: res.status, spend, cost_usd: costUsd(spend) }, verdict: res.ok ? "ok" : `http:${res.status}`, model: BRAINO_TEXT_MODEL, usage: { input_tokens: spend.input_tokens, output_tokens: spend.output_tokens }, elapsed_ms: Date.now() - started } as any);
     }
     return res;

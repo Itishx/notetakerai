@@ -249,7 +249,7 @@
 
 /* ── Chat (2026-10-17): the page is a conversation ─────────────────── */
 .oas-main { position: relative; display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
-.oas-start { flex: 1; display: flex; flex-direction: column; justify-content: center; width: 100%; max-width: 760px; margin: 0 auto; padding: 48px 24px 15vh; }
+.oas-start { flex: 1; display: flex; flex-direction: column; justify-content: center; width: 100%; max-width: 760px; margin: 0 auto; padding: 48px 24px 64px; }
 .oas-hello { font-family: var(--o-serif); font-weight: 400; font-size: clamp(30px, 3.4vw, 44px); line-height: 1.18; letter-spacing: -.018em; text-align: center; margin: 0 0 28px; }
 .oas-box { border: 1px solid var(--o-line-strong); background: var(--o-box); padding: 14px 16px 10px; box-shadow: 0 1px 0 rgba(var(--o-shade), .04), 0 12px 32px -18px rgba(var(--o-shade), .25); transition: border-color .15s, box-shadow .15s; }
 .oas-box:focus-within { border-color: var(--o-accent); box-shadow: 0 0 0 4px var(--o-accent-soft); }
@@ -342,3 +342,45 @@
 .oas-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .oas-who { display: flex; align-items: center; gap: 12px; }
 .oas-sheet-head { grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; }
+
+/* ── Rounded rail, product picker, product report, channel tabs ───────── */
+.oas-new { border-radius: 999px; justify-content: center; }
+.oas-brief-item { border-radius: 12px; }
+.oas-add b { display: inline-flex; align-items: center; gap: 6px; color: var(--o-ink-soft); font-weight: 550; }
+
+.oas-selling { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin: -10px 0 14px; }
+.oas-selling > span { font-size: 12px; color: var(--o-ink-faint); margin-right: 2px; }
+.oas-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-ink-soft); font-size: 13px; font-weight: 550; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.oas-pill:hover { border-color: var(--o-line-strong); color: var(--o-ink); }
+.oas-pill.is-on { background: var(--o-ink); border-color: var(--o-ink); color: var(--o-bg); }
+.oas-pill.is-add { border-style: dashed; }
+.oas-pill.is-file { cursor: default; color: var(--o-ink); background: var(--o-box); }
+.oas-pill.is-file button { border: 0; background: transparent; padding: 0; display: grid; place-items: center; color: var(--o-ink-faint); cursor: pointer; }
+
+.oas-product { gap: 22px; }
+.oas-form { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--o-line-strong); border-radius: 20px; background: var(--o-box); }
+.oas-form-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+.oas-form label > span { display: block; font-size: 12px; font-weight: 600; color: var(--o-ink-soft); margin-bottom: 5px; }
+.oas-form input, .oas-form textarea { width: 100%; border: 1px solid var(--o-line); border-radius: 12px; background: var(--o-bg); padding: 10px 12px; outline: 0; font-size: 14.5px; line-height: 1.5; resize: vertical; }
+.oas-form input:focus, .oas-form textarea:focus { border-color: var(--o-accent); box-shadow: 0 0 0 3px var(--o-accent-soft); }
+.oas-files { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.oas-report { border: 1px solid var(--o-line-strong); border-radius: 20px; background: var(--o-box); overflow: hidden; }
+.oas-rblock { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 18px; padding: 16px 20px; border-bottom: 1px solid var(--o-line); }
+.oas-rblock:last-child { border-bottom: 0; }
+.oas-rblock h5 { margin: 3px 0 0; font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--o-ink-faint); }
+.oas-rblock p { margin: 0 0 6px; font-family: var(--o-serif); font-size: 16.5px; line-height: 1.6; }
+.oas-rblock ul, .oas-rblock ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14.5px; }
+.oas-rblock dl { margin: 0; display: grid; gap: 10px; }
+.oas-rblock dt { font-weight: 600; font-size: 14.5px; }
+.oas-rblock dd { margin: 2px 0 0; color: var(--o-ink-soft); font-size: 14px; }
+@media (max-width: 760px) { .oas-form-row, .oas-rblock { grid-template-columns: 1fr; gap: 8px; } }
+
+/* Channel tabs: a soft track, the chosen channel lifts out of it. */
+.oas-chan { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 999px; background: var(--o-bg); border: 1px solid var(--o-line); }
+.oas-chan button { position: relative; flex: 1; height: 32px; border: 0; border-radius: 999px; background: transparent; color: var(--o-ink-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.oas-chan button:hover { color: var(--o-ink); }
+.oas-chan button.is-on { background: var(--o-box); color: var(--o-ink); box-shadow: 0 1px 2px rgba(var(--o-shade), .12), 0 0 0 1px var(--o-line-strong); }
+.oas-chan button.is-empty { color: var(--o-ink-faint); }
+.oas-chan button i { position: absolute; top: 6px; right: 9px; width: 5px; height: 5px; border-radius: 50%; background: var(--o-accent); }
+.oas-msg input, .oas-msg textarea { border-radius: 12px; }
+.oas-sheet .oas-msg textarea.is-follow { min-height: 84px; }

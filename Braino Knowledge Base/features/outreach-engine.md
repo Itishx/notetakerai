@@ -22,6 +22,14 @@ Not a new product, not a model, not an OS. An engine inside AffectiveOS (like th
 5. **Write messages for the top 12**, edit, then **Open in Gmail** or **Copy**. Press **I sent it**.
 6. Later: **Replied**, **Booked a call**, **Not interested**, **Opted out**, **Bounced**.
 
+## Product context (October 17, 2026)
+
+"What you sell" in the sidebar: name, website, notes the website does not cover, and text documents (.txt, .md, .csv, .html; PDFs not yet). Braino reads the site and up to 6 subpages (Exa contents), writes a detailed report (what it is, problem, who for, how it works, features, outcomes, proof, pricing, differentiators, alternatives, objections, tone, words to avoid, status) and asks up to 5 questions for what is missing. Stored in `product_contexts` (not outreach-specific, so Distra posts can read it). A search picks the product ("Selling: Braino"), and refine and draft read the report, so messages never claim proof or availability the report does not have.
+
+## One message per channel
+
+Draft writes email, LinkedIn, WhatsApp, X and Instagram versions for every person at once (people in batches of 4, in parallel). The person sheet has channel tabs; switching shows that channel's own message, and a dot marks the best channel for them. `message = {channel, subject, body, followups, variants: {email|linkedin|whatsapp|x|instagram: {subject, body, followups}}}`.
+
 ## How it works
 
 ```
