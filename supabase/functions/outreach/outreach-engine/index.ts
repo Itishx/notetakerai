@@ -142,7 +142,7 @@ async function refine(userId: string, body: any, spend: Spend) {
 
 /* ── Step 2: hunt (sources) ────────────────────────────────────────────── */
 
-type Find = { source: string; url: string; title: string; text: string; date?: string | null };
+type Find = { source: string; url: string; title: string; text: string; date?: string | null; image?: string };
 
 async function exaSearch(query: string, category: string | null, n: number, spend: Spend, sinceDays?: number): Promise<Find[]> {
   if (!EXA_KEY) return [];
@@ -170,7 +170,21 @@ async function exaSearch(query: string, category: string | null, n: number, spen
     title: clip(r.title, 160),
     text: clip([...(r.highlights || []), r.text].filter(Boolean).join(" "), 900),
     date: r.publishedDate || null,
+    image: typeof r.image === "string" ? r.image : "",
   }));
+}
+
+/* A real profile photo from the person's own result. LinkedIn's grey
+   placeholder lives on static.licdn.com and is not a photo of anyone. It is a
+   link to the public picture, never a copy, and LinkedIn's links expire, so
+   the page falls back to initials when one stops loading. */
+function photoFrom(finds: Find[]) {
+  for (const f of finds) {
+    const img = String(f.image || "");
+    if (!/^https:\/\//.test(img) || /static\.licdn\.com/.test(img)) continue;
+    if (f.source === "exa:people" || /profile-displayphoto/.test(img)) return img.slice(0, 600);
+  }
+  return "";
 }
 
 async function apolloSearch(icp: any, spend: Spend): Promise<Find[]> {
@@ -390,8 +404,8 @@ async function hunt(userId: string, body: any, spend: Spend) {
 
     const rows = leads.map((l) => {
       const r = rank(l, wins);
-      const sourcesUsed = (Array.isArray(l.source_ids) ? l.source_ids : []).map((n: number) => finds[n - 1]).filter(Boolean)
-        .map((f: Find) => ({ name: f.source, url: f.url, title: f.title }));
+      const used: Find[] = (Array.isArray(l.source_ids) ? l.source_ids : []).map((n: number) => finds[n - 1]).filter(Boolean);
+      const sourcesUsed = used.map((f: Find) => ({ name: f.source, url: f.url, title: f.title }));
       let discard = l.excluded ? clip(l.exclude_reason, 160) || "Excluded by your brief" : "";
       const keys = [lower(l.email), lower(l.company_domain), lower(l.linkedin_url)].filter(Boolean);
       if (!discard && keys.some((k) => suppressed.has(k))) discard = "On your do-not-contact list";
@@ -403,7 +417,7 @@ async function hunt(userId: string, body: any, spend: Spend) {
         company: clip(l.company, 160), company_domain: lower(l.company_domain).slice(0, 120),
         industry: clip(l.industry, 120), company_size: clip(l.company_size, 40), location: clip(l.location, 120),
         email: clip(l.email, 160), email_status: l.email ? (l.email_status || "guessed") : "unknown",
-        linkedin_url: clip(l.linkedin_url, 300), website: clip(l.website, 300), summary: clip(l.summary, 400),
+        linkedin_url: clip(l.linkedin_url, 300), website: clip(l.website, 300), summary: clip(l.summary, 400), photo_url: photoFrom(used),
         signals: (l.signals || []).slice(0, 6), sources: sourcesUsed.slice(0, 6), features: r.features,
         score: r.score, score_parts: r.parts, reasons: r.reasons, discarded: Boolean(discard), discard_reason: discard,
         updated_at: new Date().toISOString(),

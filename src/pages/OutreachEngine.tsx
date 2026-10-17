@@ -22,7 +22,7 @@ type Brief = {
 type Lead = {
   id: string; brief_id: string; name: string; title: string; seniority: string; company: string;
   company_domain: string; industry: string; company_size: string; location: string; email: string;
-  email_status: string; linkedin_url: string; website: string; summary: string;
+  email_status: string; linkedin_url: string; website: string; summary: string; photo_url?: string;
   signals: { kind: string; text: string; date?: string; url?: string }[];
   sources: { name: string; url: string; title?: string }[];
   score: number; score_parts: any; reasons: string[]; discarded: boolean; discard_reason: string;
@@ -30,10 +30,22 @@ type Lead = {
 };
 
 const EXAMPLES = [
-  "Founders of D2C skincare brands in India doing ₹1-10 crore, who are hiring their first marketer",
-  "Heads of operations at US logistics startups that raised a Series A in the last 6 months",
-  "Agency owners in London with 5-30 people who post about struggling to find clients",
+  { tag: "India · D2C", title: "Skincare founders hiring their first marketer", ask: "Founders of D2C skincare brands in India doing ₹1-10 crore, who are hiring their first marketer" },
+  { tag: "US · Logistics", title: "Ops heads at freshly funded startups", ask: "Heads of operations at US logistics startups that raised a Series A in the last 6 months" },
+  { tag: "UK · Agencies", title: "Small agency owners short on clients", ask: "Agency owners in London with 5-30 people who post about struggling to find clients" },
 ];
+
+/* Their public photo when the search found one; their initials when it did
+   not, or when the link has expired (LinkedIn's do). */
+function Avatar({ name, src, size = 34 }: { name: string; src?: string; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const initials = String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return (
+    <span className="oas-av" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }} aria-hidden="true">
+      {src && !broken ? <img src={src} alt="" referrerPolicy="no-referrer" loading="lazy" onError={() => setBroken(true)} /> : initials}
+    </span>
+  );
+}
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New", drafted: "Drafted", sent: "Sent", replied: "Replied", booked: "Booked",
@@ -204,7 +216,11 @@ function Start({ onCreated }: { onCreated: (b: Brief) => void }) {
       </div>
       {err && <div className="oas-err">{err}</div>}
       <div className="oas-examples">
-        {EXAMPLES.map((x) => <button key={x} type="button" className="oas-ex" onClick={() => setAsk(x)}>{x}</button>)}
+        {EXAMPLES.map((x) => (
+          <button key={x.ask} type="button" className="oas-ex" onClick={() => setAsk(x.ask)}>
+            <small>{x.tag}</small><b>{x.title}</b><ArrowUpRight className="oas-ex-go" />
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -396,7 +412,7 @@ function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOp
               {shown.map((l, i) => (
                 <tr key={l.id} className={`${l.id === openId ? "is-on" : ""} ${l.discarded ? "is-out" : ""}`} onClick={() => onOpen(l.id)}>
                   <td className="oas-rank">{i + 1}</td>
-                  <td className="oas-person"><b>{l.name}</b><small>{l.title}</small></td>
+                  <td className="oas-person"><div className="oas-who"><Avatar name={l.name} src={l.photo_url} /><div><b>{l.name}</b><small>{l.title}</small></div></div></td>
                   <td className="oas-co"><b>{l.company}</b><small>{[l.industry, l.location].filter(Boolean).join(" · ")}</small></td>
                   <td className="oas-score"><div className={`oas-meter ${l.score >= 70 ? "is-high" : ""}`}><b>{l.score}</b><i style={{ ["--w" as any]: `${l.score}%` }} /></div></td>
                   <td className="oas-why">{l.discarded ? l.discard_reason : (l.reasons || [])[0] || l.summary}</td>
@@ -452,6 +468,7 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
     <div className="oas-scrim" onClick={onClose}>
       <div className="oas-sheet" role="dialog" aria-modal="true" aria-label={lead.name} onClick={(e) => e.stopPropagation()}>
         <header className="oas-sheet-head">
+          <Avatar name={lead.name} src={lead.photo_url} size={72} />
           <div>
             <h2 className="oas-dname">{lead.name}</h2>
             <p className="oas-dsub">{[lead.title, lead.company].filter(Boolean).join(" at ")}{lead.location ? ` · ${lead.location}` : ""}</p>

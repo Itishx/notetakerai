@@ -324,3 +324,21 @@
   .oas-thread { padding: 24px 16px 140px; }
   .oas-you-b { max-width: 92%; }
 }
+
+/* ── Rounded composer, suggestion cards, photos (2026-10-17) ────────── */
+.oas-box { border-radius: 22px; }
+.oas-box.is-dock { border-radius: 22px; }
+.oas-send { border-radius: 50%; }
+.oas-start .oas-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.oas-start .oas-ex { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px 16px 16px; border: 1px solid var(--o-line); border-radius: 16px; background: var(--o-surface); color: var(--o-ink); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.oas-start .oas-ex:hover { border-color: var(--o-accent); background: var(--o-box); transform: translateY(-1px); }
+.oas-start .oas-ex small { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--o-accent); }
+.oas-start .oas-ex b { font-family: var(--o-serif); font-weight: 400; font-size: 16.5px; line-height: 1.35; padding-right: 18px; }
+.oas-ex-go { position: absolute; top: 14px; right: 14px; width: 15px; height: 15px; color: var(--o-ink-faint); transition: color .15s; }
+.oas-start .oas-ex:hover .oas-ex-go { color: var(--o-accent); }
+@media (max-width: 760px) { .oas-start .oas-examples { grid-template-columns: 1fr; } }
+
+.oas-av { flex: none; display: inline-grid; place-items: center; border-radius: 50%; overflow: hidden; background: var(--o-accent-soft); color: var(--o-accent); font-weight: 650; letter-spacing: .02em; box-shadow: inset 0 0 0 1px var(--o-line); }
+.oas-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.oas-who { display: flex; align-items: center; gap: 12px; }
+.oas-sheet-head { grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; }
