@@ -1,0 +1,12 @@
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import "./knowledge-base.css";
+
+export default function OutreachEngineDocs() {
+  return <main className="kb-article"><header className="kb-nav kb-article-nav"><Link to="/knowledge" className="kb-back"><ArrowLeft aria-hidden="true" /> Knowledge Base</Link><span className="kb-nav-label">Feature 085</span></header><article>
+    <header className="kb-article-hero"><div className="kb-article-meta"><span>Braino on the web</span><span>Outreach</span><span>Exploring</span></div><h1>Tell him who you want to sell to.<br /><em>He finds them.</em></h1><p>The right people, a reason for every pick, and the first message already written.</p><time dateTime="2026-10-17">Published October 17, 2026</time></header>
+    <section className="kb-article-block kb-article-intro"><p className="kb-dropcap">Outreach is the hardest part of starting anything. Most tools hand you a giant list and leave you to guess who is worth writing to. Braino does the opposite: a short list, ranked, with the reason each person is on it.</p><p>Say who you want, the way you would to a friend. He turns it into a precise profile, asks two or three things that would change who he picks, then searches people, companies and recent news. Every person gets a score out of 100 made of four plain parts: how well they fit, whether something just happened for them, how easy they are to reach, and how much they look like the people who said yes to you before.</p><p>Then he writes one message per person, built on their real moment, with two follow-ups. You open it in Gmail, or copy it for LinkedIn or WhatsApp, and send it yourself. When someone replies or books a call, you tell him, and the next search ranks better. That loop is the whole point.</p></section>
+    <section className="kb-article-block"><aside className="kb-honesty"><strong>The honest bit</strong><p>It is early. It cannot promise calls; it finds the best fit people it can and shows its working. It only uses what it can actually find, so some people come without an email. Nothing is ever sent on your behalf yet: you press send. Anyone who opts out is never contacted again. LinkedIn is used for drafts only, because automating it gets accounts banned.</p></aside></section>
+    <footer className="kb-article-footer"><Link to="/outreach">Open Outreach <ArrowRight aria-hidden="true" /></Link><p>Internal source: Braino Knowledge Base/features/outreach-engine.md</p></footer>
+  </article></main>;
+}

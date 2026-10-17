@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "outreach-engine",
+    title: "Outreach Engine",
+    category: "Feature",
+    date: "2026-10-17",
+    dateLabel: "October 17, 2026",
+    description:
+      "Tell Braino who you want to sell to. He finds the people who fit best, says why he picked each one, and writes the first message.",
+    status: "Exploring",
+    platform: "Braino on the web",
+    number: "085",
+  },
+  {
     slug: "option-n-recording",
     title: "Option+N Recording",
     category: "Feature",

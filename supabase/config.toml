@@ -429,3 +429,7 @@ verify_jwt = false
 [functions.hil-plan]
 entrypoint = "./functions/reasoning/hil-plan/index.ts"
 verify_jwt = false
+
+# Outreach Engine: brief -> hunt -> rank -> draft -> outcome, one function (cap is 100).
+[functions.outreach-engine]
+entrypoint = "./functions/outreach/outreach-engine/index.ts"

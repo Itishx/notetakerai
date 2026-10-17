@@ -188,6 +188,8 @@ const MeetBrainoCarousels = lazy(() => import("./pages/MeetBrainoCarousels.tsx")
 const SpeakTeaser = lazy(() => import("./pages/SpeakTeaser.tsx"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
+const OutreachEngine = lazy(() => import("./pages/OutreachEngine.tsx"));
+const OutreachEngineDocs = lazy(() => import("./pages/OutreachEngineDocs.tsx"));
 const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const Onb = lazy(() => import("./pages/Onb.tsx"));
 const Brainotes = lazy(() => import("./pages/Brainotes.tsx"));
@@ -411,6 +413,7 @@ function AppRoutes() {
         <Route path="/knowledge/pause-music-while-you-talk" element={<PauseMusicDocs />} />
         <Route path="/knowledge/option-n-recording" element={<OptionMRecordingDocs />} />
         <Route path="/knowledge/notes-as-pdfs" element={<NotesPdfDocs />} />
+        <Route path="/knowledge/outreach-engine" element={<OutreachEngineDocs />} />
         <Route path="/knowledge/trace" element={<Navigate to="/trace" replace />} />
         <Route path="/knowledge/hil-scored" element={<HilScoredDocs />} />
         <Route path="/knowledge/labs-and-saburi" element={<Navigate to="/labs" replace />} />
@@ -494,6 +497,7 @@ function AppRoutes() {
         <Route path="/brainonotes" element={<Brainotes />} />
         <Route path="/takeover" element={<Takeover />} />
         <Route path="/ideas" element={<IdeaTracker />} />
+        <Route path="/outreach" element={<OutreachEngine />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
         <Route path="/code" element={<BrainoCode />} />
