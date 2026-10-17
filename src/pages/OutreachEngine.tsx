@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Download, PenLine, Inbox as InboxIcon, RefreshCw, Send, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { supabase } from "@/integrations/supabase/client";
@@ -147,6 +147,7 @@ function OutreachApp() {
   const [productView, setProductView] = useState<string>("");
   const [sellOpen, setSellOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
@@ -215,8 +216,8 @@ function OutreachApp() {
       </header>
       <div className="oas-shell">
         <nav className="oas-rail">
-          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); }}><Plus size={15} /> New search</button>
-          <button type="button" className={`oas-sell-row oas-inbox-row ${inboxOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(true); }}>
+          <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); setVoiceOpen(false); }}><Plus size={15} /> New search</button>
+          <button type="button" className={`oas-sell-row oas-inbox-row ${inboxOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setVoiceOpen(false); setInboxOpen(true); }}>
             <InboxIcon size={14} /><span>Inbox</span>
           </button>
           {/* One row; your products fold out beneath it. */}
@@ -227,16 +228,19 @@ function OutreachApp() {
           {sellOpen && (
             <div className="oas-sell-list">
               {products.map((p) => (
-                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setProductView(p.id); }}>
+                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setVoiceOpen(false); setProductView(p.id); }}>
                   {p.name || p.report?.name || "Untitled"}{p.status !== "ready" ? <small>needs details</small> : null}
                 </button>
               ))}
-              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setProductView("new"); }}><Plus size={12} /> Add a product</button>
+              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setInboxOpen(false); setVoiceOpen(false); setProductView("new"); }}><Plus size={12} /> Add a product</button>
             </div>
           )}
+          <button type="button" className={`oas-sell-row oas-inbox-row ${voiceOpen ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(""); setInboxOpen(false); setVoiceOpen(true); }}>
+            <PenLine size={14} /><span>Your voice</span>
+          </button>
           <h6>Searches</h6>
           {briefs.map((b) => (
-            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setInboxOpen(false); setActiveId(b.id); }}>
+            <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setInboxOpen(false); setVoiceOpen(false); setActiveId(b.id); }}>
               <b>{b.title || "Untitled"}</b>
               <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} people` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
             </button>
@@ -244,7 +248,9 @@ function OutreachApp() {
           {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Your searches show up here.</p>}
         </nav>
         <section className="oas-main">
-          {inboxOpen
+          {voiceOpen
+            ? <VoiceView say={say} />
+            : inboxOpen
             ? <InboxView say={say} />
             : productView
             ? <ProductView key={productView} product={products.find((p) => p.id === productView) || null}
@@ -463,6 +469,7 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
               {ready.length > 0 && (gmail?.connected
                 ? <button type="button" className="oas-btn is-small is-ink" disabled={!!busy} onClick={() => setConfirmAll(true)}><Send /> Email all {ready.length} with Gmail</button>
                 : <button type="button" className="oas-btn is-small" onClick={() => void connectGmail()}><Mail /> Connect Gmail to send</button>)}
+              <button type="button" className="oas-btn is-small" onClick={() => downloadLeads(brief, leads)}><Download /> Download for Excel</button>
               <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Search again</button>
               {brief.stats?.cost_usd != null && <span className="oas-note">This search ≈ ${Number(brief.stats.cost_usd).toFixed(2)}</span>}
             </div>
@@ -1217,6 +1224,99 @@ function InboxRow({ it, open, onToggle, due, reload, say }: { it: InboxItem; ope
               </div>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Download: everything a search found, as a sheet Excel opens ─────────
+   A CSV with a byte-order mark, so Excel and Google Sheets read the Indian
+   and accented names correctly. One row per person, best reachable first. */
+function downloadLeads(brief: Brief, leads: Lead[]) {
+  const cols: [string, (l: Lead, i: number) => unknown][] = [
+    ["Rank", (_l, i) => i + 1], ["Name", (l) => l.name], ["Title", (l) => l.title], ["Company", (l) => l.company],
+    ["Website", (l) => l.website || (l.company_domain ? `https://${l.company_domain}` : "")], ["Industry", (l) => l.industry],
+    ["Company size", (l) => l.company_size], ["Location", (l) => l.location],
+    ["Email", (l) => l.email], ["Email trust", (l) => (l.email ? EMAIL_TRUST[l.email_status] || l.email_status : "")], ["How the email was found", (l) => l.email_source || ""],
+    ["Phones (website)", (l) => (l.contacts?.phones || []).join(" ")], ["WhatsApp (website)", (l) => (l.contacts?.whatsapp || []).join(" ")],
+    ["Other emails (website)", (l) => (l.contacts?.emails || []).filter((e) => e !== l.email).join(" ")], ["Instagram", (l) => (l.contacts?.instagram || []).map((h) => `@${h}`).join(" ")],
+    ["LinkedIn", (l) => l.linkedin_url], ["Score", (l) => l.score],
+    ["Fit", (l) => Math.round((Number(l.score_parts?.fit) || 0) * 100)], ["Timing", (l) => Math.round((Number(l.score_parts?.timing) || 0) * 100)], ["Reachable", (l) => Math.round((Number(l.score_parts?.reach) || 0) * 100)],
+    ["Why picked", (l) => (l.discarded ? `Set aside: ${l.discard_reason}` : (l.reasons || []).join(" | "))],
+    ["Signals", (l) => (l.signals || []).map((x) => `${x.text}${x.date ? ` (${x.date})` : ""}`).join(" | ")],
+    ["Status", (l) => (l.discarded ? "Set aside" : STATUS_LABEL[l.status] || l.status)], ["Best channel", (l) => CHANNEL_LABEL[l.message?.channel || ""] || ""],
+    ["Email subject", (l) => l.message?.variants?.email?.subject || ""], ["Email message", (l) => l.message?.variants?.email?.body || ""],
+    ["LinkedIn note", (l) => l.message?.variants?.linkedin?.body || ""], ["WhatsApp message", (l) => l.message?.variants?.whatsapp?.body || ""],
+    ["X message", (l) => l.message?.variants?.x?.body || ""], ["Instagram message", (l) => l.message?.variants?.instagram?.body || ""],
+  ];
+  const rows = [...leads].sort((a, b) => Number(a.discarded) - Number(b.discarded) || tierOf(a) - tierOf(b) || b.score - a.score);
+  const cell = (v: unknown) => { const t = String(v ?? ""); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const csv = [cols.map(([h]) => cell(h)).join(","), ...rows.map((l, i) => cols.map(([, f]) => cell(f(l, i))).join(","))].join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(brief.title || "outreach").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ── Your voice: how you write, learnt once, used by every channel writer ── */
+function VoiceView({ say }: { say: (t: string) => void }) {
+  const gmail = useGmail();
+  const [voice, setVoice] = useState<any>(null);
+  const [pasted, setPasted] = useState("");
+  const [self, setSelf] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => { void call("voice_get").then((r) => { setVoice(r?.voice || null); setSelf(r?.voice?.self_described || ""); }).catch(() => {}); }, []);
+  const build = async (importGmail: boolean) => {
+    setBusy(importGmail ? "gmail" : "build"); setErr("");
+    try {
+      const r = await call("voice_build", { pasted, self_described: self, import_gmail: importGmail });
+      setVoice(r.voice); setPasted(""); say("Your voice is learnt. Every channel writer uses it now.");
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(""); }
+  };
+  const p = voice?.profile || {};
+  const has = Object.keys(p).length > 0;
+  const n = (voice?.samples || []).length;
+  const list = (xs: any) => (Array.isArray(xs) ? xs.filter(Boolean) : []);
+  return (
+    <div className="oas-thread oas-product">
+      <div>
+        <div className="oas-kicker">Your voice</div>
+        <h1 className="oas-hello" style={{ textAlign: "left", margin: "8px 0 6px" }}>{has ? "This is how you write." : "Teach Braino how you write."}</h1>
+        <p className="oas-soft" style={{ margin: 0, fontFamily: "var(--o-serif)", fontSize: 18 }}>
+          {has ? p.summary : "Every message and every post is written as you, on every platform. Give him a few things you have written, or let him read your sent emails."}
+        </p>
+      </div>
+      <div className="oas-form">
+        <label><span>Paste things you have written: emails, LinkedIn posts, WhatsApp messages. Separate pieces with a blank line or ---</span>
+          <textarea rows={7} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={"Hey Rohan, saw your launch yesterday…\n---\nHonestly the hardest part of building Braino was…"} /></label>
+        <label><span>In your own words, how do you sound? (optional, and it wins over everything else)</span>
+          <textarea rows={2} value={self} onChange={(e) => setSelf(e.target.value)} placeholder="Direct, a bit funny, short sentences, Hinglish with friends, never salesy" /></label>
+        <div className="oas-row">
+          <button type="button" className="oas-btn is-primary" disabled={!!busy || (!pasted.trim() && !self.trim() && !n)} onClick={() => void build(false)}><Sparkles /> {busy === "build" ? "Learning…" : has ? "Learn again" : "Learn my voice"}</button>
+          {gmail?.connected
+            ? <button type="button" className="oas-btn" disabled={!!busy} onClick={() => void build(true)}><Mail /> {busy === "gmail" ? "Reading your sent emails…" : "Learn from my sent emails"}</button>
+            : <button type="button" className="oas-btn" onClick={() => void connectGmail()}><Mail /> Connect Gmail to learn from sent emails</button>}
+          {n ? <span className="oas-note">Learnt from {n} piece{n === 1 ? "" : "s"} of your writing</span> : null}
+        </div>
+        {err && <div className="oas-err">{err}</div>}
+      </div>
+      {busy && <Braino><p>Reading how you write: openers, rhythm, the words you always use…</p><Dots /></Braino>}
+      {has && !busy && (
+        <div className="oas-report">
+          <ReportBlock title="Formality"><p>{p.formality}</p></ReportBlock>
+          <ReportBlock title="Sentences"><p>{p.sentence_shape}</p></ReportBlock>
+          <ReportBlock title="How you open">{list(p.openers).length ? <div className="oas-tags">{list(p.openers).map((x: string) => <span key={x} className="oas-tag">{x}</span>)}</div> : null}</ReportBlock>
+          <ReportBlock title="How you sign off">{list(p.sign_offs).length ? <div className="oas-tags">{list(p.sign_offs).map((x: string) => <span key={x} className="oas-tag">{x}</span>)}</div> : null}</ReportBlock>
+          <ReportBlock title="Your words">{list(p.signature_phrases).length ? <div className="oas-tags">{list(p.signature_phrases).map((x: string) => <span key={x} className="oas-tag is-accent">{x}</span>)}</div> : null}</ReportBlock>
+          <ReportBlock title="Language"><p>{p.language_mix}</p></ReportBlock>
+          <ReportBlock title="Habits"><p>{p.punctuation}</p></ReportBlock>
+          <ReportBlock title="You never">{list(p.never).length ? <ul>{list(p.never).map((x: string) => <li key={x}>{x}</li>)}</ul> : null}</ReportBlock>
+          <ReportBlock title="Unmistakably you">{list(p.examples).length ? <ul>{list(p.examples).map((x: string) => <li key={x}>“{x}”</li>)}</ul> : null}</ReportBlock>
         </div>
       )}
     </div>

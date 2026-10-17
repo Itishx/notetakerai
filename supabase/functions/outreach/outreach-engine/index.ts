@@ -27,6 +27,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { getRequestUser } from "../../_shared/require-user.ts";
 import { BRAINO_TEXT_MODEL } from "../../_shared/openai-models.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import { buildWriterSystem, outreachChannels, readDraft, VOICE_EXTRACT_SYSTEM, type ChannelId } from "../../_shared/channel-writers/index.ts";
 import { buildCalendarOAuthState, getCalendarConnection, getCalendarOAuthEnv, getValidCalendarAccessToken } from "../../_shared/google-calendar.ts";
 
 const cors = {
@@ -783,37 +784,16 @@ async function hunt(userId: string, body: any, spend: Spend) {
 
 const CHANNELS = ["email", "linkedin", "whatsapp", "x", "instagram"] as const;
 
-/* Every channel is written separately, because a LinkedIn note, a WhatsApp
-   message and a cold email are different things. All five come back at once,
-   so switching channel on the page is instant and costs nothing. */
-const DRAFT_SYSTEM = `You write first-touch outreach for a founder. Each person gets a separate message for each channel, and each must read like the founder wrote it to them alone, natively for that channel.
+/* ── Draft: one writer per platform (2026-10-17) ─────────────────────────
+   Each platform has its own small writer in _shared/channel-writers, with its
+   own rules, called separately, so a LinkedIn note and a WhatsApp message are
+   written as different things rather than one message trimmed five ways. All
+   of them read the founder's voice and the product report; the Content Engine
+   will import the same writers. */
 
-Return JSON only:
-{"drafts": [{
-  "id": "lead id",
-  "best": "email|linkedin|whatsapp|x|instagram",
-  "email": {"subject": "under 7 words, lowercase is fine", "body": "50-90 words", "followups": ["day 3, under 40 words", "day 7, under 40 words"]},
-  "linkedin": {"body": "connection note, under 280 characters", "followups": ["after they accept, under 60 words"]},
-  "whatsapp": {"body": "2-3 short lines, conversational, like texting someone you were introduced to", "followups": ["one gentle nudge"]},
-  "x": {"body": "DM, under 240 characters, casual, no pitchy opener", "followups": []},
-  "instagram": {"body": "DM, under 200 characters, warm and light", "followups": []}
-}]}
-
-How to write, every channel:
-- Open with their real moment: a signal, their role, something they said or built. Never "I hope this finds you well".
-- Tie the product to the pain that moment implies. One idea, one small ask (a 15-minute call, or a yes/no question).
-- Use the product report for every claim. If the report has no proof, claim none. Respect its status (never imply it is live if it is a waitlist).
-- Match the product's tone. Plain, warm, direct. No buzzwords, no flattery, no em dashes, no exclamation marks.
-- Email ends with one short opt-out line (e.g. "If this is not for you, just say so and I will not write again.").
-- Each channel must differ in length, rhythm and opener, not just be trimmed.
-- best: email when an email is known, otherwise linkedin when a profile is known, otherwise email.
-- Never invent facts about the person. Use only what the lead record says.`;
-
-function variantFrom(d: any, ch: string) {
-  const v = d?.[ch] || {};
-  const body = String(v.body || "").replace(/[—–]/g, ",").trim().slice(0, 2000);
-  if (!body) return null;
-  return { subject: ch === "email" ? clip(v.subject, 120) : "", body, followups: (Array.isArray(v.followups) ? v.followups : []).slice(0, 2).map((f: any) => clip(String(f).replace(/[—–]/g, ",").replace(/^\s*(?:day\s*\d+|follow[- ]?up\s*\d*)\s*[:,.-]\s*/i, ""), 400)) };
+async function voiceFor(userId: string) {
+  const { data } = await db().from("writing_voices").select("profile, self_described").eq("user_id", userId).maybeSingle();
+  return { voice: data?.profile || null, selfDescribed: data?.self_described || "" };
 }
 
 async function draft(userId: string, body: any, spend: Spend) {
@@ -825,30 +805,91 @@ async function draft(userId: string, body: any, spend: Spend) {
   const { data: leads } = await q;
   if (!leads?.length) return json({ ok: true, drafted: 0 });
   const product = productBrief(await productFor(client, userId, brief.product_id));
-  const context = `The product, in detail:\n${product || `${brief.offer || "(not given)"}\nThe pain it solves: ${brief.icp?.pain || ""}`}\n\nWho this search is for: ${brief.icp?.summary || brief.ask}`;
+  const { voice, selfDescribed } = await voiceFor(userId);
+  const settings = await getSettings(userId);
+  const founder = String(settings.from_name || "").trim();
+  const context = `The founder writing these: ${founder || "name not given, so sign off without a name"}. The product is theirs; never sign as the product.\n\nThe product, in detail:\n${product || `${brief.offer || "(not given)"}\nThe pain it solves: ${brief.icp?.pain || ""}`}\n\nWho this search is for: ${brief.icp?.summary || brief.ask}`;
   const compact = leads.map((l: any) => ({
     id: l.id, name: l.name, title: l.title, company: l.company, industry: l.industry, location: l.location,
     has_email: Boolean(l.email), has_linkedin: Boolean(l.linkedin_url), summary: l.summary,
     signals: (l.signals || []).slice(0, 3), why_picked: (l.reasons || []).slice(0, 3),
   }));
-  // Five channels per person is long output, so people go in small batches, in parallel.
   const batches: any[][] = [];
-  for (let i = 0; i < compact.length; i += 4) batches.push(compact.slice(i, i + 4));
-  const outs = await Promise.all(batches.map((b) => ai("draft", DRAFT_SYSTEM, `${context}\n\nWrite to each of these people:\n${JSON.stringify(b)}`, spend, 9000).catch(() => ({ drafts: [] }))));
-  const byId = new Map(outs.flatMap((o: any) => o?.drafts || []).map((d: any) => [String(d.id), d]));
+  for (let i = 0; i < compact.length; i += 6) batches.push(compact.slice(i, i + 6));
+  // Every platform's writer, for every batch, in parallel.
+  const jobs: Promise<{ ch: ChannelId; drafts: any[] }>[] = [];
+  for (const ch of outreachChannels) {
+    const system = buildWriterSystem(ch, "outreach", { voice, selfDescribed });
+    for (const b of batches) {
+      jobs.push(ai(`writer-${ch}`, system, `${context}\n\nWrite to each of these people:\n${JSON.stringify(b)}`, spend, 5000)
+        .then((o: any) => ({ ch, drafts: Array.isArray(o?.drafts) ? o.drafts : [] }))
+        .catch(() => ({ ch, drafts: [] })));
+    }
+  }
+  const outs = await Promise.all(jobs);
+  const byLead = new Map<string, Record<string, any>>();
+  for (const o of outs) {
+    for (const d of o.drafts) {
+      const v = readDraft(o.ch, d);
+      if (!v || !d?.id) continue;
+      const m = byLead.get(String(d.id)) || {};
+      m[o.ch] = v;
+      byLead.set(String(d.id), m);
+    }
+  }
   let drafted = 0;
   for (const l of leads) {
-    const d: any = byId.get(String(l.id));
-    if (!d) continue;
-    const variants: Record<string, any> = {};
-    for (const ch of CHANNELS) { const v = variantFrom(d, ch); if (v) variants[ch] = v; }
-    if (!Object.keys(variants).length) continue;
-    const best = (CHANNELS as readonly string[]).includes(d.best) && variants[d.best] ? d.best : (l.email && variants.email ? "email" : Object.keys(variants)[0]);
+    const variants = byLead.get(String(l.id));
+    if (!variants || !Object.keys(variants).length) continue;
+    const best = l.email && variants.email ? "email" : l.linkedin_url && variants.linkedin ? "linkedin" : Object.keys(variants)[0];
     const message = { channel: best, ...variants[best], variants };
     await client.from("outreach_leads").update({ message, status: l.status === "new" ? "drafted" : l.status, updated_at: new Date().toISOString() }).eq("id", l.id);
     drafted += 1;
   }
   return json({ ok: true, drafted, cost_usd: costUsd(spend) });
+}
+
+/* ── The founder's voice ──────────────────────────────────────────────── */
+
+async function voiceGet(userId: string) {
+  const { data } = await db().from("writing_voices").select("*").eq("user_id", userId).maybeSingle();
+  return json({ voice: data || null });
+}
+
+/* Their own sent emails are the best sample there is: up to 25 recent ones,
+   quoted replies stripped. Read only. */
+async function sentEmailSamples(userId: string) {
+  const gm: any = await gmailToken(userId).catch(() => null);
+  if (!gm?.token || !gm.canRead) return [];
+  const list = await fetch(`${GMAIL}/messages?q=${encodeURIComponent("in:sent -in:chats")}&maxResults=40`, { headers: { Authorization: `Bearer ${gm.token}` } }).then((r) => r.json()).catch(() => ({}));
+  const out: { source: string; text: string }[] = [];
+  for (const m of (list?.messages || []).slice(0, 40)) {
+    if (out.length >= 25) break;
+    const full = await fetch(`${GMAIL}/messages/${m.id}?format=full`, { headers: { Authorization: `Bearer ${gm.token}` } }).then((r) => r.json()).catch(() => null);
+    const text = stripQuoted(plainBody(full?.payload) || "").replace(/\n{3,}/g, "\n\n");
+    if (text.length >= 60 && text.length <= 3000) out.push({ source: "sent email", text });
+  }
+  return out;
+}
+
+async function voiceBuild(userId: string, body: any, spend: Spend) {
+  const client = db();
+  const { data: existing } = await client.from("writing_voices").select("*").eq("user_id", userId).maybeSingle();
+  let samples: { source: string; text: string }[] = Array.isArray(existing?.samples) ? existing.samples : [];
+  const pasted = String(body.pasted || "").trim();
+  if (pasted) samples = [...samples.filter((x) => x.source !== "pasted"), ...pasted.split(/\n-{3,}\n|\n{3,}/).map((t) => ({ source: "pasted", text: t.trim().slice(0, 3000) })).filter((x) => x.text.length > 20)];
+  if (body.import_gmail) {
+    const sent = await sentEmailSamples(userId);
+    if (!sent.length) return json({ error: "Could not read your sent emails. Connect Gmail first." }, 400);
+    samples = [...samples.filter((x) => x.source !== "sent email"), ...sent];
+  }
+  const selfDescribed = body.self_described !== undefined ? clip(body.self_described, 1500) : (existing?.self_described || "");
+  if (!samples.length && !selfDescribed) return json({ error: "Paste a few things you have written, or import your sent emails." }, 400);
+  const input = `${selfDescribed ? `How they describe their own writing:\n${selfDescribed}\n\n` : ""}Samples of their writing:\n${samples.slice(0, 40).map((x, i) => `--- ${i + 1} (${x.source}) ---\n${x.text}`).join("\n").slice(0, 60000)}`;
+  const profile = await ai("voice", VOICE_EXTRACT_SYSTEM, input, spend, 2500);
+  const { data, error } = await client.from("writing_voices").upsert({ user_id: userId, self_described: selfDescribed, samples: samples.slice(0, 60), profile, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).select().single();
+  if (error) throw error;
+  return json({ voice: data, cost_usd: costUsd(spend) });
 }
 
 /* ── Outcomes: what the learning loop reads ────────────────────────────── */
@@ -1249,9 +1290,11 @@ serve(async (req) => {
     else if (step === "sync") res = json({ ok: true, ...(await syncUser(user.id, spend)) });
     else if (step === "inbox") res = await inbox(user.id);
     else if (step === "find_emails") res = await findEmails(user.id, body, spend);
+    else if (step === "voice_get") res = await voiceGet(user.id);
+    else if (step === "voice_build") res = await voiceBuild(user.id, body, spend);
     else if (step === "product_build") res = await productBuild(user.id, body, spend);
     else res = json({ error: "Unknown step." }, 400);
-    if (["refine", "hunt", "draft", "product_build", "find_emails"].includes(step)) {
+    if (["refine", "hunt", "draft", "product_build", "find_emails", "voice_build"].includes(step)) {
       logEngineRun({ engine: `outreach-${step}`, command: clip(body.ask || body.brief_id || "", 300), response: { status: res.status, spend, cost_usd: costUsd(spend) }, verdict: res.ok ? "ok" : `http:${res.status}`, model: BRAINO_TEXT_MODEL, usage: { input_tokens: spend.input_tokens, output_tokens: spend.output_tokens }, elapsed_ms: Date.now() - started } as any);
     }
     return res;

@@ -41,6 +41,12 @@ Draft writes email, LinkedIn, WhatsApp, X and Instagram versions for every perso
 - Needs the two Gmail scopes added to the Google Cloud OAuth consent screen; while the app is in testing only listed test users can connect.
 - LinkedIn, X, WhatsApp, Instagram are still copy and open.
 
+## Writers, voice and export (October 17, 2026)
+
+- Messages are written by the shared Channel Writers (`channel-writers.md`): one writer per platform, called separately, in the founder's voice (Outreach → **Your voice**).
+- **Download for Excel** in every search: a UTF-8 CSV (opens in Excel and Sheets), one row per person, most reachable first, with contacts, scores, reasons, signals and every channel's message.
+- Website contact scan and Prospeo: see email finding above.
+
 ## How it works
 
 ```
