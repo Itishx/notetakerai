@@ -30,6 +30,17 @@ Not a new product, not a model, not an OS. An engine inside AffectiveOS (like th
 
 Draft writes email, LinkedIn, WhatsApp, X and Instagram versions for every person at once (people in batches of 4, in parallel). The person sheet has channel tabs; switching shows that channel's own message, and a dot marks the best channel for them. `message = {channel, subject, body, followups, variants: {email|linkedin|whatsapp|x|instagram: {subject, body, followups}}}`.
 
+## Sending and the Inbox (October 17, 2026): always human in the loop
+
+- **Nothing is ever sent without a click.** Email goes through the founder's own Gmail (the Google Calendar connection, widened with `gmail.send` + `gmail.readonly`; one "Connect Gmail" click).
+- **Send with Gmail** (person sheet) or **Email all N with Gmail** (thread, with a confirm step). Before each send: do-not-contact check, mail-server (MX) check, daily warm-up cap (10 on day one, +5 a day, up to 20).
+- **Follow-ups** (day 3, day 7) are prepared in the same thread and shown in the Inbox as "due". They only go when the founder presses **Send follow-up**. Any reply drops them.
+- **Reply check** every 10 minutes (`pg_cron` job `outreach-reply-check`, header `x-outreach-cron` = secret `OUTREACH_CRON_SECRET`, scheduled outside git). Read only: finds replies and bounces, sorts each reply, drafts the answer (with the booking link when interested), adds unsubscribes and bounces to do-not-contact. It never sends.
+- **Inbox**: everyone contacted, grouped Needs you / Waiting on them / Finished, with why they were picked, which product and search, every message, their reply, and Braino's suggested answer with **Send reply**.
+- Tables: `outreach_sends`, `outreach_settings`; reply fields on `outreach_leads` (migration `20261017000005`).
+- Needs the two Gmail scopes added to the Google Cloud OAuth consent screen; while the app is in testing only listed test users can connect.
+- LinkedIn, X, WhatsApp, Instagram are still copy and open.
+
 ## How it works
 
 ```

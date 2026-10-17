@@ -551,6 +551,8 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
     const variants: Record<string, Variant> = { ...(m.variants || {}) };
     const ch = m.channel || (lead.email ? "email" : "linkedin");
     if (m.body && !variants[ch]) variants[ch] = { subject: m.subject || "", body: m.body, followups: m.followups || [] };
+    // Older drafts carried the instruction label into the text ("day 3: …").
+    for (const k of Object.keys(variants)) variants[k] = { ...variants[k], followups: (variants[k].followups || []).map((f) => String(f).replace(/^\s*(?:day\s*\d+|follow[- ]?up\s*\d*)\s*[:,.-]\s*/i, "")) };
     return { channel: ch, variants };
   };
   const [state, setState] = useState(initial);
