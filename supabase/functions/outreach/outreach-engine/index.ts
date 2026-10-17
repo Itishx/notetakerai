@@ -362,6 +362,138 @@ async function hunterFind(name: string, domain: string, spend: Spend): Promise<{
   return { email: String(d.email), status };
 }
 
+
+/* ── Finding an email (2026-10-17) ───────────────────────────────────────
+   No paid source needed. In order of trust:
+     found    on their company's own pages, matching their name
+     web      next to their name somewhere else on the web
+     hunter   Hunter's finder, when a key is set
+     guessed  the company's own pattern (seen on its site) applied to them,
+              and the domain is checked to accept mail
+     company  a general inbox (hello@, founders@) when nothing personal exists
+   Every email keeps how it was found, so the page can say how far to trust it. */
+
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const JUNK_EMAIL = /(example\.|sentry|wixpress|godaddy|yourname|youremail|domain\.com|\.(png|jpe?g|gif|webp|svg)$|no-?reply|mailer|privacy@|abuse@|webmaster@)/i;
+const GENERIC_LOCAL = new Set(["info", "hello", "hi", "contact", "support", "team", "sales", "hr", "admin", "careers", "jobs", "press", "media", "care", "help", "enquiries", "enquiry", "marketing", "office", "mail", "customercare", "business", "partnerships", "connect", "founders", "founder"]);
+const SOCIAL_HOST = /(linkedin|facebook|instagram|twitter|x\.com|youtube|crunchbase|tracxn|glassdoor|wikipedia|medium|github\.com)/i;
+
+function nameParts(name: string) {
+  const p = lower(name).replace(/\(.*?\)/g, "").replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 1);
+  return { first: p[0] || "", last: p.length > 1 ? p[p.length - 1] : "" };
+}
+function isPersonLocal(local: string, first: string, last: string) {
+  const l = lower(local).replace(/[^a-z]/g, "");
+  if (!first || !l) return false;
+  return l === first || l === first + last || l === last + first || (last && (l === first[0] + last || l === first + last[0] || (l.includes(first) && l.includes(last))));
+}
+function patternOf(local: string) {
+  const l = lower(local);
+  if (GENERIC_LOCAL.has(l)) return "";
+  if (/^[a-z]+\.[a-z]+$/.test(l)) return "first.last";
+  if (/^[a-z]+_[a-z]+$/.test(l)) return "first_last";
+  if (/^[a-z]{3,12}$/.test(l)) return "first";
+  return "";
+}
+function applyPattern(p: string, first: string, last: string, domain: string) {
+  if (!first) return "";
+  if (p === "first") return `${first}@${domain}`;
+  if (!last) return "";
+  if (p === "first.last") return `${first}.${last}@${domain}`;
+  if (p === "first_last") return `${first}_${last}@${domain}`;
+  return "";
+}
+function hostOf(u: string) {
+  try { return new URL(normalUrl(u)).hostname.replace(/^www\./, ""); } catch (_) { return ""; }
+}
+
+async function companyDomain(lead: any, spend: Spend) {
+  const known = lower(lead.company_domain) || hostOf(lead.website);
+  if (known && !SOCIAL_HOST.test(known)) return known;
+  if (!lead.company) return "";
+  const finds = await exaSearch(`${lead.company} ${lead.location || ""} official website`, "company", 3, spend);
+  for (const f of finds) { const h = hostOf(f.url); if (h && !SOCIAL_HOST.test(h)) return h; }
+  return "";
+}
+
+async function sitePagesText(domain: string, spend: Spend) {
+  if (!EXA_KEY || !domain) return "";
+  spend.exa_calls += 1;
+  const res = await fetch("https://api.exa.ai/contents", {
+    method: "POST", headers: { "x-api-key": EXA_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ urls: [`https://${domain}`], text: { maxCharacters: 6000 }, subpages: 5, subpageTarget: ["contact", "about", "team", "people", "founders"], livecrawl: "fallback" }),
+  }).catch(() => null);
+  if (!res?.ok) return "";
+  const data = await res.json().catch(() => ({}));
+  const parts: string[] = [];
+  for (const r of data?.results || []) { parts.push(String(r.text || "")); for (const sp of r.subpages || []) parts.push(String(sp.text || "")); }
+  spend.exa_pages += parts.length;
+  return parts.join("\n");
+}
+
+function emailsIn(text: string, domain: string) {
+  const all = [...new Set((String(text || "").match(EMAIL_RE) || []).map((e) => lower(e).replace(/\.$/, "")))];
+  return all.filter((e) => !JUNK_EMAIL.test(e) && (!domain || e.endsWith(`@${domain}`) || e.endsWith(`.${domain}`)));
+}
+
+async function findEmail(lead: any, spend: Spend): Promise<{ email: string; status: string; source: string; domain: string }> {
+  const none = { email: "", status: "unknown", source: "", domain: lower(lead.company_domain) };
+  const { first, last } = nameParts(lead.name);
+  const domain = await companyDomain(lead, spend);
+  if (!domain) return none;
+  // The site and the wider web are read at the same time: each is a few seconds.
+  const [siteText, webFinds] = await Promise.all([
+    sitePagesText(domain, spend),
+    exaSearch(`"${lead.name}" "@${domain}"`, null, 6, spend),
+  ]);
+  const siteEmails = emailsIn(siteText, domain);
+  const mine = siteEmails.find((e) => isPersonLocal(e.split("@")[0], first, last));
+  if (mine) return { email: mine, status: "found", source: "On their company's website", domain };
+  const webEmails = emailsIn(webFinds.map((f) => f.text).join("\n"), domain);
+  const webMine = webEmails.find((e) => isPersonLocal(e.split("@")[0], first, last));
+  if (webMine) return { email: webMine, status: "found", source: "On the web, next to their name", domain };
+
+  const hunted = await hunterFind(clip(lead.name, 80), domain, spend);
+  if (hunted) return { email: hunted.email, status: hunted.status, source: "Hunter", domain };
+
+  const seen = [...siteEmails, ...webEmails];
+  const pattern = seen.map((e) => patternOf(e.split("@")[0])).find(Boolean) || "";
+  const guess = applyPattern(pattern, first, last, domain);
+  if (guess && (await domainTakesMail(guess))) return { email: guess, status: "guessed", source: `Guessed from the company's pattern (${pattern}@${domain})`, domain };
+
+  const inbox = seen.find((e) => ["founders", "founder", "hello", "hi", "contact", "team", "business", "partnerships", "info"].includes(e.split("@")[0]));
+  if (inbox) return { email: inbox, status: "company", source: "The company's general inbox", domain };
+  return none;
+}
+
+/* Find emails for people the founder picks, or the strongest few without one. */
+async function findEmails(userId: string, body: any, spend: Spend) {
+  const client = db();
+  let q = client.from("outreach_leads").select("*").eq("user_id", userId).eq("discarded", false).eq("email", "");
+  q = Array.isArray(body.lead_ids) && body.lead_ids.length ? q.in("id", body.lead_ids.slice(0, 20)) : q.eq("brief_id", body.brief_id).neq("email_source", "none found").order("score", { ascending: false }).limit(6);
+  const { data: leads } = await q;
+  const results: any[] = [];
+  // Six people per call, all at once, so a call finishes well inside the
+  // function's time limit. The page calls again for the next six.
+  for (let i = 0; i < (leads || []).length; i += 6) {
+    const batch = (leads || []).slice(i, i + 6);
+    const found = await Promise.all(batch.map((l: any) => findEmail(l, spend).catch(() => ({ email: "", status: "unknown", source: "", domain: "" }))));
+    for (let j = 0; j < batch.length; j++) {
+      const l = batch[j], f = found[j];
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (f.domain && !l.company_domain) patch.company_domain = f.domain;
+      if (f.email) Object.assign(patch, { email: f.email, email_status: f.status, email_source: f.source });
+      else patch.email_source = "none found";
+      await client.from("outreach_leads").update(patch).eq("id", l.id);
+      results.push({ id: l.id, name: l.name, email: f.email, status: f.status, source: f.source });
+    }
+  }
+  const { count: left } = body.brief_id
+    ? await client.from("outreach_leads").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("brief_id", body.brief_id).eq("discarded", false).eq("email", "").neq("email_source", "none found")
+    : { count: 0 };
+  return json({ ok: true, found: results.filter((r) => r.email).length, tried: results.length, left: left || 0, results, cost_usd: costUsd(spend) });
+}
+
 /* ── Step 3: build one clean record per person ─────────────────────────── */
 
 const EXTRACT_SYSTEM = `You build B2B lead records from raw search results. You are strict about evidence.
@@ -532,10 +664,16 @@ async function hunt(userId: string, body: any, spend: Spend) {
 
     // Email for the strongest few only: finding emails costs per call.
     const pre = leads.map((l) => ({ l, r: rank(l, wins) })).sort((a, b) => b.r.score - a.r.score);
-    for (const { l } of pre.slice(0, 12)) {
-      if (l.email) { l.email_status = "guessed"; continue; }
-      const found = await hunterFind(clip(l.name, 80), lower(l.company_domain), spend);
-      if (found) { l.email = found.email; l.email_status = found.status; }
+    // The top 8 get their email looked for during the search; the rest on request.
+    const top = pre.slice(0, 4).map((x) => x.l);
+    for (let i = 0; i < top.length; i += 4) {
+      const batch = top.slice(i, i + 4);
+      await Promise.all(batch.map(async (l: any) => {
+        if (l.email) { l.email_status = "found"; l.email_source = "In the search results"; return; }
+        const f = await findEmail(l, spend).catch(() => null);
+        if (f?.domain && !l.company_domain) l.company_domain = f.domain;
+        if (f?.email) { l.email = f.email; l.email_status = f.status; l.email_source = f.source; }
+      }));
     }
 
     const rows = leads.map((l) => {
@@ -552,7 +690,7 @@ async function hunt(userId: string, body: any, spend: Spend) {
         name: clip(l.name, 120), title: clip(l.title, 160), seniority: clip(l.seniority, 30),
         company: clip(l.company, 160), company_domain: lower(l.company_domain).slice(0, 120),
         industry: clip(l.industry, 120), company_size: clip(l.company_size, 40), location: clip(l.location, 120),
-        email: clip(l.email, 160), email_status: l.email ? (l.email_status || "guessed") : "unknown",
+        email: clip(l.email, 160), email_status: l.email ? (l.email_status || "guessed") : "unknown", email_source: clip(l.email_source, 160),
         linkedin_url: clip(l.linkedin_url, 300), website: clip(l.website, 300), summary: clip(l.summary, 400), photo_url: photoFrom(used),
         signals: (l.signals || []).slice(0, 6), sources: sourcesUsed.slice(0, 6), features: r.features,
         score: r.score, score_parts: r.parts, reasons: r.reasons, discarded: Boolean(discard), discard_reason: discard,
@@ -1046,9 +1184,10 @@ serve(async (req) => {
     else if (step === "reply_send") res = await replySend(user.id, body);
     else if (step === "sync") res = json({ ok: true, ...(await syncUser(user.id, spend)) });
     else if (step === "inbox") res = await inbox(user.id);
+    else if (step === "find_emails") res = await findEmails(user.id, body, spend);
     else if (step === "product_build") res = await productBuild(user.id, body, spend);
     else res = json({ error: "Unknown step." }, 400);
-    if (["refine", "hunt", "draft", "product_build"].includes(step)) {
+    if (["refine", "hunt", "draft", "product_build", "find_emails"].includes(step)) {
       logEngineRun({ engine: `outreach-${step}`, command: clip(body.ask || body.brief_id || "", 300), response: { status: res.status, spend, cost_usd: costUsd(spend) }, verdict: res.ok ? "ok" : `http:${res.status}`, model: BRAINO_TEXT_MODEL, usage: { input_tokens: spend.input_tokens, output_tokens: spend.output_tokens }, elapsed_ms: Date.now() - started } as any);
     }
     return res;

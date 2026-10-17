@@ -25,7 +25,7 @@ type Brief = {
 type Lead = {
   id: string; brief_id: string; name: string; title: string; seniority: string; company: string;
   company_domain: string; industry: string; company_size: string; location: string; email: string;
-  email_status: string; linkedin_url: string; website: string; summary: string; photo_url?: string;
+  email_status: string; email_source?: string; linkedin_url: string; website: string; summary: string; photo_url?: string;
   signals: { kind: string; text: string; date?: string; url?: string }[];
   sources: { name: string; url: string; title?: string }[];
   score: number; score_parts: any; reasons: string[]; discarded: boolean; discard_reason: string;
@@ -36,6 +36,7 @@ type Product = {
   id: string; name: string; website: string; notes: string; docs: { name: string; text: string }[];
   answers: { q: string; a: string }[]; report: any; questions: string[]; status: string; updated_at: string;
 };
+const EMAIL_TRUST: Record<string, string> = { verified: "verified", found: "found", guessed: "guessed", company: "company inbox" };
 const CHANNEL_LABEL: Record<string, string> = { email: "Email", linkedin: "LinkedIn", whatsapp: "WhatsApp", x: "X", instagram: "Instagram" };
 
 const EXAMPLES = [
@@ -366,6 +367,22 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
   const gmail = useGmail();
   const ready = leads.filter((l) => !l.discarded && l.status === "drafted" && l.email && (l.message?.variants?.email?.body || (l.message?.channel === "email" && l.message?.body)));
   const [confirmAll, setConfirmAll] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const findEmails = async () => {
+    setFinding(true);
+    await run("refine", async () => {
+      // Six at a time, up to the top 12.
+      let found = 0, tried = 0;
+      for (let round = 0; round < 2; round++) {
+        const r = await call("find_emails", { brief_id: brief.id });
+        found += r.found || 0; tried += r.tried || 0;
+        await onLeads();
+        if (!r.left || !r.tried) break;
+      }
+      say(tried ? (found ? `Found ${found} email${found === 1 ? "" : "s"} for ${tried} people` : `No emails found for those ${tried} people`) : "Everyone here has been checked");
+    });
+    setFinding(false);
+  };
   const sendAll = async () => {
     setConfirmAll(false);
     await run("draft", async () => {
@@ -438,6 +455,7 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
             <People leads={leads} openId={open} onOpen={setOpen} />
             <div className="oas-row" style={{ marginTop: 14 }}>
               <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void draftAll()}><Sparkles /> {busy === "draft" ? "Working…" : "Write messages for the top 12"}</button>
+              <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void findEmails()}><Mail /> {busy === "refine" && finding ? "Finding emails…" : "Find emails"}</button>
               {ready.length > 0 && (gmail?.connected
                 ? <button type="button" className="oas-btn is-small is-ink" disabled={!!busy} onClick={() => setConfirmAll(true)}><Send /> Email all {ready.length} with Gmail</button>
                 : <button type="button" className="oas-btn is-small" onClick={() => void connectGmail()}><Mail /> Connect Gmail to send</button>)}
@@ -456,7 +474,7 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
             </div>
           </Braino>
         )}
-        {busy === "refine" && <Braino><p>Updating the profile…</p><Dots /></Braino>}
+        {busy === "refine" && <Braino><p>{finding ? "Looking for their emails: company sites, the web, and the company's own pattern…" : "Updating the profile…"}</p><Dots /></Braino>}
         {busy === "draft" && <Braino><p>Writing one message per person, from their real moment…</p><Dots /></Braino>}
         {(err || (brief.status === "failed" && brief.stats?.error)) && <Braino><p className="oas-err" style={{ margin: 0 }}>{err || brief.stats.error}</p></Braino>}
         <div ref={endRef} />
@@ -613,7 +631,9 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
             <h2 className="oas-dname">{lead.name}</h2>
             <p className="oas-dsub">{[lead.title, lead.company].filter(Boolean).join(" at ")}{lead.location ? ` · ${lead.location}` : ""}</p>
             <div className="oas-links">
-              {lead.email && <span className="oas-link" title={lead.email_status}><Mail /> {lead.email}{lead.email_status === "verified" ? " ✓" : ""}</span>}
+              {lead.email
+                ? <span className={`oas-link oas-mail s-${lead.email_status}`} title={lead.email_source || lead.email_status}><Mail /> {lead.email}<em>{EMAIL_TRUST[lead.email_status] || ""}</em></span>
+                : <button type="button" className="oas-link" onClick={() => void act("find", () => call("find_emails", { lead_ids: [lead.id] }).then((r) => { if (!r.found) throw new Error("No email found for them yet"); }), "Email found")}><Mail /> {busy === "find" ? "Looking…" : "Find email"}</button>}
               {lead.linkedin_url && <a className="oas-link" href={lead.linkedin_url} target="_blank" rel="noreferrer">LinkedIn <ArrowUpRight /></a>}
               {(lead.website || lead.company_domain) && <a className="oas-link" href={lead.website || `https://${lead.company_domain}`} target="_blank" rel="noreferrer">{lead.company_domain || "Website"} <ArrowUpRight /></a>}
             </div>

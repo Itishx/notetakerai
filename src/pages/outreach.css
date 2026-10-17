@@ -472,3 +472,8 @@
   .oas-irow-for, .oas-irow-when { display: none; }
   .oas-irow-body { grid-template-columns: 1fr; }
 }
+
+.oas-mail em { font-style: normal; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10.5px; font-weight: 600; background: var(--o-surface); color: var(--o-ink-faint); }
+.oas-mail.s-verified em, .oas-mail.s-found em { background: var(--o-good-soft); color: var(--o-good); }
+.oas-mail.s-guessed em { background: var(--o-accent-soft); color: var(--o-accent); }
+button.oas-link { cursor: pointer; font: inherit; font-size: 12px; }
