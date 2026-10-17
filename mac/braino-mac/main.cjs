@@ -11531,6 +11531,15 @@ const WHATSAPP_NOT_A_NAME = /^(?:for me|for us|please|pls|now|right now|app|the 
    (2026-09-28). */
 const WHATSAPP_COMPLAINT = /\b(?:not supposed to|shouldn'?t have|should not have|why did you|who told you|don'?t send|do not send|didn'?t (?:ask|want|tell|say)|never (?:asked|said|told)|wasn'?t supposed|i did ?n[o']?t)\b/i;
 
+/* "if Param has come home" -> "Has Param come home?" The words stay yours;
+   only the question is turned around. Anything else is sent as asked. */
+function askedAsQuestion(clause) {
+  const text = String(clause || "").trim().replace(/[?.!]+$/, "");
+  const m = text.match(/^(.+?)\s+(has|have|is|are|was|were|did|does|do|will|can|could|would|should)\s+(.+)$/i);
+  const q = m && m[1].split(/\s+/).length <= 4 ? `${m[2]} ${m[1]} ${m[3]}` : text;
+  return q.charAt(0).toUpperCase() + q.slice(1) + "?";
+}
+
 function parseWhatsAppIntent(raw) {
   const source = String(raw || "").trim();
   if (!/\bwhats\s*app\b/i.test(source)) return null;
@@ -11540,12 +11549,17 @@ function parseWhatsAppIntent(raw) {
   if (/\b(?:open|launch|start|show|bring up|pull up|go to)\b[^.]*\bwhats\s*app\b/i.test(source)
     && !/\b(?:send|message|text|tell|saying|reply|share|forward)\b/i.test(source)) return null;
   const messageMatch = source.match(/\b(?:saying|that says|which says|telling (?:her|him|them)|telling|tell (?:her|him|them))\s+["“]?(.+?)["”]?\s*$/i);
-  const message = messageMatch?.[1]?.trim() || "";
+  let message = messageMatch?.[1]?.trim() || "";
+  /* "Text Harsh on WhatsApp asking if Param has come home" (2026-10-17): the
+     ask is the message. It used to read "WhatsApp asking if Param has come
+     home" as the person, and then asked what to say. */
+  const askMatch = !message && source.match(/\b(?:asking|to ask|ask (?:her|him|them))\s+(?:(?:her|him|them)\s+)?(?:if|whether)\s+(.+?)[?.!]*\s*$/i);
+  if (askMatch) message = askedAsQuestion(askMatch[1]);
   let recipient = "";
   const patterns = [
-    /\bsend\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell)\b/i,
+    /\bsend\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell|asking|to ask|ask)\b/i,
     /\bsend\s+(?:my\s+)?(.+?)\s+a\s+(?:whatsapp\s+)?message\b/i,
-    /\b(?:message|whatsapp|text)\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell)\b/i,
+    /\b(?:message|whatsapp|text)\s+(?:my\s+)?(.+?)\s+(?:on\s+whats\s*app\s+)?(?:saying|that says|telling|tell|asking|to ask|ask)\b/i,
     /\bsend\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to\s+(?:my\s+)?(.+?)\s*$/i,
     /\b(?:message|whatsapp|text)\s+(?:my\s+)?([a-z .'-]{2,30})\s*$/i,
   ];
@@ -22302,7 +22316,13 @@ async function routeHilFirst(raw) {
   }
 
   // Everything above is instant and local. The router is the slow part.
-  if (!macHilEnabled() || !hilFirstEnabled(typeof ENV === "object" ? ENV : null, process.env)) return null;
+  /* Stage 4 means HIL decides, so it is on by itself (2026-10-17). It used to
+     need BRAINO_HIL_FIRST=1 as well, which was never set: the trace said "HIL
+     decides" and then the old patterns did, silently, since 25 Sep. "Text
+     Harsh asking if Param has come home" came back as "What should I say to
+     asking if Param has come home?". */
+  const hilFirstOn = deciderStage() >= 4 || hilFirstEnabled(typeof ENV === "object" ? ENV : null, process.env);
+  if (!macHilEnabled() || !hilFirstOn) { macTrace("↩ OLD PATH", `HIL is switched off → old patterns decide "${raw}"`); return null; }
   // A new command is a new job, exactly as routeMacDelegate does it.
   macHilGeneration += 1;
   if (macHilAbort) {
