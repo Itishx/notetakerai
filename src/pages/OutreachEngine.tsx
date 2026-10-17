@@ -25,7 +25,7 @@ type Brief = {
 type Lead = {
   id: string; brief_id: string; name: string; title: string; seniority: string; company: string;
   company_domain: string; industry: string; company_size: string; location: string; email: string;
-  email_status: string; email_source?: string; linkedin_url: string; website: string; summary: string; photo_url?: string;
+  email_status: string; email_source?: string; contacts?: { domain?: string; emails?: string[]; phones?: string[]; whatsapp?: string[]; instagram?: string[] }; linkedin_url: string; website: string; summary: string; photo_url?: string;
   signals: { kind: string; text: string; date?: string; url?: string }[];
   sources: { name: string; url: string; title?: string }[];
   score: number; score_parts: any; reasons: string[]; discarded: boolean; discard_reason: string;
@@ -371,13 +371,13 @@ function Thread({ brief, leads, onBrief, onLeads, say }: {
   const findEmails = async () => {
     setFinding(true);
     await run("refine", async () => {
-      // Six at a time, up to the top 12.
+      // Eight at a time: their website first (free), then Prospeo.
       let found = 0, tried = 0;
       for (let round = 0; round < 2; round++) {
         const r = await call("find_emails", { brief_id: brief.id });
         found += r.found || 0; tried += r.tried || 0;
         await onLeads();
-        if (!r.left || !r.tried) break;
+        if (!r.tried || r.tried < 8) break;
       }
       say(tried ? (found ? `Found ${found} email${found === 1 ? "" : "s"} for ${tried} people` : `No emails found for those ${tried} people`) : "Everyone here has been checked");
     });
@@ -652,6 +652,23 @@ function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () 
                 ? <p className="oas-err" style={{ marginTop: 12 }}>Set aside: {lead.discard_reason}</p>
                 : <ul className="oas-reasons" style={{ marginTop: 14 }}>{(lead.reasons || []).map((r) => <li key={r}>{r}</li>)}</ul>}
             </section>
+            {lead.email_source && lead.email ? <p className="oas-note" style={{ margin: "0 28px", paddingTop: 14 }}>Email: {lead.email_source}</p> : null}
+            {(() => {
+              const c = lead.contacts || {};
+              const any = (c.emails || []).length || (c.phones || []).length || (c.whatsapp || []).length || (c.instagram || []).length;
+              if (!any) return null;
+              return (
+                <section className="oas-dsec">
+                  <h5>From their website{c.domain ? ` · ${c.domain}` : ""}</h5>
+                  <div className="oas-links">
+                    {(c.emails || []).map((e) => <a key={e} className="oas-link" href={`mailto:${e}`}><Mail /> {e}</a>)}
+                    {(c.phones || []).map((p) => <a key={p} className="oas-link" href={`tel:${p}`}>☎ {p}</a>)}
+                    {(c.whatsapp || []).map((w) => <a key={w} className="oas-link" href={`https://wa.me/${w}`} target="_blank" rel="noreferrer">WhatsApp {w} <ArrowUpRight /></a>)}
+                    {(c.instagram || []).map((h) => <a key={h} className="oas-link" href={`https://instagram.com/${h}`} target="_blank" rel="noreferrer">@{h} <ArrowUpRight /></a>)}
+                  </div>
+                </section>
+              );
+            })()}
             {(lead.signals || []).length > 0 && (
               <section className="oas-dsec">
                 <h5>What is happening for them</h5>
