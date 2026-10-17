@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUp, ArrowUpRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import "./outreach.css";
@@ -105,6 +105,7 @@ export default function OutreachEngine() {
   const [products, setProducts] = useState<Product[]>([]);
   // "" = new search, "new" = add a product, otherwise a product id being viewed.
   const [productView, setProductView] = useState<string>("");
+  const [sellOpen, setSellOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
@@ -174,14 +175,21 @@ export default function OutreachEngine() {
       <div className="oas-shell">
         <nav className="oas-rail">
           <button className="oas-new" type="button" onClick={() => { setActiveId(""); setProductView(""); }}><Plus size={15} /> New search</button>
-          <h6>What you sell</h6>
-          {products.map((p) => (
-            <button key={p.id} type="button" className={`oas-brief-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(p.id); }}>
-              <b>{p.name || p.report?.name || "Untitled product"}</b>
-              <small>{p.status === "ready" ? "Report ready" : p.status === "reading" ? "Reading…" : "Needs details"} · {ago(p.updated_at)}</small>
-            </button>
-          ))}
-          <button type="button" className={`oas-brief-item oas-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView("new"); }}><b><Plus size={13} /> Add a product</b></button>
+          {/* One row; your products fold out beneath it. */}
+          <button type="button" className={`oas-sell-row ${sellOpen ? "is-open" : ""}`} aria-expanded={sellOpen} onClick={() => setSellOpen((o) => !o)}>
+            <ChevronRight size={14} className="oas-sell-chev" /><span>What you sell</span>
+            {!sellOpen && products[0] ? <small>{products.length > 1 ? `${products.length} products` : (products[0].name || products[0].report?.name)}</small> : null}
+          </button>
+          {sellOpen && (
+            <div className="oas-sell-list">
+              {products.map((p) => (
+                <button key={p.id} type="button" className={`oas-sell-item ${productView === p.id ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView(p.id); }}>
+                  {p.name || p.report?.name || "Untitled"}{p.status !== "ready" ? <small>needs details</small> : null}
+                </button>
+              ))}
+              <button type="button" className={`oas-sell-item is-add ${productView === "new" ? "is-on" : ""}`} onClick={() => { setActiveId(""); setProductView("new"); }}><Plus size={12} /> Add a product</button>
+            </div>
+          )}
           <h6>Searches</h6>
           {briefs.map((b) => (
             <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => { setProductView(""); setActiveId(b.id); }}>
@@ -239,13 +247,6 @@ function Start({ products, onCreated, onAddProduct }: { products: Product[]; onC
   return (
     <div className="oas-start">
       <h1 className="oas-hello">Who do we want to sell to?</h1>
-      <div className="oas-selling">
-        <span>Selling</span>
-        {ready.map((p) => (
-          <button key={p.id} type="button" className={`oas-pill ${p.id === productId ? "is-on" : ""}`} onClick={() => setProductId(p.id === productId ? "" : p.id)}>{p.name || p.report?.name}</button>
-        ))}
-        <button type="button" className="oas-pill is-add" onClick={onAddProduct}><Plus size={13} /> {ready.length ? "Add" : "Tell Braino what you sell"}</button>
-      </div>
       <div className="oas-box">
         <textarea rows={2} value={ask} autoFocus onChange={(e) => setAsk(e.target.value)} placeholder="Who do we want to sell to? e.g. founders of D2C skincare brands in India"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
@@ -254,7 +255,10 @@ function Start({ products, onCreated, onAddProduct }: { products: Product[]; onC
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
         <div className="oas-box-foot">
           <span className="oas-note">Nothing is searched or sent until you say so.</span>
+          <div className="oas-foot-right">
+            <SellPicker ready={ready} productId={productId} setProductId={setProductId} onAddProduct={onAddProduct} />
           <button type="button" className="oas-send" aria-label="Send" disabled={!ask.trim()} onClick={() => void go()}><ArrowUp size={17} /></button>
+          </div>
         </div>
       </div>
       {err && <div className="oas-err">{err}</div>}
@@ -724,4 +728,39 @@ function ProductView({ product, onSaved, say }: { product: Product | null; onSav
 function ReportBlock({ title, children }: { title: string; children: ReactNode }) {
   if (!children || (Array.isArray(children) && !children.some(Boolean))) return null;
   return <section className="oas-rblock"><h5>{title}</h5><div>{children}</div></section>;
+}
+
+/* The product chip that sits beside send, like a model picker. */
+function SellPicker({ ready, productId, setProductId, onAddProduct }: {
+  ready: Product[]; productId: string; setProductId: (id: string) => void; onAddProduct: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener("mousedown", off);
+    return () => window.removeEventListener("mousedown", off);
+  }, [open]);
+  const cur = ready.find((p) => p.id === productId);
+  return (
+    <div className="oas-picker" ref={ref}>
+      <button type="button" className="oas-picker-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="oas-soft">Selling</span> {cur ? (cur.name || cur.report?.name) : "nothing yet"} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="oas-picker-menu" role="menu">
+          {ready.map((p) => (
+            <button key={p.id} type="button" role="menuitem" onClick={() => { setProductId(p.id); setOpen(false); }}>
+              <span>{p.name || p.report?.name}</span>{p.id === productId ? <Check size={14} /> : null}
+            </button>
+          ))}
+          {ready.length > 0 && (
+            <button type="button" role="menuitem" onClick={() => { setProductId(""); setOpen(false); }}><span className="oas-soft">Describe it in the box instead</span>{!productId ? <Check size={14} /> : null}</button>
+          )}
+          <button type="button" role="menuitem" className="is-add" onClick={() => { setOpen(false); onAddProduct(); }}><Plus size={13} /> Add a product</button>
+        </div>
+      )}
+    </div>
+  );
 }
