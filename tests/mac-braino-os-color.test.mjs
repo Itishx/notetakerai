@@ -90,3 +90,11 @@ test("Braino OS commands are caught before chat can swallow them", async () => {
   const preload = readFileSync(new URL("../mac/braino-mac/preload.cjs", import.meta.url), "utf8");
   assert.match(preload, /quickCommand:/);
 });
+
+test("a sentence about a profile, tab or app never repaints him (2026-10-18)", () => {
+  for (const t of ["Switch to my default, my main profile.", "switch to the default tab", "switch to red profile", "reset my chrome settings"]) {
+    assert.equal(parseBrainoOsColorIntent(t), null, t);
+  }
+  assert.equal(parseBrainoOsColorIntent("Braino reset your colour")?.action, "reset");
+  assert.equal(parseBrainoOsColorIntent("be yourself")?.action, "reset");
+});

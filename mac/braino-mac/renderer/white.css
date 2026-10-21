@@ -162,3 +162,243 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 /* The ending: the notebook slides in as the summary. */
 body:not(.su-solo) .su-right { animation: nbIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes nbIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+
+/* ══ Paper (2026-10-18) ══ The app window dressed like Claude's desktop app and
+   affctve.com: warm paper, black ink, one hairline, Iowan Old Style for every
+   heading, SF Pro for everything else. Scoped to body.app so Set him up keeps
+   its own look. A sidebar that folds away, calm list rows instead of square
+   tiles, and chat as one centred reading column. */
+body.app {
+  --p-bg: #f4f2ec; --p-side: #efece4; --p-surface: #faf9f5; --p-card: #fdfcf9;
+  --p-ink: #16150f; --p-ink-2: #625f54; --p-ink-3: #918d80;
+  --p-line: #dcd8cb; --p-line-soft: #e8e4d9; --p-line-strong: #c6c1b1;
+  --p-hover: rgba(22, 21, 15, 0.05); --p-sel: rgba(22, 21, 15, 0.075);
+  --p-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --p-sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --p-ui: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --side-w: 256px;
+  background: var(--p-bg) !important; color: var(--p-ink); font: 13.5px/1.45 var(--p-sans);
+}
+body.app ::selection { background: rgba(240, 122, 96, 0.22); }
+
+/* ── Frame: a top strip you drag the window by, the sidebar, the page ── */
+body.app .win { position: relative; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); background: var(--p-bg); transition: grid-template-columns 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+body.app .win.side-closed { grid-template-columns: 0px minmax(0, 1fr); }
+body.app .topdrag { position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 1; -webkit-app-region: drag; }
+body.app .side-toggle { position: absolute; top: 12px; left: 84px; z-index: 5; width: 30px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--p-ink-2); cursor: pointer; -webkit-app-region: no-drag; transition: background 0.15s, color 0.15s; }
+body.app .side-toggle:hover { background: var(--p-hover); color: var(--p-ink); }
+body.app .side-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Sidebar ── */
+body.app .side { min-width: 0; overflow: hidden; padding: 52px 0 10px; gap: 0; background: var(--p-side); border-right: 1px solid var(--p-line-soft); -webkit-app-region: no-drag; transition: border-color 0.28s; }
+body.app .win.side-closed .side { border-right-color: transparent; }
+body.app .side > * { box-sizing: border-box; width: calc(var(--side-w) - 24px); margin-left: 12px; margin-right: 12px; flex: none; }
+body.app .side .mark { -webkit-app-region: no-drag; font: 400 24px/1 var(--p-serif) !important; letter-spacing: -0.015em; color: var(--p-ink); padding: 6px 8px 14px; }
+body.app .find { background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 9px; padding: 6px 10px; margin-bottom: 10px; }
+body.app .find:focus-within { border-color: var(--p-line-strong); }
+body.app .find input { color: var(--p-ink); font: 13px var(--p-sans); }
+body.app .find input::placeholder { color: var(--p-ink-3); }
+body.app .find svg { stroke: var(--p-ink-3); }
+body.app .nav { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+body.app .nav::-webkit-scrollbar { width: 0; }
+body.app .nav .gh { padding: 16px 10px 6px; font: 600 11px var(--p-sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--p-ink-3); }
+body.app .nav .gh:first-child { padding-top: 4px; }
+body.app .nav button { aspect-ratio: auto; flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 32px; padding: 5px 10px; border: 0; border-radius: 8px; background: none; box-shadow: none; color: var(--p-ink-2); font: 400 13.5px/1.2 var(--p-sans); text-align: left; transform: none !important; transition: background 0.15s, color 0.15s; }
+body.app .nav button:hover { background: var(--p-hover); color: var(--p-ink); }
+body.app .nav button[aria-current="true"] { background: var(--p-sel) !important; border: 0 !important; color: var(--p-ink); font-weight: 500; box-shadow: none !important; }
+body.app .nav button[aria-current="true"]::after { display: none; }
+body.app .nav .ni, body.app .nav button[aria-current="true"] .ni { width: 18px !important; height: 18px !important; flex: none; background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0; color: inherit; }
+body.app .nav .ni svg { width: 17px !important; height: 17px !important; stroke-width: 1.55 !important; transform: none !important; }
+body.app .nav .nm { display: block; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-line-clamp: unset; }
+body.app .nav .bdg { position: static; margin-left: auto; background: var(--p-ink); color: var(--p-bg); font: 600 10.5px var(--p-ui); }
+body.app .me { margin-top: 0; padding: 10px 10px 4px; border: 0; border-top: 1px solid var(--p-line-soft); border-radius: 0; background: none; }
+body.app .me:hover b { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--p-line-strong); }
+body.app .me .av { background: var(--p-ink); color: var(--p-bg); font: 500 13px var(--p-serif); }
+body.app .me b { font: 500 13px var(--p-sans); color: var(--p-ink); }
+body.app .me span { color: var(--p-ink-3); display: block; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── The page ── */
+body.app .main { background: var(--p-bg); padding-top: 52px; }
+body.app .main.chatting { padding-top: 0; }
+body.app .bar { -webkit-app-region: no-drag; max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 18px 40px 10px; align-items: flex-start; }
+body.app .bar h1 { font: 400 34px/1.1 var(--p-serif) !important; letter-spacing: -0.015em; color: var(--p-ink); }
+body.app .bar p { margin-top: 8px; font: 400 14px/1.5 var(--p-sans); color: var(--p-ink-2); max-width: 60ch; }
+body.app .bar .back { margin: 4px 4px 0 -6px; width: 30px; height: 30px; border-radius: 8px; background: none; color: var(--p-ink-2); font-size: 22px; }
+body.app .bar .back:hover { background: var(--p-hover); color: var(--p-ink); }
+body.app .title-edit { font: 400 34px/1.1 var(--p-serif); letter-spacing: -0.015em; color: var(--p-ink); background: none; border: 0; outline: 0; padding: 0; width: min(560px, 60vw); border-bottom: 1px solid transparent; }
+body.app .title-edit:hover, body.app .title-edit:focus { border-bottom-color: var(--p-line); }
+body.app .bar h1:has(.title-edit) { display: flex; align-items: center; }
+body.app .body { max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 14px 40px 48px; gap: 16px; }
+body.app .main.bare .body { padding-top: 26px; }
+body.app .body::-webkit-scrollbar { width: 8px; }
+body.app .body::-webkit-scrollbar-thumb { background: rgba(22, 21, 15, 0.12); border-radius: 8px; }
+/* The scroller is the whole page, so the column can sit in the middle. */
+body.app .main:not(.chatting) { overflow-y: auto; }
+body.app .main:not(.chatting) > .body { overflow: visible; flex: none; }
+body.app .main::-webkit-scrollbar { width: 8px; }
+body.app .main::-webkit-scrollbar-thumb { background: rgba(22, 21, 15, 0.12); border-radius: 8px; }
+
+/* Sections: one surface, one hairline, room to breathe. */
+body.app .m { background: var(--p-card); border: 1px solid var(--p-line-soft); border-radius: 14px; padding: 18px 20px; box-shadow: none; }
+body.app .m.link:hover { background: #fff; border-color: var(--p-line); }
+body.app .m h2 { font: 400 20px/1.25 var(--p-serif); letter-spacing: -0.01em; color: var(--p-ink); margin-bottom: 4px; }
+body.app .m .sub, body.app .sub { color: var(--p-ink-2); font-size: 13px; line-height: 1.55; }
+body.app .k, body.app .m .k { font: 600 11px var(--p-sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--p-ink-3); margin-bottom: 10px; }
+body.app .m .k .chip { letter-spacing: 0; text-transform: none; }
+body.app .m .big { font: 400 32px/1.05 var(--p-serif); letter-spacing: -0.01em; color: var(--p-ink); font-variant-numeric: lining-nums tabular-nums; }
+body.app .greet { font: 400 44px/1.08 var(--p-serif) !important; letter-spacing: -0.02em; color: var(--p-ink); margin-top: 10px; }
+body.app .greet em { color: var(--p-ink-3); font-style: italic; }
+body.app .hs { background: var(--p-card); border-color: var(--p-line-soft); border-radius: 14px; }
+body.app .hs .k { font: 600 11px var(--p-sans); letter-spacing: 0.14em; }
+body.app .hs .n { font-family: var(--p-serif); }
+body.app .hero-photo { border-radius: 14px; background: var(--p-surface); border-color: var(--p-line-soft); }
+body.app .hero-photo h2 { font-family: var(--p-serif) !important; font-weight: 400; }
+body.app .ask { background: #fff; border: 1px solid var(--p-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(22, 21, 15, 0.04); }
+body.app .ask:focus-within { border-color: var(--p-line-strong); }
+body.app .ask input { color: var(--p-ink); font: 15px var(--p-sans); }
+
+/* Rows: a label, a quiet line under it, the control on the right. */
+body.app .row { min-height: 44px; padding: 10px 0; gap: 14px; border-top: 1px solid var(--p-line-soft) !important; }
+body.app .row:first-child { border-top: 0 !important; }
+body.app .row .lb b { font: 500 14px/1.35 var(--p-sans); color: var(--p-ink); }
+body.app .row .lb small { font-size: 12.5px; line-height: 1.45; color: var(--p-ink-2); margin-top: 2px; }
+body.app .row .val { color: var(--p-ink-2); font-size: 13px; }
+
+/* Controls */
+body.app .tg { background: rgba(22, 21, 15, 0.16); }
+body.app .tg[aria-checked="true"] { background: var(--p-ink); }
+body.app .seg { background: rgba(22, 21, 15, 0.055); border-radius: 9px; padding: 2px; }
+body.app .seg button { color: var(--p-ink-2); font: 500 12.5px var(--p-sans); padding: 5px 11px; }
+body.app .seg button:hover { color: var(--p-ink); }
+body.app .seg button[aria-pressed="true"] { background: #fff; color: var(--p-ink); box-shadow: 0 1px 2px rgba(22, 21, 15, 0.1), 0 0 0 0.5px rgba(22, 21, 15, 0.06); }
+body.app .btn { background: var(--p-card); border: 1px solid var(--p-line); color: var(--p-ink); font: 500 12.5px var(--p-sans); padding: 6px 14px; border-radius: 999px; }
+body.app .btn:hover { background: #fff; border-color: var(--p-line-strong); }
+body.app .btn.primary, body.app .btn.pr, body.app .hero-photo .btn { background: var(--p-ink); color: var(--p-bg); border-color: var(--p-ink); }
+body.app .btn.primary:hover, body.app .btn.pr:hover { background: #2b2a24; }
+body.app .chip { background: var(--p-surface); border-color: var(--p-line); color: var(--p-ink-2); }
+body.app input[type="range"] { accent-color: var(--p-ink) !important; }
+body.app .act-find { background: #fff !important; border: 1px solid var(--p-line) !important; border-radius: 10px; }
+body.app .act-find input { color: var(--p-ink); }
+body.app .toast { background: var(--p-ink); color: var(--p-bg); border: 0; font: 500 13px var(--p-sans); }
+
+/* Tiles become one calm list: permissions, skills, Chrome profiles. */
+body.app .tiles { grid-template-columns: 1fr; gap: 0; background: var(--p-card); border: 1px solid var(--p-line-soft); border-radius: 14px; padding: 2px 20px; }
+body.app .tile { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t foot" "s foot"; column-gap: 16px; row-gap: 2px; align-items: center; padding: 13px 0; border: 0; border-top: 1px solid var(--p-line-soft); border-radius: 0; background: none; }
+body.app .tile:first-child { border-top: 0; }
+body.app .tile .t { grid-area: t; gap: 12px; }
+body.app .tile .t b { font: 500 14px/1.35 var(--p-sans); color: var(--p-ink); }
+body.app .tile small { grid-area: s; padding-left: 34px; font-size: 12.5px; color: var(--p-ink-2); }
+body.app .tile input { grid-column: 1 / -1; margin-left: 34px; background: #fff !important; border: 1px solid var(--p-line) !important; color: var(--p-ink) !important; }
+body.app .tile .foot { grid-area: foot; justify-content: flex-end; }
+body.app .ic { background: none; border: 1px solid var(--p-line); }
+body.app .ic svg { stroke: var(--p-ink-2); }
+body.app .ic.lg { border-radius: 10px; }
+body.app .ring { background: conic-gradient(var(--p-ink) calc(var(--p) * 1%), rgba(22, 21, 15, 0.09) 0); }
+body.app .ring span { background: var(--p-card); font: 400 18px var(--p-serif); color: var(--p-ink); }
+
+/* Shortcuts: one list, the keys on the right. */
+body.app .keys { grid-template-columns: 1fr; gap: 0; background: var(--p-card); border: 1px solid var(--p-line-soft); border-radius: 14px; padding: 2px 20px; }
+body.app .keyt { border: 0; border-top: 1px solid var(--p-line-soft); border-radius: 0; background: none; padding: 12px 0; min-height: 30px; }
+body.app .keyt:first-child { border-top: 0; }
+body.app .keyt b { font: 500 14px var(--p-sans); color: var(--p-ink); }
+body.app .kc kbd { font: 500 12.5px var(--p-ui); background: #fff; border: 1px solid var(--p-line); box-shadow: 0 1px 0 var(--p-line); border-radius: 6px; min-width: 24px; height: 24px; color: var(--p-ink); }
+body.app .steps .step { background: none; border: 0; border-top: 1px solid var(--p-line-soft); border-radius: 0; padding: 10px 0; }
+body.app .steps .step:first-child { border-top: 0; }
+body.app .step.done .d { background: var(--p-ink); color: var(--p-bg); }
+body.app .looks .look { color: var(--p-ink); font-family: var(--p-sans); }
+body.app .look[aria-pressed="true"] { border-color: var(--p-ink); }
+body.app .look i { border-color: var(--p-line); }
+body.app .look:nth-child(1) i { background: linear-gradient(160deg, #faf9f5, #ece8dd); }
+body.app .nl-month { font: 600 11px var(--p-sans) !important; letter-spacing: 0.14em; text-transform: uppercase; color: var(--p-ink-3); }
+
+/* Notes */
+body.app .note-doc { font: 400 16px/1.7 var(--p-serif); color: var(--p-ink); }
+body.app .note-doc h1, body.app .note-doc h2, body.app .note-doc h3 { font-family: var(--p-serif); font-weight: 400; letter-spacing: -0.01em; }
+
+/* ── Chats: the list ── */
+body.app .chats { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 14px; }
+body.app .chats-head { display: flex; align-items: center; gap: 10px; }
+body.app .chats-find { flex: 1; margin: 0; display: flex; padding: 9px 12px; }
+body.app .chats-find input { flex: 1; border: 0; outline: 0; background: none; font: 14px var(--p-sans); }
+body.app .chats-head .btn { padding: 9px 16px; font-size: 13px; }
+body.app .chats-k { margin: 6px 0 -4px; }
+body.app .chats-list { display: flex; flex-direction: column; border-top: 1px solid var(--p-line-soft); }
+body.app .chats-row { all: unset; box-sizing: border-box; display: flex; align-items: baseline; gap: 16px; padding: 15px 10px; margin: 0; border-bottom: 1px solid var(--p-line-soft); border-radius: 0; cursor: pointer; transition: background 0.15s; }
+body.app .chats-row:hover { background: var(--p-hover); border-radius: 10px; border-bottom-color: transparent; }
+body.app .chats-row:focus-visible { outline: 2px solid var(--p-ink); outline-offset: -2px; border-radius: 10px; }
+body.app .chats-t { flex: 1; min-width: 0; font: 400 16px/1.35 var(--p-serif); color: var(--p-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.app .chats-row time { flex: none; font: 400 12.5px var(--p-sans); color: var(--p-ink-3); font-variant-numeric: tabular-nums; }
+body.app .chats-empty { padding: 48px 0; text-align: center; color: var(--p-ink-2); font: 400 17px/1.5 var(--p-serif); border-top: 1px solid var(--p-line-soft); }
+body.app .chats-empty p { margin: 0; }
+
+/* ── Chats: one open conversation ── */
+body.app .main.chatting .body { display: flex !important; flex-direction: column; max-width: none; }
+body.app .chat-top { position: relative; z-index: 2; flex: none; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 20px; -webkit-app-region: drag; transition: padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+body.app .win.side-closed .chat-top { padding-left: 124px; }
+body.app .chat-top button { -webkit-app-region: no-drag; }
+body.app .chat-back { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 5px 6px; border: 0; border-radius: 8px; background: none; color: var(--p-ink-2); font: 500 13px var(--p-sans); cursor: pointer; }
+body.app .chat-back:hover, body.app .chat-top-new:hover { background: var(--p-hover); color: var(--p-ink); }
+body.app .chat-back svg, body.app .chat-top-new svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.app .chat-top-t { flex: 1; min-width: 0; text-align: center; font: 400 14.5px var(--p-serif); color: var(--p-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 12px; }
+body.app .chat-top-new { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--p-ink-2); cursor: pointer; }
+body.app .chat { flex: 1; min-height: 0; height: auto; }
+body.app .chat::before { display: none; }
+body.app .chat-scroll { padding: 18px 0 30px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 28px), transparent 100%); }
+body.app .chat-col { max-width: 720px; padding: 0 32px; gap: 28px; }
+body.app .cm-text { font: 400 16.5px/1.72 var(--p-serif) !important; color: var(--p-ink) !important; letter-spacing: 0; }
+body.app .cm-text h4 { font: 400 20px/1.3 var(--p-serif); letter-spacing: -0.01em; }
+body.app .cm-text li::marker { color: var(--p-ink-3); }
+body.app .cm.you .cm-b { margin-left: auto; max-width: 78%; padding: 0 !important; text-align: right; font: 400 15px/1.55 var(--p-sans) !important; color: var(--p-ink-2) !important; }
+body.app .cm.you + .cm.him { margin-top: -8px; }
+body.app .cw-shimmer { font-family: var(--p-serif); }
+body.app .cw-thought p { font-family: var(--p-serif); }
+body.app .chat-box { width: min(720px, calc(100% - 64px)); box-sizing: border-box; margin-bottom: 22px; padding: 12px 12px 10px 18px; border-radius: 22px; background: #fff !important; border: 1px solid var(--p-line) !important; box-shadow: 0 1px 2px rgba(22, 21, 15, 0.04), 0 14px 34px -24px rgba(22, 21, 15, 0.35) !important; }
+body.app .chat-box:focus-within { border-color: var(--p-line-strong) !important; }
+body.app .chat-box textarea { font: 400 15.5px/1.5 var(--p-sans); }
+body.app .chat-box textarea::placeholder { font: 400 15.5px/1.5 var(--p-sans); color: var(--p-ink-3); }
+body.app .chat-sound, body.app .chat-clear { background: none !important; border: 1px solid var(--p-line-soft) !important; color: var(--p-ink-2); font: 500 12px var(--p-sans); }
+body.app .chat-sound[aria-pressed="true"] { background: var(--p-ink) !important; color: var(--p-bg); border-color: var(--p-ink) !important; }
+body.app .chat-clear { display: none; }
+body.app .chat-hint { color: var(--p-ink-3); font: 400 11.5px var(--p-sans); }
+body.app .chat-send { width: 34px; height: 34px; background: var(--p-ink); box-shadow: none; }
+body.app .chat-send:hover { transform: scale(1.05); }
+body.app .chat-send svg { stroke: var(--p-bg); }
+body.app .chat.empty .chat-hello h1 { font: 400 40px/1.1 var(--p-serif); letter-spacing: -0.015em; }
+body.app .chat-sg { background: var(--p-card) !important; border: 1px solid var(--p-line-soft) !important; border-radius: 10px; color: var(--p-ink-2); font: 400 13.5px var(--p-sans); }
+body.app .chat-sg:hover { border-color: var(--p-line) !important; color: var(--p-ink); background: #fff !important; }
+body.app .chat-suggest { width: min(720px, calc(100% - 64px)); }
+body.app .chat.empty { padding-bottom: 52px; }
+body.app .cw-work.live, body.app .cw-work.done > summary { background: var(--p-card) !important; border-color: var(--p-line-soft) !important; }
+@media (max-width: 760px) { body.app .win { grid-template-columns: 0px minmax(0, 1fr); } body.app .side { display: flex; } }
+@media (prefers-reduced-motion: reduce) { body.app .win, body.app .chat-top { transition: none; } }
+/* Paper wins over the older !important layers in app.css. */
+body.app .nav { display: flex !important; gap: 1px !important; }
+body.app .nav .gh { padding: 16px 10px 6px !important; }
+body.app .nav .gh:first-child { padding-top: 4px !important; }
+body.app .nav button { height: auto; min-height: 32px; padding: 5px 10px !important; gap: 10px !important; border: 0 !important; border-radius: 8px !important; background: none !important; color: var(--p-ink-2) !important; font: 400 13.5px/1.2 var(--p-sans) !important; }
+body.app .nav button:hover { background: var(--p-hover) !important; color: var(--p-ink) !important; transform: none !important; }
+body.app .nav button[aria-current="true"] { color: var(--p-ink) !important; font-weight: 500 !important; }
+body.app .bar { padding: 18px 40px 10px !important; }
+body.app .body { padding: 14px 40px 48px !important; gap: 16px !important; }
+body.app .main.bare .body { padding-top: 22px !important; }
+body.app .main.chatting .body { padding: 0 !important; }
+body.app .hero-photo { background: var(--p-surface) !important; min-height: 0; padding: 26px 28px; }
+body.app .hero-photo h2 { color: var(--p-ink); font-size: 28px; }
+body.app .hero-photo p { color: var(--p-ink-2); }
+body.app .act-row, body.app .mem-row { border-top-color: var(--p-line-soft) !important; }
+body.app .act-main b, body.app .mem-row p { font-family: var(--p-serif); }
+body.app .mem-add input, body.app .nf-dates input { background: #fff !important; border: 1px solid var(--p-line) !important; color: var(--p-ink) !important; color-scheme: light; }
+body.app .note-doc { border: 1px solid var(--p-line-soft); padding: 40px 48px; }
+body.app .note-doc h1, body.app .note-doc h2 { font: 400 22px/1.3 var(--p-serif); color: var(--p-ink); }
+body.app .note-doc h3 { font: 600 15px var(--p-sans); }
+body.app .note-doc.tx p { font: 400 14.5px/1.65 var(--p-serif); color: var(--p-ink-2); }
+body.app .chip.nk-meeting, body.app .chip.nk-lecture, body.app .chip.nk-assignment { color: var(--p-ink-2); }
+body.app .qa.user { background: none; text-align: right; color: var(--p-ink-2); }
+body.app .qa.assistant { background: none; border: 0; border-left: 2px solid var(--p-line); border-radius: 0; font: 400 15px/1.6 var(--p-serif); }
+body.app .pc { background: var(--p-card); border-color: var(--p-line-soft); }
+body.app .pc-av { background: var(--p-sel); }
+body.app .dict-hero h2 { font: 400 26px/1.2 var(--p-serif) !important; }
+body.app .dict-out { font: 400 17px/1.5 var(--p-serif); }
+body.app .dict-say { font: italic 15px/1.5 var(--p-serif); }
+body.app .note-pdf { border: 1px solid var(--p-line-soft); }
+body.app .note-pdf, body.app .note-doc { box-sizing: border-box; }

@@ -10,7 +10,7 @@ const main = fs.readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.u
 const catalog = fs.readFileSync(new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
 
 test("being named always gets through: the not-for-him gate sees the words as heard", () => {
-  assert.match(main, /macHeardAddressed = \/\\bbrain\(\?:o\|elle\|a\)\\b\/i\.test\(String\(prompt \|\| ""\)\);/);
+  assert.match(main, /macHeardAddressed = Boolean\(options\.typed\) \|\| \/\\bbrain\(\?:o\|elle\|a\)\\b\/i\.test\(String\(prompt \|\| ""\)\);/);
   assert.match(main, /&& !macHeardAddressed && !\/\\bbrain/);
 });
 

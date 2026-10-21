@@ -26,9 +26,11 @@ test("the chat draws day, connections, choices and sources, and a tap answers", 
   assert.match(chat, /if \(r\?\.ui\) reply\.ui = r\.ui;/);
 });
 
-test("many chats, listed under Chat", () => {
+test("many chats, on their own Chats page (2026-10-18)", () => {
   assert.match(chat, /const ALL = "braino-chats", CUR = "braino-chat-cur"/);
   assert.match(chat, /list: \(\) => chats\.filter/);
-  assert.match(app, /\$\{id === "chat" \? chatSubNav\(\) : ""\}/);
-  assert.match(app, /data-chat="new">\+ New chat</);
+  assert.doesNotMatch(app, /chatSubNav/);
+  assert.match(app, /S\.chatView === "thread" \? chatThread\(\) : chatsPage\(\)/);
+  assert.match(app, /data-chat="new">New chat</);
+  assert.match(app, /data-chat="list" aria-label="Back to all chats"/);
 });

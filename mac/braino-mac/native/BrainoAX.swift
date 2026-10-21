@@ -748,6 +748,85 @@ func runKey(name: String) {
   out("key\t\(key)")
 }
 
+// ── Teach Braino: watch what you click and type (2026-10-20) ────────────────
+// Long-running. One JSON line per event on stdout until stdin closes or the
+// process is killed. Reads the mouse button and the element under it, like a
+// screen reader would; secure (password) fields are never read.
+func watchElementInfo(_ el: AXUIElement) -> String {
+  let role = axString(el, kAXRoleAttribute as String)
+  let secure = role == "AXSecureTextField" || axString(el, kAXSubroleAttribute as String) == "AXSecureTextField"
+  var label = axString(el, kAXTitleAttribute as String)
+  if label.isEmpty { label = axString(el, kAXDescriptionAttribute as String) }
+  if label.isEmpty, let parent = axAttr(el, kAXParentAttribute as String) {
+    let p = parent as! AXUIElement
+    label = axString(p, kAXTitleAttribute as String)
+    if label.isEmpty { label = axString(p, kAXDescriptionAttribute as String) }
+  }
+  var value = ""
+  if !secure, let v = axAttr(el, kAXValueAttribute as String) as? String { value = String(v.prefix(120)) }
+  let help = axString(el, kAXHelpAttribute as String)
+  return "\"role\":\"\(jsonEscape(role))\",\"label\":\"\(jsonEscape(String(label.prefix(120))))\",\"value\":\"\(jsonEscape(value))\",\"help\":\"\(jsonEscape(String(help.prefix(80))))\",\"secure\":\(secure)"
+}
+
+func runWatch() {
+  let sys = AXUIElementCreateSystemWide()
+  var wasDown = false
+  var tick = 0
+  var focusKey = ""
+  var focusValue = ""
+  var focusStart = ""
+  var focusApp = ""
+  func flushTyping() {
+    if !focusKey.isEmpty && focusValue != focusStart && !focusValue.isEmpty {
+      out("{\"t\":\"typed\",\"app\":\"\(jsonEscape(focusApp))\",\"field\":\"\(jsonEscape(focusKey))\",\"text\":\"\(jsonEscape(String(focusValue.prefix(200))))\"}")
+    }
+    focusStart = focusValue
+  }
+  out("{\"t\":\"ready\"}")
+  while true {
+    usleep(30_000)
+    tick += 1
+    let down = (NSEvent.pressedMouseButtons & 1) != 0
+    if down && !wasDown {
+      flushTyping()
+      let p = NSEvent.mouseLocation
+      let h = NSScreen.screens.first?.frame.height ?? 0
+      var hit: AXUIElement?
+      let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+      if AXUIElementCopyElementAtPosition(sys, Float(p.x), Float(h - p.y), &hit) == .success, let el = hit {
+        out("{\"t\":\"click\",\"app\":\"\(jsonEscape(app))\",\(watchElementInfo(el))}")
+      } else {
+        out("{\"t\":\"click\",\"app\":\"\(jsonEscape(app))\",\"role\":\"\",\"label\":\"\"}")
+      }
+    }
+    wasDown = down
+    // Typing: the focused field's text, checked a few times a second. Only the
+    // finished value is reported, when focus moves or you click.
+    if tick % 12 == 0, let f = axAttr(sys, kAXFocusedUIElementAttribute as String) {
+      let el = f as! AXUIElement
+      let role = axString(el, kAXRoleAttribute as String)
+      if role == "AXSecureTextField" { focusKey = ""; continue }
+      if role == "AXTextField" || role == "AXTextArea" || role == "AXComboBox" || role == "AXSearchField" {
+        var label = axString(el, kAXTitleAttribute as String)
+        if label.isEmpty { label = axString(el, kAXDescriptionAttribute as String) }
+        if label.isEmpty { label = axString(el, kAXPlaceholderValueAttribute as String) }
+        let key = "\(role):\(label)"
+        let value = (axAttr(el, kAXValueAttribute as String) as? String) ?? ""
+        if key != focusKey {
+          flushTyping()
+          focusKey = key
+          focusApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+          focusStart = value
+        }
+        focusValue = value
+      } else if !focusKey.isEmpty {
+        flushTyping()
+        focusKey = ""
+      }
+    }
+  }
+}
+
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
   out("error\tusage: press|pressindex|typeindex|observe|meeting|key|selected|replace|focused|fieldstate|insert|window")
@@ -776,6 +855,8 @@ case "window":
   runWindow(action: action, appQuery: appQuery.isEmpty ? "front" : appQuery)
 case "key":
   runKey(name: arguments.dropFirst(2).joined(separator: " "))
+case "watch":
+  runWatch()
 case "observe":
   runObserve(cap: arguments.count > 2 ? (Int(arguments[2]) ?? 120) : 120)
 case "observeapp":

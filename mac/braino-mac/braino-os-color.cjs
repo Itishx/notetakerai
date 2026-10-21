@@ -172,6 +172,7 @@ function resolveColor(raw) {
 
 const ASK = /\b(?:turn|change|make|paint|colou?r|go|become|switch)\b/;
 const SELF = /\b(?:yourself|your ?self|you|your colou?r|braino|the colou?r|it)\b/;
+const NOT_COLOUR = /\b(?:profiles?|tabs?|chrome|browser|accounts?|windows?|apps?|settings|mode|playlist|songs?|channel|meeting|calendar|whatsapp|spotify|youtube)\b/;
 const RESET = /\b(?:be yourself|back to (?:normal|blue|yourself)|reset|default|normal again|original)\b/;
 
 /* Only ever a deliberate instruction. "I like red" does not repaint him. */
@@ -183,8 +184,13 @@ function parseBrainoOsColorIntent(raw) {
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return null;
+  /* "Switch to my default, my main profile" reset his colour and opened Braino
+     OS (2026-10-18): "switch" + "default" was enough. A sentence about a
+     profile, tab, app or account is never about his colour. */
+  if (NOT_COLOUR.test(text)) return null;
 
-  if (RESET.test(text) && (ASK.test(text) || /\bcolou?r\b/.test(text) || /\bbe yourself\b/.test(text))) {
+  // Reset needs the colour itself, or "be yourself": "default" alone is not his colour.
+  if (RESET.test(text) && (/\bcolou?r\b/.test(text) || /\b(?:be yourself|back to (?:blue|yourself))\b/.test(text))) {
     return { action: "reset", say: "Back to blue." };
   }
 

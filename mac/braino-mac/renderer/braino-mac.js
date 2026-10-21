@@ -1569,6 +1569,25 @@ function compactFlowText(text, maxChars = 42) {
 /* Option+N recording in the thinking design (2026-10-16). Folded: the chip
    says "Recording 02:31" with the arrow. Open: what has been heard so far,
    newest last, and the sheet's own Stop. */
+/* Teach Braino: the notch says he is watching, with a clock, until Done. */
+let teachStartedAt = 0;
+let teachClock = 0;
+window.brainoMac?.onTeach?.((p) => {
+  window.clearInterval(teachClock);
+  teachStartedAt = p?.action === "start" ? Number(p.startedAt) || Date.now() : 0;
+  if (teachStartedAt) teachClock = window.setInterval(() => updateNotchFace(), 1000);
+  updateNotchFace();
+});
+// Tapping the notch while he watches is "Done": the app is out of the way.
+notchFace?.addEventListener("click", (event) => {
+  if (!teachStartedAt) return;
+  event.stopPropagation();
+  logRenderer("teach.done_tap", {});
+  teachStartedAt = 0;
+  nfSetThinking("Learning how you did it...");
+  void window.brainoMac.teachStop?.({}).finally(() => nfSetThinking(""));
+}, true);
+
 let recKind = "";
 let recLiveText = "";
 let recHidAos = false;
@@ -4076,6 +4095,7 @@ function updateNotchFace() {
       const yapNotice = nfTransient.text && now < nfTransient.until ? nfTransient.text : "";
       slots.push(yapNotice || "BrainoHERA");
     }
+    if (teachStartedAt) slots.push(`● Watching ${fmtMeetingClock(Date.now() - teachStartedAt)}`);
     if (meetingRecording) slots.push(`● REC ${fmtMeetingClock(Date.now() - meetingStartedAt)}`);
     else if (screenRecording) slots.push(`● SCREEN ${fmtMeetingClock(Date.now() - screenRecStartedAt)}`);
     if (nfAlarmRinging && slots.length < 2) slots.push(`⏰ ${nfAlarmRinging.label} · tap to stop`);
@@ -7449,6 +7469,8 @@ async function runDelegate(prompt, options = {}) {
   const delegatePromise = window.brainoMac.delegate(nfShelfWrapPrompt(text), {
     forceBrain: Boolean(options.forceBrain),
     reason: options.reason || "",
+    // Typed is always to him: main must never drop it as room talk.
+    typed: Boolean(options.typed),
     // Main may hand a sentence back as talk; only a live voice session can answer it.
     canTalk: Boolean(realtimeActive && rtDc && rtDc.readyState === "open"),
   });
@@ -9819,7 +9841,7 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
       /* Before the chat fork, because chat is exactly what swallows this. */
       const resumed = takeOwedTask(turnText);
       if (resumed) {
-        await runDelegate(resumed, { keepRealtime: true });
+        await runDelegate(resumed, { keepRealtime: true, typed: Boolean(opts.typed) });
         return;
       }
       if (await shouldUseRealtimeDirectChat(turnText)) {
@@ -9830,7 +9852,7 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
           ...voiceLatencySnapshot(),
         });
       }
-      await runDelegate(turnText, { keepRealtime: true });
+      await runDelegate(turnText, { keepRealtime: true, typed: Boolean(opts.typed) });
     } finally {
       /* Only the current turn gets to say it is finished.
          An interrupted turn can still be unwinding minutes later, and clearing

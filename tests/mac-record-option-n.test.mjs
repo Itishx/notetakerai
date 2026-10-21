@@ -22,7 +22,10 @@ test("the notch asks lecture or meeting, and the pick goes straight to the recor
 
 test("one recorder: a lecture is transcribed as a lecture", () => {
   assert.match(main, /mode: meetingState\.kind === "lecture" \? "lecture" : "meeting"/);
-  assert.match(main, /summary = \(await lectureNotes\(transcript, ""\)\)\.notes/);
+  // Words only per chunk; one write-up at the end, reused as the note.
+  assert.match(main, /transcriptOnly: true,/);
+  assert.match(main, /if \(pdfSaved\?\.wroteUp\) summary = pdfSaved\.markdown;/);
+  assert.match(main, /logMac\("rec\.segment\.garbage"/);
 });
 
 test("saved on this Mac first, listed for the app", () => {

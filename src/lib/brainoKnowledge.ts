@@ -20,6 +20,30 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "teach-braino",
+    title: "Teach Braino",
+    category: "Feature",
+    date: "2026-10-20",
+    dateLabel: "October 20, 2026",
+    description:
+      "Do a job once while Braino watches. He learns what it is for, what changes each time and the steps, then does it when you ask.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "087",
+  },
+  {
+    slug: "mac-app-redesign",
+    title: "The Braino App, Redesigned",
+    category: "Feature",
+    date: "2026-10-18",
+    dateLabel: "October 18, 2026",
+    description:
+      "The Braino window on your Mac now reads like a calm notebook: warm paper, serif headings, a sidebar you can fold away, and chats on their own page.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "086",
+  },
+  {
     slug: "outreach-engine",
     title: "Outreach Engine",
     category: "Feature",

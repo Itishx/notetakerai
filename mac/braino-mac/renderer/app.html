@@ -8,10 +8,12 @@
   <link rel="stylesheet" href="chat.css" />
   <link rel="stylesheet" href="white.css" />
 </head>
-<body>
+<body class="app">
 <div class="stage">
 <div class="win" id="win" data-product="companion">
-  <aside class="side">
+  <div class="topdrag" aria-hidden="true"></div>
+  <button type="button" class="side-toggle" id="side-toggle" aria-label="Hide sidebar" aria-expanded="true" title="Hide sidebar (⌘\)"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M9.5 5v14"/></svg></button>
+  <aside class="side" id="side">
     <div class="mark">Braino</div>
     <label class="find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="Search" aria-label="Search"></label>
     <nav class="nav" id="nav" aria-label="Sections"></nav>

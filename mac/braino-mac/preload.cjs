@@ -633,6 +633,22 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:alarm-dismiss", handler);
     return () => ipcRenderer.removeListener("braino-mac:alarm-dismiss", handler);
   },
+  teachStart: (said) => ipcRenderer.invoke("braino-mac:teach-start", said),
+  teachStop: (opts) => ipcRenderer.invoke("braino-mac:teach-stop", opts),
+  teachState: () => ipcRenderer.invoke("braino-mac:teach-state"),
+  taughtList: () => ipcRenderer.invoke("braino-mac:taught-list"),
+  taughtDelete: (id) => ipcRenderer.invoke("braino-mac:taught-delete", id),
+  taughtRun: (id) => ipcRenderer.invoke("braino-mac:taught-run", id),
+  onTeach: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:teach", handler);
+    return () => ipcRenderer.removeListener("braino-mac:teach", handler);
+  },
+  onTaughtChanged: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:taught-changed", handler);
+    return () => ipcRenderer.removeListener("braino-mac:taught-changed", handler);
+  },
   calendarNextNow: () => ipcRenderer.invoke("braino-mac:calendar-next-now"),
   recordStop: () => ipcRenderer.invoke("braino-mac:record-stop"),
   recordStart: (payload) => ipcRenderer.invoke("braino-mac:record-start", payload),

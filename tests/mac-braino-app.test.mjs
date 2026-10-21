@@ -13,7 +13,7 @@ test("double-click Braino opens the one app; Cmd+Shift+D does too", () => {
 
 test("Companion only, with Braino, Connections and System shared", () => {
   // Chat is the front door (2026-09-28). Foundry comes later (2026-10-15).
-  assert.match(app, /companion: \[\["", \["chat", "home"\]\], \["Library"/);
+  assert.match(app, /companion: \[\["", \["chat", "home", "teach"\]\], \["Library"/);
   assert.doesNotMatch(app, /foundry: \[\[/);
   assert.match(app, /shared: \[\["Braino", \["appearance", "voice", "commands", "skills"\]\]/);
 });

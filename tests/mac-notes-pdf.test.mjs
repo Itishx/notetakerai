@@ -43,7 +43,7 @@ test("each kind asks for the story order, answer first", () => {
 });
 
 test("meetings and lectures save a PDF without waiting on it", () => {
-  assert.match(main, /void saveNotesPdf\(\{ kind: state\.kind/);
+  assert.match(main, /pdfSaved = await saveNotesPdf\(\{ kind: state\.kind/);
   assert.match(main, /void saveNotesPdf\(\{ kind: "lecture"/);
 });
 

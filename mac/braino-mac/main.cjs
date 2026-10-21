@@ -274,6 +274,7 @@ const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
 const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "instant-fire.cjs"));
 const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
 const { createNarrator, stepLine, asDoing } = require(path.join(__dirname, "narrate.cjs"));
+const teach = require(path.join(__dirname, "teach.cjs"));
 const formFill = require(path.join(__dirname, "form-fill.cjs"));
 const notesPdf = require(path.join(__dirname, "notes-pdf.cjs"));
 const webAddress = require(path.join(__dirname, "web-address.cjs"));
@@ -1996,6 +1997,7 @@ async function refreshDesktopOverlayContext(reason = "poll") {
   if (contextKey && contextKey !== lastOverlayContextKey) {
     lastOverlayContextKey = contextKey;
     contextChanged = true;
+    teachNoteFocus(activeMacContext);
     logMac("desktop.context.changed", {
       reason,
       appName: activeMacContext?.appName || "",
@@ -9025,13 +9027,21 @@ async function handleMeetingSegment(payload = {}) {
 
   meetingState.segmentBusy = true;
   const segmentSentAt = Date.now();
+  // Every chunk's audio is kept on this Mac until the notes are written, so a
+  // failed upload is never a lost minute of the lecture.
+  const segIndex = meetingState.segmentCount + meetingState.failedSegments + 1;
+  try {
+    const dir = path.join(RECORDINGS_DIR(), meetingState.recId);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const st of audible) fs.writeFileSync(path.join(dir, `seg-${String(segIndex).padStart(3, "0")}-${st.role}.webm`), Buffer.from(st.audioBase64, "base64"));
+  } catch (error) { logMac("rec.audio.save_failed", { recId: meetingState.recId, error }); }
   logMac("rec.segment.sent", {
     recId: meetingState.recId,
     segmentS: Math.round(segmentMs / 1000),
     streams: audible.map((st) => ({ role: st.role, kb: Math.round((st.bytes || 0) / 1024), ms: st.durationMs })),
   });
   try {
-    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
+    const sendOnce = () => fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -9041,13 +9051,24 @@ async function handleMeetingSegment(payload = {}) {
       body: JSON.stringify({
         mode: meetingState.kind === "lecture" ? "lecture" : "meeting",
         audioStreams: audible.map(({ role, audioBase64, mimeType }) => ({ role, audioBase64, mimeType })),
-        existingNotes: meetingState.notesMarkdown,
+        // Words only while recording; the notes are written once, at the end
+        // (2026-10-18). Rewriting them every 30s re-read the whole lecture
+        // each time and was most of the cost.
+        transcriptOnly: true,
+        existingNotes: "",
         existingTranscript: meetingState.transcriptText,
         meetingContext: meetingMacContext(segmentStartMs, segmentEndMs),
         clientNow: new Date().toISOString(),
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       }),
     });
+    // One more go for a network or server hiccup; "no speech" (4xx) is an answer.
+    let response = await sendOnce().catch(() => null);
+    if (!response || response.status >= 500) {
+      logMac("rec.segment.retry", { recId: meetingState?.recId, status: response?.status || 0 });
+      await new Promise((r) => setTimeout(r, 3000));
+      response = await sendOnce();
+    }
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -9057,6 +9078,18 @@ async function handleMeetingSegment(payload = {}) {
     }
     if (!meetingState) return { ok: true, empty: true };   // stopped while we were away
 
+    /* A quiet room comes back as confident nonsense in another script (a 96s
+       lecture became two Korean words, 2026-10-16). Indian classrooms and
+       calls are Latin or Devanagari; anything mostly else is dropped. */
+    const previous = meetingState.transcriptText || "";
+    const incoming = String(data?.transcript || "");
+    const fresh = incoming.startsWith(previous) ? incoming.slice(previous.length) : incoming;
+    const letters = fresh.replace(/[\s\d\p{P}\p{S}]/gu, "");
+    const foreign = letters.replace(/[\p{Script=Latin}\p{Script=Devanagari}]/gu, "");
+    if (letters.length && foreign.length / letters.length > 0.4) {
+      logMac("rec.segment.garbage", { recId: meetingState.recId, chars: fresh.length, sample: textForLog(fresh.slice(0, 60)) });
+      data.transcript = previous;
+    }
     if (data?.transcript) meetingState.transcriptText = String(data.transcript);
     if (data?.notes) meetingState.notesMarkdown = String(data.notes);
     if (data?.meetingArtifacts) meetingState.artifacts = data.meetingArtifacts;
@@ -9337,6 +9370,111 @@ function listRecordingsLocal() {
   }
 }
 
+/* ── Teach Braino (2026-10-20) ────────────────────────────────────────────────
+   You do a job once while he watches; he learns it and does it when asked.
+   Watching = BrainoAX "watch" (clicks by name, finished typing, never password
+   fields) plus every app and Chrome tab change. One model call at the end
+   turns it into a named job, saved in taught-jobs.json. Running one is the
+   normal brain with the taught steps in its context (teach.cjs). */
+const TAUGHT_PATH = () => path.join(AUTH_STORE_DIR, "taught-jobs.json");
+let teachState = null; // { id, startedAt, said, events, proc }
+
+function readTaughtJobs() {
+  try { return JSON.parse(fs.readFileSync(TAUGHT_PATH(), "utf8")) || []; } catch (_) { return []; }
+}
+function writeTaughtJobs(jobs) {
+  try { fs.writeFileSync(TAUGHT_PATH(), JSON.stringify(jobs.slice(0, teach.MAX_TAUGHT), null, 2)); } catch (error) { logMac("teach.save_failed", { error }); }
+  sendToRenderer("braino-mac:taught-changed", {});
+  if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:taught-changed", {});
+}
+function teachNoteFocus(ctx) {
+  if (!teachState || !ctx) return;
+  teachState.events.push({ t: "focus", at: Date.now() - teachState.startedAt, app: ctx.appName || "", title: ctx.browserTitle || ctx.windowTitle || "", url: ctx.browserUrl || "" });
+}
+
+async function startTeaching(said = "") {
+  if (teachState) return { ok: true, already: true };
+  const binary = await ensureAxHelperBinary();
+  if (!binary) return { ok: false, say: "I could not start watching. Accessibility needs to be on for me." };
+  teachState = { id: `job-${Date.now().toString(36)}`, startedAt: Date.now(), said: String(said || "").slice(0, 300), events: [], proc: null };
+  const st = teachState;
+  const proc = spawn(binary, ["watch"], { stdio: ["pipe", "pipe", "ignore"] });
+  st.proc = proc;
+  let buffer = "";
+  proc.stdout.on("data", (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) {
+      let e = null;
+      try { e = JSON.parse(line); } catch (_) { continue; }
+      if (!e || e.t === "ready" || st.events.length >= teach.MAX_EVENTS) continue;
+      st.events.push({ ...e, at: Date.now() - st.startedAt });
+    }
+  });
+  proc.on("exit", (code) => { if (teachState === st) logMac("teach.watch_exit", { code }); });
+  macAppStepAside(); // the app gets out of the way so the job has the screen
+  teachNoteFocus(activeMacContext);
+  logMac("teach.start", { id: st.id, said: textForLog(st.said) });
+  sendToRenderer("braino-mac:teach", { action: "start", startedAt: st.startedAt });
+  if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:teach", { action: "start", startedAt: st.startedAt });
+  return { ok: true, say: "Watching. Do it the way you normally would, then tap the notch when you are done." };
+}
+
+async function stopTeaching({ cancel = false } = {}) {
+  const st = teachState;
+  if (!st) return { ok: false, say: "I was not watching anything." };
+  teachState = null;
+  try { st.proc?.kill(); } catch (_) {}
+  sendToRenderer("braino-mac:teach", { action: "stop" });
+  if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:teach", { action: "stop" });
+  const lines = teach.compactTimeline(st.events);
+  logMac("teach.stop", { id: st.id, events: st.events.length, lines: lines.length, ms: Date.now() - st.startedAt, cancel });
+  if (cancel) return { ok: true, say: "Okay, forgot it." };
+  if (lines.length < 2) return { ok: false, say: "I did not see enough to learn from. Try again and do the whole job." };
+  sendTaskProgress({ status: "thinking", text: "Learning how you did it" });
+  const startedAt = Date.now();
+  try {
+    const authToken = await getBrainoAuthToken();
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ notes: "", chatHistory: [], responseMedium: "text", message: teach.learnPrompt(lines, { said: st.said }) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const job = teach.parseLearned(data?.reply);
+    logMac("teach.learned", { id: st.id, ok: Boolean(job), ms: Date.now() - startedAt, name: textForLog(job?.name || ""), steps: job?.steps?.length || 0 });
+    if (!job) return { ok: false, say: "I watched, but could not work out the job from it. Try once more, a little slower." };
+    const saved = { id: st.id, ...job, learnedAt: Date.now(), watched: lines, runs: 0 };
+    writeTaughtJobs([saved, ...readTaughtJobs().filter((j) => j.name.toLowerCase() !== job.name.toLowerCase())]);
+    const needs = job.inputs.length ? ` I'll ask for the ${job.inputs.map((i) => i.name.replace(/_/g, " ")).join(" and ")} each time.` : "";
+    const example = String(job.say || "").replace(/\{(\w+)\}/g, (_m, k) => job.inputs.find((i) => i.name === k)?.example || k.replace(/_/g, " "));
+    return { ok: true, job: saved, say: `Got it: ${job.name}. ${job.steps.length} steps.${needs} Just ask me${example ? `, like "${example}"` : ""}.` };
+  } catch (error) {
+    logMac("teach.learn_failed", { id: st.id, error });
+    return { ok: false, say: "I could not learn that just now. Your recording is gone, sorry, try again." };
+  } finally {
+    sendTaskProgress({ status: "done", text: "" });
+  }
+}
+
+ipcMain.handle("braino-mac:teach-start", async (_e, said) => startTeaching(said));
+ipcMain.handle("braino-mac:teach-stop", async (_e, opts) => {
+  const r = await stopTeaching(opts || {});
+  if (r?.say) sendToRenderer("braino-mac:speak-line", { text: r.say });
+  if (!opts?.cancel) openBrainoApp("teach");
+  return r;
+});
+ipcMain.handle("braino-mac:teach-state", () => (teachState ? { teaching: true, startedAt: teachState.startedAt, events: teachState.events.length } : { teaching: false }));
+ipcMain.handle("braino-mac:taught-list", () => readTaughtJobs());
+ipcMain.handle("braino-mac:taught-delete", (_e, id) => { writeTaughtJobs(readTaughtJobs().filter((j) => j.id !== String(id || ""))); return { ok: true }; });
+ipcMain.handle("braino-mac:taught-run", async (_e, id) => {
+  const job = readTaughtJobs().find((j) => j.id === String(id || ""));
+  if (!job) return { ok: false, say: "I could not find that job." };
+  // By name, never the example sentence: he asks for what changes this time.
+  return runDelegate(`Do my taught job "${job.name}". Ask me for the ${job.inputs.map((i) => i.name.replace(/_/g, " ")).join(" and ") || "details"} first.`, { typed: true });
+});
+
 let recordStopping = false;
 async function recordHotkey() {
   if (recordStopping) { logMac("rec.hotkey", { action: "ignored_stopping" }); return; }
@@ -9590,34 +9728,18 @@ async function stopMeetingRecording() {
 
   // The notes were already being written segment by segment. Only fall back to a one-shot
   // summary when nothing built them along the way.
+  /* One write-up, at the end (2026-10-18). It used to be three: notes rebuilt
+     every chunk, a summary here, then the PDF's own write-up. The PDF's
+     write-up is the best of them, so it is the only one, and its text is the
+     note everywhere: on this Mac, in the cloud and in the PDF. */
   let summary = state.notesMarkdown;
-  if (!summary && isLecture) {
-    try {
-      summary = (await lectureNotes(transcript, "")).notes || "";
-    } catch (error) {
+  let pdfSaved = null;
+  if (!summary) {
+    pdfSaved = await saveNotesPdf({ kind: state.kind, source: state.source, minutes, date: state.startedAt, notes: "", transcript }).catch((error) => {
       logMac("rec.notes.failed", { recId: state.recId, kind: state.kind, error });
-    }
-  }
-  if (!summary && !isLecture) {
-    const authToken = await getBrainoAuthToken();
-    try {
-      const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({
-          notes: "",
-          chatHistory: [],
-          message: `Summarize this ${minutes}-minute ${state.source} into crisp meeting notes with sections: Summary (2-3 sentences), Key points (bullets), Action items (bullets, or "None"). The screenshot shows the meeting screen for extra context.\n\nLive bullets so far:\n${state.notes.join("\n") || "(none)"}\n\nTranscript:\n${transcript.slice(0, 12000)}`,
-          visionMode: state.lastShotB64 ? "describe" : undefined,
-          imageBase64: state.lastShotB64 || undefined,
-          responseMedium: "text",
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      summary = String(data?.reply || "").trim();
-    } catch (error) {
-      logMac("meeting.summary.failed", { error });
-    }
+      return null;
+    });
+    if (pdfSaved?.wroteUp) summary = pdfSaved.markdown;
   }
   logMac(summary ? "rec.notes.ok" : "rec.notes.missing", { recId: state.recId, kind: state.kind, ms: Date.now() - notesStartedAt, chars: (summary || "").length, builtLive: Boolean(state.notesMarkdown) });
   const dateLabel = new Date(state.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -9634,9 +9756,9 @@ async function stopMeetingRecording() {
     status: summary ? "ready" : "notes_missing",
     problems: { audioError: state.audioCaptureError || "", failedSegments: state.failedSegments, lostS: Math.round(state.lostSegmentMs / 1000), transcriptSource: state.transcriptText ? "transcribed" : "captions" },
   });
-  // The PDF is written in the background so "Done" is never late for it.
-  // From Option+N or Stop, the finished note then opens by itself in the app.
-  void saveNotesPdf({ kind: state.kind, source: state.source, minutes, date: state.startedAt, notes: summary, transcript }).then((saved) => {
+  // From Option+N or Stop, the finished note opens by itself in the app.
+  const pdfReady = pdfSaved ? Promise.resolve(pdfSaved) : saveNotesPdf({ kind: state.kind, source: state.source, minutes, date: state.startedAt, notes: summary, transcript });
+  void pdfReady.then((saved) => {
     if (state.via !== "option_n") return;
     logMac("rec.note.open", { recId: state.recId, ok: Boolean(saved?.ok), file: saved?.file || "" });
     openBrainoApp(saved?.ok && saved.file ? `note:${saved.file}` : "notes");
@@ -20504,6 +20626,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
         nowPlayingLine,
         layaHintLine(command),
         relationsLine(),
+        teach.taughtContextLines(readTaughtJobs(), command),
         macOwnJobActive() ? OWN_BROWSER_NOTE : "",
         macRecentExchanges(),
       ].filter(Boolean).join("\n"),
@@ -22480,7 +22603,9 @@ async function runHandoff(h, source) {
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
   macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
-  macHeardAddressed = /\bbrain(?:o|elle|a)\b/i.test(String(prompt || ""));
+  /* Typed in the app chat is said to him by definition. Laya scored "hi" as
+     room talk and it was dropped without a word (2026-10-18). */
+  macHeardAddressed = Boolean(options.typed) || /\bbrain(?:o|elle|a)\b/i.test(String(prompt || ""));
   {
     const pasted = parseHandoff(prompt);
     if (pasted) return runHandoff(pasted, "pasted");
@@ -25637,7 +25762,9 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
     if (chatForward && !chatForward.started) { chatForward.started = true; chatForward.jobStartedAt = Date.now(); }
     const chatStartedAt = Date.now();
     macChatRunning = macCommandSurface === "chat";
-    try { result = await runDelegate(prompt, options || {}); } finally { macChatRunning = false; }
+    // Anything sent from the app window was typed to him; it is never room talk.
+    const runOptions = macCommandSurface === "chat" ? { ...(options || {}), typed: true } : (options || {});
+    try { result = await runDelegate(prompt, runOptions); } finally { macChatRunning = false; }
     if (macCommandSurface === "chat" && result && macLastToolUi && macLastToolUi.at >= chatStartedAt) result = { ...result, ui: macLastToolUi.ui };
   } finally {
     macDelegatesInFlight = Math.max(0, macDelegatesInFlight - 1);
@@ -26782,6 +26909,7 @@ async function saveNotesPdf({ kind, source, minutes, date, notes, transcript }) 
   } catch (error) {
     logMac("notes_pdf.writeup_failed", { kind, ms: Date.now() - started, error: String(error?.message || error) });
   }
+  const wroteUp = Boolean(markdown);
   if (!markdown) markdown = String(notes || "").trim() || "_The write-up was not ready. The full transcript is below._";
   const fallbackTitle = `${kind === "lecture" ? "Lecture" : source || "Meeting"}, ${new Date(date || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "long" })}`;
   const title = notesPdf.titleFrom(markdown, fallbackTitle);
@@ -26793,7 +26921,7 @@ async function saveNotesPdf({ kind, source, minutes, date, notes, transcript }) 
   ];
   const saved = await notesPdf.savePdf({ BrowserWindow, kind, title, chips, markdown, transcript, source: kind === "meeting" ? source : (source !== "Lecture" ? source : ""), minutes, date, log: logMac, root: NOTES_PDF_ROOT });
   if (saved.ok && appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:notes-changed");
-  return saved;
+  return { ...saved, markdown, wroteUp };
 }
 
 /* The Notes page in the app: PDFs on this Mac plus the notes synced to his account. */

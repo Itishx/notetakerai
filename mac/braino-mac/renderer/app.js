@@ -34,6 +34,7 @@ async function load(kind) {
   if (kind === "snap") S.snap = await call("setupSnapshot");
   if (kind === "recent") S.recent = (await call("appRecent"))?.rows || [];
   if (kind === "skills") S.skills = (await call("skillsList"))?.skills || [];
+  if (kind === "taught") { S.taught = (await call("taughtList")) || []; S.teach = (await call("teachState")) || { teaching: false }; }
   if (kind === "profiles") S.profiles = await call("chromeProfiles");
   if (kind === "mesa") S.mesa = await call("mesaState");
   if (kind === "contacts") { S.contacts = await call("contactsList"); S.important = (await call("waImportant"))?.names || []; }
@@ -124,7 +125,7 @@ async function askNote(question) {
 
 const P = {
   /* Chat: the first page. Type to him; he answers or does it (chat.js). */
-  chat: { t: "", nav: ["Chat", "chat"], r: () => window.BrainoChat?.html() || "" },
+  chat: { t: "", nav: ["Chat", "chat"], r: () => (S.chatView === "thread" ? chatThread() : chatsPage()) },
   /* Companion */
   /* Home: a stats board. Every number is counted from his real activity log
      and memory on this Mac; nothing is estimated or made up. */
@@ -269,6 +270,20 @@ const P = {
     ? `<div class="tiles" style="grid-column:span 12">${S.skills.map((k) => `<div class="tile"><div class="t">${ic("spark", "coral")}<b>"${esc(k.phrase)}"</b></div><small>${esc(k.steps.join(" › "))} · used ${k.uses}×</small><div class="foot">${chip("Instant")}<button class="btn" type="button" data-forget="${esc(k.phrase)}">Forget</button></div></div>`).join("")}</div>`
     : m("", `<p class="sub">Nothing yet. When he plans a job that works, it shows up here.</p>`) },
 
+  /* Teach Braino (2026-10-20): show him a job once, then just ask. */
+  teach: { t: "Teach Braino", l: "Do a job once while he watches. He learns what it is for, what changes each time, and the steps. Next time, just ask.", nav: ["Teach Braino", "spark"], need: ["taught"], badge: () => (S.taught || []).length || "", r: () => {
+    const live = S.teach?.teaching;
+    const secs = live ? Math.max(0, Math.round((Date.now() - (S.teach.startedAt || Date.now())) / 1000)) : 0;
+    const head = live
+      ? m("s12", `${kicker("Watching")}<h2>Do it the way you normally would.</h2><p class="sub">${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} · he sees every app, page and button you click. Password fields are never read.</p><div style="margin-top:12px;display:flex;gap:8px">${btn("Done, learn it", "teachDone").replace('class="btn"', 'class="btn primary"')}${btn("Cancel", "teachCancel")}</div>`)
+      : m("s12", `${kicker("New lesson")}<h2>Show him how.</h2><p class="sub">Say what the job is, press Start, then do it. This window steps aside while you work.</p><div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input id="teach-said" placeholder="e.g. Buy a book on Amazon (optional)" style="flex:1;min-width:0;padding:9px 12px;border-radius:10px;border:1px solid var(--rim2, rgba(0,0,0,.14));background:transparent;color:inherit;font:inherit">${btn("Start", "teachStart").replace('class="btn"', 'class="btn primary"')}</div>`);
+    const jobs = S.taught || [];
+    const list = jobs.length
+      ? `<div class="tiles" style="grid-column:span 12">${jobs.map((j) => `<div class="tile"><div class="t">${ic("spark", "coral")}<b>${esc(j.name)}</b></div><small>${esc(j.goal || "")}</small><small>${esc(j.steps.length)} steps${j.inputs?.length ? ` · asks for ${esc(j.inputs.map((i) => i.name.replace(/_/g, " ")).join(", "))}` : ""}${j.say ? ` · say "${esc(j.say)}"` : ""}</small><div class="foot"><button class="btn" type="button" data-teach-run="${esc(j.id)}">Run</button><button class="btn" type="button" data-teach-del="${esc(j.id)}">Forget</button></div></div>`).join("")}</div>`
+      : m("s12", `<p class="sub">Nothing taught yet. Your first lesson shows up here.</p>`);
+    return head + list;
+  } },
+
   /* Connections */
   chrome: { t: "Chrome profiles", l: "Pick your main one and say what the others are for. A link with those words opens in that profile.", nav: ["Chrome profiles", "chrome"], need: ["profiles"], r: () => {
     const ps = S.profiles?.profiles || []; const cfg = S.profiles?.config || { primary: "", rules: [] };
@@ -279,7 +294,7 @@ const P = {
 
   /* System */
   general: { t: "General", nav: ["General", "gear"], need: ["login"], r: () => `
-    ${m("s8", `${kicker("Look")}<div class="looks"><button class="look" type="button" aria-pressed="true"><i></i>Glass</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Dark · soon</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Light · soon</button></div>`)}
+    ${m("s8", `${kicker("Look")}<div class="looks"><button class="look" type="button" aria-pressed="true"><i></i>Paper</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Dark · soon</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Light · soon</button></div>`)}
     ${m("s4", `${kicker("Braino for Mac")}<div class="big">${esc(S.login?.version || "")}</div><p class="sub">This Mac</p>`)}
     ${m("s6", `${kicker("Start")}<div class="rows">${row("Open at login", "", tg(Boolean(S.login?.openAtLogin), "openAtLogin", "Open at login"))}${row("Quit Braino", "He stops listening until you open him again. Or press \u2318Q with this window in front.", btn("Quit", "quitBraino"))}</div>`)}
     ${m("s6", `${kicker("Language")}<div class="rows">${row("He speaks", "", "<span class='val'>English</span>")}${row("He understands", "English and Hinglish", "<span class='val'>Auto</span>")}</div>`)}` },
@@ -304,27 +319,58 @@ const P = {
   account: { t: "Account", nav: ["Account", "user"], r: () => `${m("s6", `<div class="head"><div class="av" style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ff9b82,#b24a36);display:grid;place-items:center;font:600 17px var(--ui)">${esc((first() || "·").charAt(0))}</div><div><h2>${esc(S.auth?.displayName || "Not signed in")}</h2><p class="sub">${esc(S.auth?.email || "")}</p></div></div>`)}${m("s6", `${kicker("This Mac")}<div class="rows">${row("Signed in", S.auth?.authenticated ? "Yes" : "No")}${row("Sign out", "", btn("Sign out", "signOut"))}</div>`)}` },
 };
 const NAV = {
-  companion: [["", ["chat", "home"]], ["Library", ["activity", "memory", "notes", "dictation"]], ["Your world", ["mesa", "whatsapp"]]],
+  companion: [["", ["chat", "home", "teach"]], ["Library", ["activity", "memory", "notes", "dictation"]], ["Your world", ["mesa", "whatsapp"]]],
   shared: [["Braino", ["appearance", "voice", "commands", "skills"]], ["Connections", ["chrome", "music"]], ["System", ["general", "permissions", "keys", "privacy", "setup"]]],
 };
 
 let product = "companion", cur = "chat";
-/* Recent chats, nested under Chat (2026-10-15), like Claude and ChatGPT. */
-/* Chat > : outside chat it is one row with a chevron; inside chat, every
-   chat is listed under it (2026-10-16). */
-function chatSubNav() {
-  if (cur !== "chat") return "";
+/* Chat is two pages, like Claude (2026-10-18): Chats, every conversation as a
+   calm list, and one conversation open, with Back to the list. The sidebar
+   never unfolds a list under Chat any more; that dropdown could not be closed. */
+S.chatView = "list";
+const ago = (at) => {
+  const d = new Date(at), now = new Date(), mins = Math.round((now - d) / 60000);
+  if (!Number.isFinite(mins)) return "";
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { day: "numeric", month: "short" });
+};
+function chatsPage() {
   const list = window.BrainoChat?.list?.() || [];
-  const rows = list.map((c) => `<button type="button" class="nav-chat${c.current && cur === "chat" ? " on" : ""}" data-chat="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>`).join("");
-  return `<div class="nav-sub"><button type="button" class="nav-chat nav-new" data-chat="new">+ New chat</button>${rows}</div>`;
+  const q = S.chatsQ || "";
+  const shown = q ? list.filter((c) => String(c.title).toLowerCase().includes(q)) : list;
+  const head = `<div class="chats-head"><label class="act-find chats-find"><input id="chats-q" placeholder="Search your chats" value="${esc(q)}" aria-label="Search your chats"></label><button type="button" class="btn primary" data-chat="new">New chat</button></div>`;
+  const rows = shown.map((c) => `<button type="button" class="chats-row" data-chat="${esc(c.id)}"><span class="chats-t">${esc(c.title || "New chat")}</span><time>${esc(ago(c.at))}</time></button>`).join("");
+  const empty = `<div class="chats-empty"><p>${list.length ? "No chat matches that." : "No chats yet. Start one and it shows up here."}</p></div>`;
+  return `<section class="chats">${head}${list.length ? `<div class="k chats-k">${list.length} ${list.length === 1 ? "chat" : "chats"}</div>` : ""}${shown.length ? `<div class="chats-list">${rows}</div>` : empty}</section>`;
 }
-window.addEventListener("braino-chats-changed", () => renderNav());
+function chatThread() {
+  const c = (window.BrainoChat?.list?.() || []).find((x) => x.current);
+  return `<div class="chat-top"><button type="button" class="chat-back" data-chat="list" aria-label="Back to all chats"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Chats</button><span class="chat-top-t" id="chat-top-t">${esc(c?.title || "New chat")}</span><button type="button" class="chat-top-new" data-chat="new" aria-label="New chat" title="New chat"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>${window.BrainoChat?.html() || ""}`;
+}
+function openChatView(id) {
+  const B = window.BrainoChat; if (!B) return;
+  if (id === "list") { S.chatView = "list"; if (cur !== "chat") void go("chat"); else paint(); return; }
+  const ok = id === "new" ? B.newChat() : B.open(id);
+  if (ok === false) { toast("He's still answering. One moment."); return; }
+  S.chatView = "thread";
+  if (cur !== "chat") void go("chat"); else paint();
+}
+window.addEventListener("braino-chats-changed", () => {
+  if (cur !== "chat") return;
+  if (S.chatView === "list") { paint(); return; }
+  const c = (window.BrainoChat?.list?.() || []).find((x) => x.current);
+  const t = $("chat-top-t"); if (t) t.textContent = c?.title || "New chat";
+});
 function renderNav() {
   const f = $("q").value.toLowerCase();
   $("nav").innerHTML = [...NAV[product], ...NAV.shared].map(([g, ids]) => {
     const items = ids.filter((id) => !f || P[id].nav[0].toLowerCase().includes(f));
     if (!items.length) return "";
-    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}${id === "chat" ? `<span class="nav-chev${cur === "chat" ? " open" : ""}">›</span>` : ""}</button>${id === "chat" ? chatSubNav() : ""}`; }).join("");
+    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}</button>`; }).join("");
   }).join("");
 }
 function paint() {
@@ -336,11 +382,13 @@ function paint() {
     $("title").innerHTML = `<button class="back" type="button" data-act="noteBack" aria-label="All notes">‹</button><input id="note-title" class="title-edit" value="${esc(x.title)}" aria-label="Title" spellcheck="false" title="Click to rename">`;
     $("lede").textContent = [{ meeting: "Meeting", lecture: "Lecture" }[x.kind] || "Note", x.at ? new Date(x.at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : ""].filter(Boolean).join(" · ");
   }
-  document.querySelector(".bar").style.display = p.t ? "flex" : "none";
-  document.querySelector(".main").classList.toggle("bare", !p.t);
-  document.querySelector(".main").classList.toggle("chatting", cur === "chat");
+  const chatList = cur === "chat" && S.chatView !== "thread";
+  if (chatList) { $("title").textContent = "Chats"; $("lede").textContent = "Every conversation you've had with Braino. Open one to pick it up again."; }
+  document.querySelector(".bar").style.display = p.t || chatList ? "flex" : "none";
+  document.querySelector(".main").classList.toggle("bare", !p.t && !chatList);
+  document.querySelector(".main").classList.toggle("chatting", cur === "chat" && !chatList);
   const body = $("body"); body.innerHTML = p.r();
-  if (cur === "chat") window.BrainoChat?.mount();
+  if (cur === "chat" && !chatList) window.BrainoChat?.mount();
   [...body.children].forEach((el, i) => { el.style.animationDelay = `${Math.min(i, 10) * 40}ms`; });
   const bar = document.querySelector(".bar"); bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = "";
   renderNav();
@@ -417,6 +465,17 @@ document.addEventListener("click", async (e) => {
     if (act === "deleteToday") { await call("activityDeleteDay", new Date().toISOString().slice(0, 10)); toast("Today's memory is deleted."); }
     if (act === "pauseMemory") { await call("activityPause", true); toast("Memory paused. Say \"resume memory\" to start again."); }
     if (act === "quitBraino") { await call("quitBraino"); return; }
+    if (act === "teachStart") {
+      const said = $("teach-said")?.value.trim() || "";
+      const r = await call("teachStart", said);
+      if (r?.ok === false) { toast(r.say || "Could not start."); return; }
+      S.teach = { teaching: true, startedAt: Date.now() }; paint(); return;
+    }
+    if (act === "teachDone" || act === "teachCancel") {
+      toast(act === "teachDone" ? "Learning how you did it…" : "Cancelled.");
+      const r = await call("teachStop", { cancel: act === "teachCancel" });
+      await load("taught"); paint(); if (r?.say) toast(r.say); return;
+    }
     if (act === "signOut") { await call("authSignOut"); await load("auth"); paint(); }
     if (act === "memCancel") { S.memEditing = null; paint(); }
     if (act === "memAdd") {
@@ -446,12 +505,28 @@ document.addEventListener("click", async (e) => {
   }
   const primary = t.closest("[data-primary]")?.dataset.primary;
   if (primary && S.profiles) { const r = await call("chromeProfilesSave", { ...S.profiles.config, primary }); if (r?.config) S.profiles.config = r.config; paint(); toast("That's your main profile now."); return; }
+  const teachRun = t.closest("[data-teach-run]")?.dataset.teachRun; if (teachRun) { toast("On it."); await call("taughtRun", teachRun); return; }
+  const teachDel = t.closest("[data-teach-del]")?.dataset.teachDel; if (teachDel) { await call("taughtDelete", teachDel); await load("taught"); paint(); toast("Forgotten."); return; }
   const forget = t.closest("[data-forget]")?.dataset.forget; if (forget) { await call("skillsForget", forget); await load("skills"); paint(); toast("Forgotten."); return; }
   const unstar = t.closest("[data-unstar]")?.dataset.unstar; if (unstar) { S.important = (await call("waImportant", unstar, false))?.names || S.important.filter((n) => n !== unstar); paint(); return; }
   const ch = t.closest("[data-chat]");
-  if (ch) { if (cur !== "chat") void go("chat").then(() => (ch.dataset.chat === "new" ? window.BrainoChat?.newChat() : window.BrainoChat?.open(ch.dataset.chat))); else (ch.dataset.chat === "new" ? window.BrainoChat?.newChat() : window.BrainoChat?.open(ch.dataset.chat)); return; }
-  const g = t.closest("[data-go]"); if (g) { void go(g.dataset.go); }
+  if (ch) { openChatView(ch.dataset.chat); return; }
+  if (t.closest("#side-toggle")) { setSide(!sideOpen); return; }
+  const g = t.closest("[data-go]"); if (g) { if (g.dataset.go === "chat") S.chatView = "list"; void go(g.dataset.go); }
 });
+/* The sidebar folds away, like Claude's (2026-10-18). Remembered on this Mac. */
+let sideOpen = true;
+try { sideOpen = localStorage.getItem("braino-app-side") !== "0"; } catch (_) {}
+function setSide(open, quiet) {
+  sideOpen = open;
+  $("win").classList.toggle("side-closed", !open);
+  const b = $("side-toggle"); b.setAttribute("aria-expanded", String(open));
+  b.setAttribute("aria-label", open ? "Hide sidebar" : "Show sidebar"); b.title = `${open ? "Hide" : "Show"} sidebar (\u2318\\)`;
+  $("side").inert = !open;
+  if (!quiet) { try { localStorage.setItem("braino-app-side", open ? "1" : "0"); } catch (_) {} }
+}
+setSide(sideOpen, true);
+document.addEventListener("keydown", (e) => { if (e.metaKey && e.key === "\\") { e.preventDefault(); setSide(!sideOpen); } });
 document.addEventListener("change", async (e) => {
   const dir = e.target?.dataset?.usefor;
   if (dir && S.profiles) {
@@ -472,9 +547,9 @@ document.addEventListener("keydown", async (e) => {
 $("q").addEventListener("input", renderNav);
 document.addEventListener("input", (e) => {
   const id = e.target?.id;
-  if (id !== "act-q" && id !== "mem-q" && id !== "people-q" && id !== "nf-q") return;
+  if (id !== "act-q" && id !== "mem-q" && id !== "people-q" && id !== "nf-q" && id !== "chats-q") return;
   const v = e.target.value.trim().toLowerCase();
-  if (id === "act-q") S.actQ = v; else if (id === "people-q") S.peopleQ = v; else if (id === "nf-q") S.nf.q = v; else S.memQ = v;
+  if (id === "chats-q") S.chatsQ = v; else if (id === "act-q") S.actQ = v; else if (id === "people-q") S.peopleQ = v; else if (id === "nf-q") S.nf.q = v; else S.memQ = v;
   const pos = e.target.selectionStart; paint();
   const again = $(id); if (again) { again.focus(); again.setSelectionRange(pos, pos); }
 });
@@ -500,6 +575,8 @@ document.addEventListener("focusout", async (e) => {
   if (r?.ok) { x.title = title; if (r.file) x.file = r.file; toast("Renamed."); }
   else { e.target.value = x.title; toast(r?.error === "signed_out" ? "Sign in to rename synced notes." : "Couldn't rename that just now."); }
 });
+api.onTeach?.(() => { void load("taught").then(() => { if (cur === "teach") paint(); }); });
+api.onTaughtChanged?.(() => { void load("taught").then(() => { if (cur === "teach") paint(); }); });
 api.onNotesChanged?.(() => { if (cur === "notes") void load("notes").then(() => { if (!S.noteOpen) paint(); }); });
 
 (async () => {

@@ -164,6 +164,8 @@ const OwnBrowserDocs = lazy(() => import("./pages/OwnBrowserDocs.tsx"));
 const CleanHearingDocs = lazy(() => import("./pages/CleanHearingDocs.tsx"));
 const PauseMusicDocs = lazy(() => import("./pages/PauseMusicDocs.tsx"));
 const OptionMRecordingDocs = lazy(() => import("./pages/OptionMRecordingDocs.tsx"));
+const TeachBrainoDocs = lazy(() => import("./pages/TeachBrainoDocs.tsx"));
+const MacAppRedesignDocs = lazy(() => import("./pages/MacAppRedesignDocs.tsx"));
 const NotesPdfDocs = lazy(() => import("./pages/NotesPdfDocs.tsx"));
 const MondayMode = lazy(() => import("./pages/MondayMode.tsx"));
 const MondayModeDocs = lazy(() => import("./pages/MondayModeDocs.tsx"));
@@ -411,6 +413,8 @@ function AppRoutes() {
         <Route path="/knowledge/clean-hearing" element={<CleanHearingDocs />} />
         <Route path="/knowledge/pause-music-while-you-talk" element={<PauseMusicDocs />} />
         <Route path="/knowledge/option-n-recording" element={<OptionMRecordingDocs />} />
+        <Route path="/knowledge/teach-braino" element={<TeachBrainoDocs />} />
+        <Route path="/knowledge/mac-app-redesign" element={<MacAppRedesignDocs />} />
         <Route path="/knowledge/notes-as-pdfs" element={<NotesPdfDocs />} />
         <Route path="/knowledge/outreach-engine" element={<OutreachEngineDocs />} />
         <Route path="/knowledge/trace" element={<Navigate to="/trace" replace />} />

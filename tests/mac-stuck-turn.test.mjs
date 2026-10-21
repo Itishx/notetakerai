@@ -41,7 +41,7 @@ test("a chat reply that never comes always times out its own wait", async () => 
 
 test("a sentence Laya is sure is not for him, without his name, is dropped (class in the room, 6 Oct)", () => {
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /if \(layaFirst && layaFirst\.kind === "ignore" && layaFirst\.confidence >= LAYA_TALK_SURE\n    && !\/\\bbrain\(\?:o\|elle\|a\)\\b\/i\.test\(String\(raw \|\| ""\)\) && !pendingHilRun\) \{/);
+  assert.match(main, /if \(layaFirst && layaFirst\.kind === "ignore" && layaFirst\.confidence >= LAYA_TALK_SURE\n    && !macHeardAddressed && !\/\\bbrain\(\?:o\|elle\|a\)\\b\/i\.test\(String\(raw \|\| ""\)\) && !pendingHilRun\) \{/);
   assert.match(main, /source: "laya:not_for_him"/);
 });
 
