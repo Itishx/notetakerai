@@ -250,8 +250,6 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   const [line] = useState(() => READY[Math.floor(Math.random() * READY.length)]);
   const [step, setStep] = useState<number>(saved?.brief ? 3 : (!saved && seed) ? 1 : 0);
   const [draft, setDraft] = useState("");
-  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
-  const [sure, setSure] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string>("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -690,6 +688,8 @@ export default function FoundryApp() {
   const [seeds, setSeeds] = useState<Record<string, string>>({});
   const [menu, setMenu] = useState<string>("");
   const [draft, setDraft] = useState("");
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [sure, setSure] = useState("");
 
   useEffect(() => { try { localStorage.setItem(LIST, JSON.stringify(list)); } catch (_) { /* private window */ } }, [list]);
   useEffect(() => { if (!active) document.title = "Braino Foundry"; }, [active]);
@@ -704,10 +704,10 @@ export default function FoundryApp() {
   }
   // Rename happens in place in the sidebar, like Claude; Enter saves, Escape cancels.
   function saveName() {
-    if (!editing) return;
-    const name = editing.name.trim();
-    if (name) setList((l) => l.map((p) => p.id === editing.id ? { ...p, name, custom: true } as ProjectMeta : p));
-    setEditing(null);
+    if (!renaming) return;
+    const name = renaming.name.trim();
+    if (name) setList((l) => l.map((p) => p.id === renaming.id ? { ...p, name, custom: true } as ProjectMeta : p));
+    setRenaming(null);
   }
   function remove(id: string) {
     try { localStorage.removeItem(keyOf(id)); } catch (_) { /* fine */ }
@@ -737,8 +737,8 @@ export default function FoundryApp() {
         <div className="fc-plist">
           {sorted.map((p) => (
             <div key={p.id} className={`fc-pitem${active === p.id ? " on" : ""}`}>
-              {editing?.id === p.id ? (
-                <input className="fc-pedit" autoFocus value={editing.name} onChange={(e) => setEditing({ id: p.id, name: e.target.value })} onBlur={saveName} onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditing(null); }} />
+              {renaming?.id === p.id ? (
+                <input className="fc-pedit" autoFocus value={renaming.name} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} onBlur={saveName} onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setRenaming(null); }} />
               ) : (
               <button className="fc-pbtn" onClick={() => open(p.id)}>
                 <span>{p.running && <i className="fc-run" />}{p.name}</span><small>{ago(p.updated)}</small>
@@ -754,7 +754,7 @@ export default function FoundryApp() {
                     </>
                   ) : (
                     <>
-                      <button onClick={() => { setMenu(""); setEditing({ id: p.id, name: p.name }); }}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg>Rename</button>
+                      <button onClick={() => { setMenu(""); setRenaming({ id: p.id, name: p.name }); }}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg>Rename</button>
                       <button className="del" onClick={() => setSure(p.id)}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>Delete</button>
                     </>
                   )}
