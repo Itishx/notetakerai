@@ -118,9 +118,9 @@ type RunEntry = { at: number; named: number; of: number; postsOk: number; leadsO
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
-type ProjectProps = { id: string; active: boolean; seed: string; theme: string; toggle: () => void; onMeta: (m: Partial<ProjectMeta> & { id: string }) => void; onHome: () => void };
+type ProjectProps = { id: string; name?: string; active: boolean; seed: string; theme: string; toggle: () => void; onMeta: (m: Partial<ProjectMeta> & { id: string }) => void; onHome: () => void };
 
-function FoundryProject({ id, active, seed, theme, toggle, onMeta, onHome }: ProjectProps) {
+function FoundryProject({ id, name, active, seed, theme, toggle, onMeta, onHome }: ProjectProps) {
   const STORE = keyOf(id);
   const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (_) { return null; } }, [STORE]);
 
@@ -128,6 +128,28 @@ function FoundryProject({ id, active, seed, theme, toggle, onMeta, onHome }: Pro
   const [link, setLink] = useState<string>(saved?.link || "");
   const [about, setAbout] = useState<string>(saved?.about || "");
   const [brief, setBrief] = useState<Brief | null>(saved?.brief || null);
+  /* "Do it": for each fix, the finished piece plus where and how to publish it.
+     Kept under its own key so it survives reloads. */
+  type Made = { title: string; content: string; where: string; link: string; steps: string[] };
+  const [made, setMade] = useState<Record<string, Made>>(() => { try { return JSON.parse(localStorage.getItem(`${STORE}-made`) || "{}"); } catch (_) { return {}; } });
+  const [making, setMaking] = useState("");
+  const [openFix, setOpenFix] = useState("");
+  useEffect(() => { try { localStorage.setItem(`${STORE}-made`, JSON.stringify(made)); } catch (_) { /* private window */ } }, [made, STORE]);
+  async function doIt(f: Fix) {
+    setOpenFix(f.question);
+    if (made[f.question] || !brief) return;
+    setMaking(f.question);
+    try {
+      const m = await askJson<Made>(`You are Braino Foundry, a distribution co-founder doing the work for a first-time founder who knows nothing about marketing.
+Product: ${brief.product}. ${brief.oneLine}. Buyer: ${brief.buyer}. Problem: ${brief.problem}. Website: ${brief.site || "none yet"}. Voice: ${brief.voice}.
+The fix to carry out: "${f.what}" on ${f.where}, so that AI assistants and Google name this product when people ask "${f.question}".
+Write the finished piece, ready to paste, in the founder's voice. If it is a page (FAQ, comparison, guide), write the full page text with headings in plain markdown. If it is a Reddit or forum answer, write the full answer, helpful first, mentioning the product once and honestly. No em-dashes.
+Then say exactly where to publish it and how, for someone who has never done it: 3 to 6 short steps, starting with creating an account if one is usually needed.
+JSON: {"title": string, "content": string, "where": string, "link": "the best URL to start from", "steps": [string]}`);
+      setMade((d) => ({ ...d, [f.question]: m }));
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not write it"); }
+    finally { setMaking(""); }
+  }
   const [confirmed, setConfirmed] = useState<boolean>(saved?.confirmed || false);
   const [answers, setAnswers] = useState<AiAnswer[] | null>(saved?.answers || null);
   const [google, setGoogle] = useState<Google[] | null>(saved?.google || null);
@@ -530,7 +552,25 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                         {fixes && (
                           <>
                             <p>What to publish next, so AI starts recommending you.</p>
-                            <div className="fc-fixcards">{fixes.slice(0, 5).map((f) => <div key={f.question} className="fc-fixcard"><span className="fc-where">{f.where}</span><b>{f.what}</b><small>Fixes: {f.question}</small></div>)}</div>
+                            <div className="fc-fixcards">{fixes.slice(0, 5).map((f) => (
+                              <div key={f.question} className={`fc-fixcard${openFix === f.question ? " on" : ""}`}>
+                                <span className="fc-where">{f.where}</span><b>{f.what}</b><small>Fixes: {f.question}</small>
+                                <button className="fc-doit" disabled={!!making} onClick={() => void doIt(f)}>{making === f.question ? <><Dots /> Writing it</> : made[f.question] ? "Show it" : "Do it"}</button>
+                              </div>
+                            ))}</div>
+                            {openFix && made[openFix] && (() => { const m = made[openFix]; return (
+                              <div className="fc-made">
+                                <div className="fc-made-h"><div><small>Ready to publish</small><b>{m.title}</b></div><button className="fc-x" aria-label="Close" onClick={() => setOpenFix("")}>×</button></div>
+                                <div className="fc-made-grid">
+                                  <div className="fc-made-text"><pre>{m.content}</pre><button className="ob-btn fc-sm" onClick={() => void copy(m.content)}>Copy text</button></div>
+                                  <div className="fc-made-how">
+                                    <small>Where: {m.where}</small>
+                                    <ol>{m.steps.map((x) => <li key={x}>{x}</li>)}</ol>
+                                    {m.link && <a className="ob-btn is-coral fc-sm" href={m.link} target="_blank" rel="noreferrer" onClick={() => void copy(m.content)}>Copy and open</a>}
+                                  </div>
+                                </div>
+                              </div>
+                            ); })()}
                           </>
                         )}
                       </>
@@ -632,7 +672,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
       <main className="fc-main" hidden={!active}>
         <header className="fc-top">
           <button className="fc-icon fc-only-m" onClick={onHome} aria-label="All projects"><svg className="fc-ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></button>
-          <span className="fc-title">{brief ? brief.product : "New project"}</span>
+          <span className="fc-title">{name || (brief ? brief.product : "New project")}</span>
           <div className="fc-tabs" role="tablist">
             <button role="tab" aria-selected={view === "chat"} className={view === "chat" ? "on" : ""} onClick={() => setView("chat")}>Chat</button>
             <button role="tab" aria-selected={view === "overview"} className={view === "overview" ? "on" : ""} onClick={() => setView("overview")}>Overview</button>
@@ -870,6 +910,7 @@ export default function FoundryApp() {
   const [draft, setDraft] = useState("");
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [sure, setSure] = useState("");
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => { try { localStorage.setItem(LIST, JSON.stringify(list)); } catch (_) { /* private window */ } }, [list]);
   useEffect(() => { if (!active) document.title = "Braino Foundry"; }, [active]);
@@ -932,9 +973,9 @@ export default function FoundryApp() {
                 <span>{p.running && <i className="fc-run" />}{p.name}</span><small>{ago(p.updated)}</small>
               </button>
               )}
-              <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setSure(""); setMenu(menu === p.id ? "" : p.id); }}><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
+              <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setSure(""); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuAt({ x: Math.max(8, r.right - 200), y: r.bottom + 6 }); setMenu(menu === p.id ? "" : p.id); }}><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
               {menu === p.id && (
-                <div className="fc-menu" onClick={(e) => e.stopPropagation()}>
+                <div className="fc-menu" style={{ position: "fixed", left: menuAt.x, top: menuAt.y, right: "auto" }} onClick={(e) => e.stopPropagation()}>
                   {sure === p.id ? (
                     <>
                       <p className="fc-menu-q">Delete this project? Its chat and results go too.</p>
@@ -978,7 +1019,7 @@ export default function FoundryApp() {
         </main>
       )}
       {opened.filter((id) => list.some((p) => p.id === id)).map((id) => (
-        <FoundryProject key={id} id={id} active={active === id} seed={seeds[id] || ""} theme={theme} toggle={toggle} onMeta={onMeta} onHome={() => setActive(null)} />
+        <FoundryProject key={id} id={id} name={list.find((p) => p.id === id)?.name} active={active === id} seed={seeds[id] || ""} theme={theme} toggle={toggle} onMeta={onMeta} onHome={() => setActive(null)} />
       ))}
     </div>
   );
