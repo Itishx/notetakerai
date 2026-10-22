@@ -158,6 +158,7 @@ const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
 const SaferDefaultDocs = lazy(() => import("./pages/SaferDefaultDocs.tsx"));
 const Labs = lazy(() => import("./pages/Labs.tsx"));
+const LabsPost = lazy(() => import("./pages/LabsPost"));
 const HilScoredDocs = lazy(() => import("./pages/HilScoredDocs.tsx"));
 const Trace = lazy(() => import("./pages/Trace.tsx"));
 const PointerDocs = lazy(() => import("./pages/PointerDocs.tsx"));
@@ -408,6 +409,7 @@ function AppRoutes() {
         <Route path="/affective" element={<Affective />} />
         <Route path="/about" element={<About />} />
         <Route path="/labs" element={<Labs />} />
+        <Route path="/labs/:slug" element={<LabsPost />} />
         <Route path="/trace" element={<Trace />} />
         <Route path="/knowledge/your-mouse-is-the-context" element={<PointerDocs />} />
         <Route path="/knowledge/he-can-see-you" element={<SeeYouDocs />} />

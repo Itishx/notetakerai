@@ -49,3 +49,13 @@
 .lb-sys { max-width: 18ch; margin: 10px 0 18px; }
 .lb-sys-one { max-width: 62ch; font-family: var(--a-display); font-size: clamp(18px, 1.5vw, 21px); line-height: 1.6; color: var(--a-ink-soft); margin: 0; }
 .lb-sec-tight { padding-top: 0 !important; }
+
+/* Writing from Labs (2026-10-22): article cards driven by src/lib/labsPosts.ts. */
+.lb-posts { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.lb-post { display: flex; flex-direction: column; gap: 10px; height: 100%; padding: 26px; border: 1px solid var(--a-line-strong, var(--a-line)); border-radius: 20px; text-decoration: none; color: inherit; background: color-mix(in srgb, #fff 45%, var(--a-bg, #f4f2ec)); transition: border-color .2s, transform .2s; }
+.aff[data-theme="dark"] .lb-post { background: color-mix(in srgb, #fff 3%, var(--a-bg)); }
+.lb-post:hover { border-color: var(--a-ink); transform: translateY(-2px); }
+.lb-post-meta { font: 500 12.5px/1 var(--ao-sf); color: var(--a-ink-faint); letter-spacing: .02em; }
+.lb-post h3 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: clamp(26px, 2.6vw, 34px); line-height: 1.1; color: var(--a-ink); }
+.lb-post p { margin: 0; font: 400 16px/1.55 var(--ao-sf); color: var(--a-ink-soft); }
+.lb-post-go { margin-top: auto; padding-top: 8px; font: 500 14px/1 var(--ao-sf); color: var(--a-ink); }

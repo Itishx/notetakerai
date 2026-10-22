@@ -40,3 +40,12 @@ Tell Foundry what you're building. It finds where buyers can't find you, writes 
 - [x] Listed in **Everything New with Braino**
 - [x] Public copy is simple and human
 - [x] Release date and status are accurate
+
+## Labs blog and the launch article (2026-10-22)
+
+- **Labs is now a small blog.** `/labs` has a "Writing from Labs" section. Cards come from `src/lib/labsPosts.ts`; add an entry there (and a body in `BODIES` inside `src/pages/LabsPost.tsx`) to publish a new article.
+- **First article:** "Introducing Braino Foundry" at `/labs/introducing-braino-foundry`. Covers why (8 of 8 founders named distribution, 0 of 8 pay for a tool), the three engines and their loop, the four workflows, where it lives (Mac app in private beta, website at /foundry/app for Chrome and Windows, one brain), and honest limits.
+- **Labs engine boxes** for Optics, Content and Outreach now say "Part of Braino Foundry" and point at `/foundry`.
+- **Limits stated in the article:** approve = copy + open (no auto posting yet); Reddit is found through Google; a search takes about a minute.
+- **Technical shape:** `LabsPost.tsx` renders by slug (`/labs/:slug`), diagrams are inline SVG/HTML, styles in `labs-post.css`, Affective homepage grammar, light and dark.
+- **Status:** built 22 October 2026, route added in `App.tsx` by Itish.

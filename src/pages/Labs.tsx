@@ -6,6 +6,7 @@ import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
 import "./labs.css";
+import { LABS_POSTS } from "@/lib/labsPosts";
 
 /* ============================================================================
    /labs — Affective Labs (2026-10-03). Where we play with AI and tech that is
@@ -16,35 +17,47 @@ import "./labs.css";
    What is in Labs now (2026-10-17): the system we are building, one that
    takes care of things for you end to end, and its three engines. Whatever
    is being worked on lives here and can be tried while it is being made:
-   Outreach first (usable), Content being built, Optics after it.
+   Outreach first, then Content and Optics.
+
+   2026-10-22: all three engines now live together inside Braino Foundry
+   (/foundry, app at /foundry/app). Labs is also a small blog: articles
+   come from src/lib/labsPosts.ts and render at /labs/:slug.
    ============================================================================ */
 
 const ENGINES: { id: string; kicker: string; name: string; line: string; status: string[]; story: string[]; to?: string; cta?: string }[] = [
   {
-    id: "outreach", kicker: "Try it now", name: "Outreach", line: "Who should you be talking to?",
-    status: ["In testing", "Open to try"],
+    id: "optics", kicker: "Inside Braino Foundry", name: "Optics", line: "Where can buyers not find you?",
+    status: ["Part of Braino Foundry", "Open to try"],
     story: [
-      "Tell Braino who you want to sell to. He finds the people most likely to buy, says why he picked each one, and writes the first message for email, LinkedIn, WhatsApp, X and Instagram. You press send.",
-      "It reads your website first, so every message knows exactly what you sell, and it learns from who replies.",
+      "Optics asks the questions your buyers ask, in AI answers and on Google, and shows you where you are missing. Every gap comes with the reason and what to do about it.",
+      "It is the starting point. What Optics finds tells Content what to write and Outreach who to talk to.",
     ],
-    to: "/outreach", cta: "Open Outreach",
+    to: "/foundry", cta: "See Braino Foundry",
   },
   {
-    id: "content", kicker: "Building now", name: "Content", line: "What should you put out?",
-    status: ["Being built", "No release date"],
-    story: ["Content makes what you publish, in your own voice: the post, the thread, the caption, shaped for where it is going. It starts from the same picture of your product the Outreach Engine uses, so everything sounds like one company."],
+    id: "content", kicker: "Inside Braino Foundry", name: "Content", line: "What should you put out?",
+    status: ["Part of Braino Foundry", "Open to try"],
+    story: [
+      "Content writes public posts in your voice for X, LinkedIn, Reddit, Instagram and Threads, each one shaped for where it is going.",
+      "Nothing goes out on its own. You read it, you approve it, it is ready to post.",
+    ],
+    to: "/foundry", cta: "See Braino Foundry",
   },
   {
-    id: "optics", kicker: "Next", name: "Optics", line: "What is actually working?",
-    status: ["Planned"],
-    story: ["Optics reads what is landing and what is not, and tells you why in plain words, so the next post and the next message get better on their own."],
+    id: "outreach", kicker: "Inside Braino Foundry", name: "Outreach", line: "Who is asking for you right now?",
+    status: ["Part of Braino Foundry", "Open to try"],
+    story: [
+      "Outreach finds people on Reddit asking about the exact problem you solve, and writes one message for each of them. One person, one message, never a blast.",
+      "It was the first engine we built in Labs. Now it lives inside Braino Foundry with the other two, and you approve every message.",
+    ],
+    to: "/foundry", cta: "See Braino Foundry",
   },
 ];
 
 const HOW = [
   { h: "Built on what we already made.", p: "Every experiment starts from AffectiveOS: the memory, the voice, the eyes on your screen. We are not starting from zero, so we can try odd things quickly." },
   { h: "Trained on its own.", p: "A Labs project does not have to fit inside Braino first. It gets its own data, its own tests and its own rules, and earns its way into a product later, or not at all." },
-  { h: "Said plainly.", p: "Each experiment says what works, what does not, and what might be a little naughty. If it is half built, the page says half built." },
+  { h: "Said plainly.", p: "Each experiment says what works, what does not, and what surprised us. If it is half built, the page says half built." },
 ];
 
 /* The homepage's word-by-word stamp (affective.css .aff-kin). Each word is
@@ -82,10 +95,11 @@ export default function Labs() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
+            <Link to="/foundry">Braino Foundry</Link>
+            <a href="#writing">Writing</a>
             <Link to="/braino">Braino</Link>
-            <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
+            <Link to="/foundry/app" className="aff-nav-go">Open Foundry</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -103,7 +117,7 @@ export default function Labs() {
               <p className="aff-hero-one">
                 Labs is where we play with AI and tech that is not a product yet. Some of it will become one. Some of it will not, and that is the point.
               </p>
-              <p className="lb-tag"><i aria-hidden="true" />Experimental. Some of it may be a little naughty.</p>
+              <p className="lb-tag"><i aria-hidden="true" />Experimental. Some of it may turn out brilliant.</p>
             </div>
           </div>
         </div>
@@ -125,7 +139,7 @@ export default function Labs() {
         <div className="aff-wrap">
           <p className="ah-kicker">What we are building</p>
           <h2 className="aff-h1 lb-sys">A system that takes care of things for you, <b>end to end.</b></h2>
-          <p className="lb-sys-one">Not a tool you operate. Three engines that do the work together: one that makes what you put out, one that reads what is working, and one that reaches the people who should hear about it. Whatever we are working on lives here in Labs, so you can try it while it is still being made.</p>
+          <p className="lb-sys-one">Not a tool you operate. Three engines that feed each other: Optics finds where buyers cannot find you, Content fills those gaps in public, and Outreach reaches the people already asking. They started here as separate experiments. Now they are built together inside Braino Foundry, and you approve everything before it goes anywhere.</p>
         </div>
       </section>
 
@@ -150,13 +164,32 @@ export default function Labs() {
         </section>
       ))}
 
+      <section className="lb-sec" id="writing">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Writing from Labs</p>
+          <h2 className="aff-h1 lb-sys">What we made, <b>and why.</b></h2>
+          <ul className="lb-posts">
+            {LABS_POSTS.map((p) => (
+              <li key={p.slug}>
+                <Link to={`/labs/${p.slug}`} className="lb-post">
+                  <span className="lb-post-meta">{p.dateLabel} · {p.readTime}</span>
+                  <h3>{p.title}</h3>
+                  <p>{p.line}</p>
+                  <span className="lb-post-go">Read the post</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       <section className="lb-sec lb-end">
         <div className="aff-wrap lb-end-in">
           <h2 className="aff-h1 lb-end-line">Curious first. <b>Useful later.</b></h2>
-          <p>Each engine shows up here as it changes: what we tried, what broke, and what made it into Braino.</p>
+          <p>Optics, Content and Outreach grew up here. Now they work together as Braino Foundry, your distribution co-founder.</p>
           <div className="aff-hero-cta">
-            <Link to="/outreach" className="aff-cta">Try the Outreach Engine</Link>
-            <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
+            <Link to="/foundry" className="aff-cta">Meet Braino Foundry</Link>
+            <Link to="/foundry/app" className="aff-cta aff-cta-ghost">Open the app</Link>
           </div>
         </div>
       </section>
