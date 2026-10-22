@@ -127,6 +127,7 @@ const AppStoreGrid = lazy(() => import("./pages/AppStoreGrid.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
 const FoundryApp = lazy(() => import("./pages/FoundryApp.tsx"));
+const FoundryLanding = lazy(() => import("./pages/FoundryLanding.tsx"));
 const FoundryAppDocs = lazy(() => import("./pages/FoundryAppDocs.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
 const FoundryDocs = lazy(() => import("./pages/FoundryDocs.tsx"));
@@ -455,7 +456,8 @@ function AppRoutes() {
             every deck and doc written this year points into it. */}
         <Route path="/braino" element={<BrainoFinal />} />
         {/* Foundry, the working app (Forge AI Hackathon, 2026-10-22). */}
-        <Route path="/foundry" element={<FoundryApp />} />
+        <Route path="/foundry" element={<FoundryLanding />} />
+        <Route path="/foundry/app" element={<FoundryApp />} />
         <Route path="/knowledge/foundry-app" element={<FoundryAppDocs />} />
         <Route path="/foundry-legacy" element={<Foundry />} />
         <Route path="/automations" element={<Automations />} />

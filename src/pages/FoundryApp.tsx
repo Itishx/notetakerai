@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAffTheme } from "@/components/AffTheme";
-import { AffNav, AffFooter } from "@/components/affPage";
+import { Link } from "react-router-dom";
 import "./affective.css";
 import "./foundry-app.css";
+import "./foundry-dash.css";
 
 /* Foundry (Forge AI Hackathon, 2026-10-22). One journey, Workflow 1, Get found:
    your brief -> where you are invisible (Optics) -> posts that fix it (Content)
@@ -88,6 +89,7 @@ export default function FoundryApp() {
   const [done, setDone] = useState<Record<string, "approved" | "skipped">>(saved?.done || {});
   const [busy, setBusy] = useState<Record<string, string>>({});
   const [err, setErr] = useState<string>("");
+  const [tab, setTab] = useState<"overview" | "brief" | "optics" | "content" | "outreach" | "inbox">(saved?.brief ? "overview" : "brief");
 
   useEffect(() => {
     try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done })); } catch (_) { /* private window */ }
@@ -203,152 +205,170 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     { id: "threads", label: "Threads", text: posts.threads, url: `https://www.threads.net/intent/post?text=${enc(posts.threads)}` },
   ] : [];
 
+  const working = Object.values(busy)[0] || "";
+  const NAV: [typeof tab, string, string][] = [
+    ["overview", "Overview", "M3 12l9-8 9 8v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"],
+    ["brief", "Brief", "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7"],
+    ["optics", "Optics", "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
+    ["content", "Content", "M4 20h4L19 9l-4-4L4 16zM14 6l4 4"],
+    ["outreach", "Outreach", "M4 4h16v12H8l-4 4zM8 9h8M8 12h5"],
+    ["inbox", "Approvals", "M4 13h4l2 3h4l2-3h4M4 13l3-8h10l3 8v6H4z"],
+  ];
+  const pendingCount = postCards.filter((c) => !done[`post-${c.id}`]).length + (leads || []).filter((l) => !done[`lead-${l.url}`]).length;
+
+  const PostCard = ({ c }: { c: typeof postCards[number] }) => (
+    <article className={`fx-item ${done[`post-${c.id}`] || ""}`}>
+      <header><span className="fx-tag c">{c.label}</span>{done[`post-${c.id}`] && <span className="fx-state">{done[`post-${c.id}`]}</span>}</header>
+      <p>{c.text}</p>
+      <footer><button className="fx-btn pri" onClick={() => act(`post-${c.id}`, "approved", c.text, c.url)}>Approve & open</button><button className="fx-btn" onClick={() => act(`post-${c.id}`, "skipped")}>Skip</button></footer>
+    </article>
+  );
+  const LeadCard = ({ l }: { l: Lead }) => (
+    <article className={`fx-item ${done[`lead-${l.url}`] || ""}`}>
+      <header><span className="fx-score" style={{ ["--p" as string]: `${l.intent}%` }}><b>{l.intent}</b></span><div className="fx-lead-h"><a href={l.url} target="_blank" rel="noopener noreferrer">{l.title}</a><small>{l.community} · {l.why}</small></div>{done[`lead-${l.url}`] && <span className="fx-state">{done[`lead-${l.url}`]}</span>}</header>
+      <p className="fx-msg">{l.message}</p>
+      <footer><button className="fx-btn pri" onClick={() => act(`lead-${l.url}`, "approved", l.message, l.url)}>Approve & open thread</button><button className="fx-btn" onClick={() => act(`lead-${l.url}`, "skipped")}>Skip</button></footer>
+    </article>
+  );
+  const Empty = ({ text }: { text: string }) => <div className="fx-empty">{working ? <><span className="fx-dot" />{working}…</> : text}</div>;
+
   return (
-    <div className="aff fd" data-theme={theme}>
-      <AffNav theme={theme} onToggle={toggle} links={[["How it works", "#how"], ["Braino", "/braino"]]} />
-      <main className="aff-wrap fd-main">
-        <header className="fd-hero">
-          <div className="aff-kicker">Foundry · Get found</div>
-          <h1 className="fd-h1">Get your product <em>seen</em>.</h1>
-          <p className="fd-lede">Tell Foundry what you're building. It finds where buyers can't find you, writes the posts that fix it, and brings you people asking for it. You only approve.</p>
-          <div className="fd-engines" id="how">
-            <span className="fd-chip o">Optics</span><span className="fd-arrow">→</span><span className="fd-chip c">Content</span><span className="fd-arrow">→</span><span className="fd-chip r">Outreach</span>
+    <div className="aff fx" data-theme={theme}>
+      <aside className="fx-side">
+        <Link to="/foundry" className="fx-brand"><span className="fx-logo">F</span>Foundry</Link>
+        <nav>
+          {NAV.map(([id, label, d]) => (
+            <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)} disabled={id !== "brief" && !confirmed}>
+              <svg viewBox="0 0 24 24"><path d={d} /></svg><span>{label}</span>
+              {id === "inbox" && pendingCount > 0 && <em>{pendingCount}</em>}
+            </button>
+          ))}
+        </nav>
+        <div className="fx-side-foot">
+          <div className="fx-engines"><i className="o" /><i className="c" /><i className="r" /></div>
+          <span>Nothing goes out without your approval.</span>
+        </div>
+      </aside>
+
+      <div className="fx-main">
+        <header className="fx-top">
+          <div>
+            <div className="fx-crumb">{brief ? brief.product : "New brief"}</div>
+            <h1>{NAV.find((n) => n[0] === tab)?.[1]}</h1>
+          </div>
+          <div className="fx-top-r">
+            {working && <span className="fx-live"><span className="fx-dot" />{working}</span>}
+            <button className="fx-icon" onClick={toggle} aria-label="Theme">{theme === "dark" ? "☀" : "☾"}</button>
+            {brief && <button className="fx-btn" onClick={() => { reset(); setTab("brief"); }}>New brief</button>}
           </div>
         </header>
 
-        {err && <div className="fd-err" role="alert">{err} <button onClick={() => setErr("")}>Dismiss</button></div>}
+        {err && <div className="fx-err">{err}<button onClick={() => setErr("")}>Dismiss</button></div>}
 
-        {(answers || leads) && brief && (
-          <section className="fd-moment" aria-live="polite">
-            <div className="aff-kicker">Your week, found</div>
-            <p>
-              We asked GPT-5.6 the {answers?.length || 0} questions your buyers ask. You were named in <b>{namedCount}</b>.
-              {rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}
-              {google ? <> On Google, you're on page one for <b>{googleHits}</b> of {google.length}.</> : null}
-              {posts ? <> Here are <b>5 posts</b> that answer them</> : null}
-              {leads ? <>{posts ? "," : " Here are"} and <b>{leads.length} people</b> asking for it on Reddit, each with a reply in your voice.</> : posts ? "." : null}
-            </p>
-            {approved > 0 && <div className="fd-moment-sub">{approved} approved so far.</div>}
-          </section>
+        {tab === "overview" && confirmed && brief && (
+          <div className="fx-grid">
+            <div className="fx-kpis">
+              <div className="fx-kpi o"><span>AI answers naming you</span><b>{answers ? `${namedCount}/${answers.length}` : "…"}</b><small>{rivals[0] ? `${rivals[0][0]} named ${rivals[0][1]}×` : "checking"}</small></div>
+              <div className="fx-kpi o"><span>Google page one</span><b>{google ? `${googleHits}/${google.length}` : "…"}</b><small>buyer searches</small></div>
+              <div className="fx-kpi c"><span>Posts ready</span><b>{posts ? 5 : "…"}</b><small>5 platforms</small></div>
+              <div className="fx-kpi r"><span>People asking</span><b>{leads ? leads.length : "…"}</b><small>Reddit, with a reply each</small></div>
+            </div>
+            {(answers || leads) && (
+              <section className="fx-moment">
+                <div className="fx-label">This week</div>
+                <p>We asked AI the {answers?.length || 0} questions your buyers ask. You were named in <b>{namedCount}</b>.{rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}{google ? <> On Google you're on page one for <b>{googleHits}</b> of {google.length}.</> : null}{posts ? <> Here are <b>5 posts</b> that answer them</> : null}{leads ? <>{posts ? "," : " Here are"} and <b>{leads.length} people</b> asking for it on Reddit.</> : posts ? "." : null}</p>
+              </section>
+            )}
+            <section className="fx-panel">
+              <div className="fx-panel-h"><h2>Competitors in AI answers</h2><button className="fx-link" onClick={() => setTab("optics")}>Optics →</button></div>
+              {rivals.length ? rivals.map(([n, c]) => <div className="fx-bar" key={n}><span>{n}</span><i style={{ width: `${(c / Math.max(1, answers?.length || 1)) * 100}%` }} /><b>{c}</b></div>) : <Empty text="No answers yet." />}
+            </section>
+            <section className="fx-panel">
+              <div className="fx-panel-h"><h2>Waiting for you</h2><button className="fx-link" onClick={() => setTab("inbox")}>Approvals →</button></div>
+              <div className="fx-mini">{postCards.slice(0, 2).map((c) => <div key={c.id}><span className="fx-tag c">{c.label}</span><p>{c.text.slice(0, 110)}…</p></div>)}{(leads || []).slice(0, 2).map((l) => <div key={l.url}><span className="fx-tag r">Reddit</span><p>{l.title}</p></div>)}{!posts && !leads && <Empty text="Nothing yet." />}</div>
+            </section>
+          </div>
         )}
 
-        {/* 1. Brief */}
-        <section className="fd-step">
-          <div className="fd-step-head"><span className="fd-n">1</span><div><h2>Your brief</h2><p>In your own words. Jargon is fine; Foundry will play it back plainly.</p></div></div>
-          {!brief && (
-            <div className="fd-form">
-              <label>What are you building?<textarea rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="An app that reminds PG tenants to pay and collects rent on UPI…" /></label>
-              <div className="fd-row">
-                <label>Any link (site, GitHub, doc)<input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" /></label>
-                <label>A line about you<input value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Solo founder, 5 hours a week for marketing" /></label>
-              </div>
-              <button className="fd-go" disabled={!desc.trim() || !!busy.brief} onClick={makeBrief}>{busy.brief ? `${busy.brief}…` : "Make my brief"}</button>
-            </div>
-          )}
-          {brief && (
-            <div className="fd-brief">
-              <div className="fd-brief-name">{brief.product}</div>
-              <p className="fd-brief-line">{brief.oneLine}</p>
-              <dl><div><dt>Buyer</dt><dd>{brief.buyer}</dd></div><div><dt>Their problem</dt><dd>{brief.problem}</dd></div><div><dt>Your voice</dt><dd>{brief.voice}</dd></div></dl>
-              {!confirmed ? (
-                <div className="fd-confirm"><span>Does this match what you have in mind?</span><button className="fd-go" onClick={confirmBrief}>Yes, that's it</button><button className="fd-ghost" onClick={() => setBrief(null)}>Edit</button></div>
-              ) : (
-                <div className="fd-confirm done"><span>Brief confirmed.</span><button className="fd-ghost" onClick={reset}>Start over</button></div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {confirmed && brief && (
-          <>
-            {/* 2. Optics */}
-            <section className="fd-step">
-              <div className="fd-step-head"><span className="fd-n o">2</span><div><h2>Optics: where you're invisible</h2><p>Your buyers' questions, asked to an AI assistant and to Google.</p></div></div>
-              {busy.optics && <div className="fd-busy">{busy.optics}…</div>}
-              {answers && (
-                <div className="fd-table">
-                  <div className="fd-tr fd-th"><span>Buyer question</span><span>Who the AI names</span><span>You?</span></div>
-                  {answers.map((a) => {
-                    const yes = a.names.some((n) => mentions(n, brief));
-                    return (
-                      <div className="fd-tr" key={a.question}>
-                        <span>{a.question}</span>
-                        <span className="fd-names">{a.names.map((n) => <i key={n} className={mentions(n, brief) ? "me" : ""}>{n}</i>)}</span>
-                        <span className={yes ? "fd-yes" : "fd-no"}>{yes ? "Named" : "Missing"}</span>
-                      </div>
-                    );
-                  })}
+        {tab === "brief" && (
+          <div className="fx-narrow">
+            {!brief ? (
+              <section className="fx-panel">
+                <div className="fx-panel-h"><h2>Tell Foundry what you're building</h2></div>
+                <p className="fx-sub">In your own words. Jargon is fine; Foundry plays it back plainly.</p>
+                <label className="fx-field">What are you building?<textarea rows={5} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="An app that reminds PG tenants to pay and collects rent on UPI…" /></label>
+                <div className="fx-two">
+                  <label className="fx-field">Any link<input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Website, GitHub or a doc" /></label>
+                  <label className="fx-field">A line about you<input value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Solo founder, 5 hours a week" /></label>
                 </div>
-              )}
-              {google && google.length > 0 && (
-                <div className="fd-google">
-                  <div className="aff-kicker">Google, page one</div>
-                  {google.map((g) => (
-                    <div className="fd-g" key={g.query}>
-                      <b>{g.query}</b>
-                      <span>{g.results.slice(0, 3).map((r) => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return r.title; } }).join(" · ")}</span>
-                      <em className={g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) ? "fd-yes" : "fd-no"}>{g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) ? "You're there" : "Not on page one"}</em>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {fixes && (
-                <div className="fd-fixes">
-                  <div className="aff-kicker">Fix list, sent to Content</div>
-                  {fixes.map((f) => <div className="fd-fix" key={f.question}><b>{f.where}</b><span>{f.what}</span><small>For: {f.question}</small></div>)}
-                </div>
-              )}
-            </section>
-
-            {/* 3. Content */}
-            <section className="fd-step">
-              <div className="fd-step-head"><span className="fd-n c">3</span><div><h2>Content: posts that fix it</h2><p>Public posts for everyone, in your voice. Approve copies the post and opens the platform.</p></div></div>
-              {busy.content && <div className="fd-busy">{busy.content}…</div>}
-              <div className="fd-ask">
-                <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Or: write a post about… (what you shipped today)" />
-                <button className="fd-ghost" disabled={!topic.trim() || !!busy.content} onClick={() => { void runContent(brief, fixes, topic.trim()); setTopic(""); }}>Write it</button>
-              </div>
-              <div className="fd-cards">
-                {postCards.map((c) => (
-                  <article className={`fd-card ${done[`post-${c.id}`] || ""}`} key={c.id}>
-                    <header><b>{c.label}</b>{done[`post-${c.id}`] && <span>{done[`post-${c.id}`]}</span>}</header>
-                    <p>{c.text}</p>
-                    <footer>
-                      <button className="fd-go sm" onClick={() => act(`post-${c.id}`, "approved", c.text, c.url)}>Approve</button>
-                      <button className="fd-ghost sm" onClick={() => act(`post-${c.id}`, "skipped")}>Skip</button>
-                    </footer>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            {/* 4. Outreach */}
-            <section className="fd-step">
-              <div className="fd-step-head"><span className="fd-n r">4</span><div><h2>Outreach: people asking today</h2><p>Reddit threads from the past year where people describe your problem, read one by one. One message each, to one person. Approve copies it and opens the thread.</p></div></div>
-              {busy.outreach && <div className="fd-busy">{busy.outreach}…</div>}
-              {leads && leads.length === 0 && !busy.outreach && <p className="fd-muted">Nobody found asking about this on Reddit. Try a broader brief.</p>}
-              <div className="fd-leads">
-                {(leads || []).map((l) => (
-                  <article className={`fd-lead ${done[`lead-${l.url}`] || ""}`} key={l.url}>
-                    <header>
-                      <span className="fd-intent" style={{ ["--p" as string]: `${l.intent}%` }}>{l.intent}</span>
-                      <div><a href={l.url} target="_blank" rel="noopener noreferrer">{l.title}</a><small>r/{l.community.replace(/^r\//, "")} · {l.why}</small></div>
-                    </header>
-                    <p>{l.message}</p>
-                    <footer>
-                      <button className="fd-go sm" onClick={() => act(`lead-${l.url}`, "approved", l.message, l.url)}>Approve</button>
-                      <button className="fd-ghost sm" onClick={() => act(`lead-${l.url}`, "skipped")}>Skip</button>
-                      {done[`lead-${l.url}`] && <span className="fd-state">{done[`lead-${l.url}`]}</span>}
-                    </footer>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
+                <button className="fx-btn pri lg" disabled={!desc.trim() || !!busy.brief} onClick={makeBrief}>{busy.brief ? `${busy.brief}…` : "Make my brief"}</button>
+              </section>
+            ) : (
+              <section className="fx-panel">
+                <div className="fx-label">{brief.product}</div>
+                <p className="fx-big">{brief.oneLine}</p>
+                <div className="fx-facts"><div><span>Buyer</span><p>{brief.buyer}</p></div><div><span>Their problem</span><p>{brief.problem}</p></div><div><span>Your voice</span><p>{brief.voice}</p></div></div>
+                {!confirmed ? (
+                  <div className="fx-confirm"><span>Does this match what you have in mind?</span><button className="fx-btn" onClick={() => setBrief(null)}>Edit</button><button className="fx-btn pri" onClick={() => { setTab("overview"); void confirmBrief(); }}>Yes, run Foundry</button></div>
+                ) : <div className="fx-confirm ok"><span>Confirmed. Foundry is running.</span><button className="fx-btn" onClick={() => setTab("overview")}>See overview</button></div>}
+              </section>
+            )}
+          </div>
         )}
-        <p className="fd-foot">Foundry never posts or sends on its own. Every post and message waits for you.</p>
-      </main>
-      <AffFooter />
+
+        {tab === "optics" && brief && (
+          <div className="fx-stack">
+            <section className="fx-panel">
+              <div className="fx-panel-h"><h2>AI answers</h2><span className="fx-pill o">AEO</span></div>
+              {answers ? (
+                <table className="fx-table"><thead><tr><th>Buyer question</th><th>Who the AI names</th><th>You</th></tr></thead><tbody>
+                  {answers.map((a) => { const yes = a.names.some((n) => mentions(n, brief)); return (
+                    <tr key={a.question}><td>{a.question}</td><td><div className="fx-names">{a.names.map((n) => <i key={n} className={mentions(n, brief) ? "me" : ""}>{n}</i>)}</div></td><td><span className={yes ? "fx-ok" : "fx-miss"}>{yes ? "Named" : "Missing"}</span></td></tr>
+                  ); })}
+                </tbody></table>
+              ) : <Empty text="Waiting for your brief." />}
+            </section>
+            <section className="fx-panel">
+              <div className="fx-panel-h"><h2>Google, page one</h2><span className="fx-pill o">SEO</span></div>
+              {google && google.length ? (
+                <table className="fx-table"><thead><tr><th>Search</th><th>Top results</th><th>You</th></tr></thead><tbody>
+                  {google.map((g) => { const yes = g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)); return (
+                    <tr key={g.query}><td>{g.query}</td><td className="fx-hosts">{g.results.slice(0, 3).map((r) => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return r.title; } }).join(" · ")}</td><td><span className={yes ? "fx-ok" : "fx-miss"}>{yes ? "On page one" : "Not there"}</span></td></tr>
+                  ); })}
+                </tbody></table>
+              ) : <Empty text="Google results appear here." />}
+            </section>
+            <section className="fx-panel">
+              <div className="fx-panel-h"><h2>Fix list</h2><button className="fx-link" onClick={() => setTab("content")}>Sent to Content →</button></div>
+              {fixes ? <div className="fx-fixes">{fixes.map((f) => <div key={f.question}><span className="fx-tag o">{f.where}</span><p>{f.what}</p><small>For: {f.question}</small></div>)}</div> : <Empty text="Fixes appear after the check." />}
+            </section>
+          </div>
+        )}
+
+        {tab === "content" && brief && (
+          <div className="fx-stack">
+            <div className="fx-ask"><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Write a post about… (something you shipped today)" /><button className="fx-btn pri" disabled={!topic.trim() || !!busy.content} onClick={() => { void runContent(brief, fixes, topic.trim()); setTopic(""); }}>Write it</button></div>
+            {posts ? <div className="fx-cards">{postCards.map((c) => <PostCard key={c.id} c={c} />)}</div> : <Empty text="Posts appear after the Optics check." />}
+          </div>
+        )}
+
+        {tab === "outreach" && brief && (
+          <div className="fx-stack">
+            {leads && leads.length ? <div className="fx-list">{leads.map((l) => <LeadCard key={l.url} l={l} />)}</div> : <Empty text={leads ? "Nobody found asking about this. Try a broader brief." : "People appear here."} />}
+          </div>
+        )}
+
+        {tab === "inbox" && (
+          <div className="fx-stack">
+            <p className="fx-sub">Every post and message waits here. Approve copies the text and opens the platform. Foundry never posts on its own.</p>
+            <div className="fx-list">
+              {postCards.map((c) => <PostCard key={c.id} c={c} />)}
+              {(leads || []).map((l) => <LeadCard key={l.url} l={l} />)}
+              {!posts && !leads && <Empty text="Nothing waiting yet." />}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
