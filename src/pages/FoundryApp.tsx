@@ -250,6 +250,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   const [line] = useState(() => READY[Math.floor(Math.random() * READY.length)]);
   const [step, setStep] = useState<number>(saved?.brief ? 3 : (!saved && seed) ? 1 : 0);
   const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [sure, setSure] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string>("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -302,7 +304,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     return "I am still working. Give me a moment.";
   };
   const onTranscript = useCallback((t: string) => turnRef.current(t), []);
-  const voice = useBrainoVoice({ onTranscript });
+  const voice = useBrainoVoice({ onTranscript, anonymous: true });
   useEffect(() => { if (!active && voice.active) voice.stop(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function editBrief() { setBrief(null); setStep(0); setDraft(desc); }
@@ -640,7 +642,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
         {voice.active && (
           <div className="fc-voice" role="dialog" aria-label="Voice mode">
             <div className={`fc-mascot big ${voice.status}`}><BrainoMascot variant="foundry" size={170} /></div>
-            <p className="fc-v-status">{voice.status === "listening" ? "Listening" : voice.status === "thinking" ? "Thinking" : voice.status === "speaking" ? "Speaking" : voice.status === "connecting" ? "Getting ready" : voice.status === "error" ? "Something went wrong" : "Here"}</p>
+            <p className="fc-v-status">{voice.status === "listening" ? "Listening" : voice.status === "thinking" ? "Thinking" : voice.status === "speaking" ? "Speaking" : voice.status === "connecting" ? "Getting ready" : voice.status === "error" ? (/not-allowed|denied/i.test(voice.error) ? "Allow the microphone to talk to me" : voice.error || "Something went wrong") : "Here"}</p>
             {voice.userText && <p className="fc-v-you">{voice.userText}</p>}
             {voice.brainoText && <p className="fc-v-him">{voice.brainoText}</p>}
             {voice.error && <p className="fc-v-err">{voice.error}</p>}
@@ -700,13 +702,14 @@ export default function FoundryApp() {
     setList((l) => [{ id, name: seed ? seed.slice(0, 40) : "New project", updated: Date.now(), named: -1, of: 0, postsOk: 0, leadsOk: 0, running: false }, ...l]);
     open(id); setDraft("");
   }
-  function rename(id: string) {
-    const cur = list.find((p) => p.id === id);
-    const name = window.prompt("Rename project", cur?.name || "");
-    if (name && name.trim()) setList((l) => l.map((p) => p.id === id ? { ...p, name: name.trim(), custom: true } as ProjectMeta : p));
+  // Rename happens in place in the sidebar, like Claude; Enter saves, Escape cancels.
+  function saveName() {
+    if (!editing) return;
+    const name = editing.name.trim();
+    if (name) setList((l) => l.map((p) => p.id === editing.id ? { ...p, name, custom: true } as ProjectMeta : p));
+    setEditing(null);
   }
   function remove(id: string) {
-    if (!window.confirm("Delete this project? Its chat, results and approvals go too.")) return;
     try { localStorage.removeItem(keyOf(id)); } catch (_) { /* fine */ }
     setList((l) => l.filter((p) => p.id !== id)); setOpened((o) => o.filter((x) => x !== id));
     if (active === id) setActive(null);
@@ -734,14 +737,27 @@ export default function FoundryApp() {
         <div className="fc-plist">
           {sorted.map((p) => (
             <div key={p.id} className={`fc-pitem${active === p.id ? " on" : ""}`}>
+              {editing?.id === p.id ? (
+                <input className="fc-pedit" autoFocus value={editing.name} onChange={(e) => setEditing({ id: p.id, name: e.target.value })} onBlur={saveName} onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditing(null); }} />
+              ) : (
               <button className="fc-pbtn" onClick={() => open(p.id)}>
                 <span>{p.running && <i className="fc-run" />}{p.name}</span><small>{ago(p.updated)}</small>
               </button>
-              <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setMenu(menu === p.id ? "" : p.id); }}>...</button>
+              )}
+              <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setSure(""); setMenu(menu === p.id ? "" : p.id); }}><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
               {menu === p.id && (
                 <div className="fc-menu" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => { setMenu(""); rename(p.id); }}>Rename</button>
-                  <button className="del" onClick={() => { setMenu(""); remove(p.id); }}>Delete</button>
+                  {sure === p.id ? (
+                    <>
+                      <p className="fc-menu-q">Delete this project? Its chat and results go too.</p>
+                      <div className="fc-menu-row"><button onClick={() => setSure("")}>Cancel</button><button className="del solid" onClick={() => { setMenu(""); setSure(""); remove(p.id); }}>Delete</button></div>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setMenu(""); setEditing({ id: p.id, name: p.name }); }}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg>Rename</button>
+                      <button className="del" onClick={() => setSure(p.id)}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>Delete</button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -769,23 +785,6 @@ export default function FoundryApp() {
                 <button type="submit" className="fc-send" aria-label="Start project" disabled={!draft.trim()}><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg></button>
               </form>
               <p className="fc-home-sub">Each product gets its own project: a chat, a scorecard, posts and people to reply to. You approve everything.</p>
-              {list.length > 0 && (
-                <>
-                  <div className="fc-home-h"><h2>Your projects</h2><span>{list.length}</span></div>
-                  <div className="fc-pgrid">
-                    {sorted.map((p) => (
-                      <button key={p.id} className="fc-pcard" onClick={() => open(p.id)}>
-                        <div className="fc-pcard-h"><b>{p.name}</b>{p.running ? <span className="fc-tagrun"><i className="fc-run" />Running</span> : <small>{ago(p.updated)}</small>}</div>
-                        <div className="fc-pstats">
-                          <div><span>Named by AI</span><b>{p.named >= 0 ? <>{p.named}<small>/{p.of}</small></> : "-"}</b>{p.named >= 0 && <i className="fc-pbar"><em style={{ width: `${p.of ? (p.named / p.of) * 100 : 0}%` }} /></i>}</div>
-                          <div><span>Posts approved</span><b>{p.postsOk}</b></div>
-                          <div><span>Replies approved</span><b>{p.leadsOk}</b></div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           </div>
         </main>

@@ -384,3 +384,17 @@
   .fc-top .fc-title { display: none; }
   .fc-tabs { margin-left: 0; }
 }
+
+/* Project menu, Claude style (2026-10-22): icon dots, icon rows, delete asks in place. */
+.fc-more { display: grid; place-items: center; }
+.fc-more svg { width: 16px; height: 16px; fill: currentColor; }
+.fc-menu { min-width: 190px; padding: 6px; border-radius: 14px; gap: 2px; }
+.fc-menu button { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; font-size: 14px; color: var(--a-ink); }
+.fc-menu button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.fc-menu-q { margin: 6px 8px 10px; font-size: 13px; line-height: 1.45; color: var(--a-ink-soft); }
+.fc-menu-row { display: flex; gap: 6px; justify-content: flex-end; }
+.fc-menu-row button { justify-content: center; flex: 1; border: 1px solid var(--a-line) !important; }
+.fc-menu .del.solid { background: #c0463c; color: #fff !important; border-color: #c0463c !important; }
+.fc-menu .del.solid:hover { background: #a83a31; }
+.fc-pedit { flex: 1; min-width: 0; margin: 2px 4px; padding: 7px 10px; border: 1px solid var(--a-ink-faint); border-radius: 8px; background: var(--a-box); color: var(--a-ink); font: inherit; font-size: 14px; outline: none; }
+.fc-pedit:focus { border-color: var(--a-ink); box-shadow: 0 0 0 3px rgba(var(--a-shade), .08); }

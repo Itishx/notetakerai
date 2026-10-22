@@ -49,9 +49,11 @@ type Options = {
   accessToken?: string;
   onTranscript: (text: string) => Promise<string>;
   onLog?: (scope: string, msg: string, data?: unknown) => void;
+  /* Pages with no sign-in (Braino Foundry): the voice function accepts the site key. */
+  anonymous?: boolean;
 };
 
-export function useBrainoVoice({ accessToken, onTranscript, onLog }: Options) {
+export function useBrainoVoice({ accessToken, onTranscript, onLog, anonymous = false }: Options) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [active, setActive] = useState(false);
   const [userText, setUserText] = useState("");
@@ -256,7 +258,7 @@ export function useBrainoVoice({ accessToken, onTranscript, onLog }: Options) {
   }, [log, stopFishSpeech]);
 
   const start = useCallback(() => {
-    if (!accessToken) {
+    if (!accessToken && !anonymous) {
       activeRef.current = true;
       setError("Sign in to talk to Braino.");
       setStatus("error");
@@ -273,7 +275,7 @@ export function useBrainoVoice({ accessToken, onTranscript, onLog }: Options) {
     setBrainoText("");
     setStatus("connecting");
     startListening();
-  }, [accessToken, startListening, stopFishSpeech]);
+  }, [accessToken, anonymous, startListening, stopFishSpeech]);
 
   const toggle = useCallback(() => {
     if (activeRef.current) stop();
