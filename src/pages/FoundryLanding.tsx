@@ -158,7 +158,7 @@ export default function FoundryLanding() {
           </div>
         </div>
         <figure className="aff-hero-shot" data-grow>
-          <img src="/braino-waitlist-forest.png" alt="A dark forest with one small tree lit up in a clearing." width={1956} height={804} loading="eager" decoding="async" />
+          <img src="/braino-waitlist-forest.jpg" alt="A dark forest with one small tree lit up in a clearing." width={1600} height={657} loading="eager" decoding="async" />
         </figure>
         <div className="aff-strip">
           <div className="aff-wrap aff-strip-in">
