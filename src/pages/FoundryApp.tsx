@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAffTheme } from "@/components/AffTheme";
 import { Link } from "react-router-dom";
+import { BrainoMascot } from "@/components/BrainoMascot";
+import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 import "./affective.css";
 import "./onboarding-flow.css";
 import "./foundry-app.css";
@@ -20,7 +22,13 @@ type Posts = { x: string; linkedin: string; reddit: { title: string; body: strin
 type RedditPost = { title: string; body: string; url: string; community: string; upVotes: number | null; comments: number | null; createdAt: string };
 type Lead = RedditPost & { intent: number; why: string; message: string };
 
-const STORE = "foundry-session-v1";
+const LEGACY = "foundry-session-v1";
+const GREETING = "Hi, I'm Braino Foundry. I help get what you're building seen. Three quick questions.";
+const READY = ["Ready when you are.", "What are we getting seen today?", "Tell me what you're building.", "Fresh page. Your move.", "I'm listening."];
+const LIST = "foundry-projects-v1";
+const keyOf = (id: string) => `foundry-project-${id}`;
+
+export type ProjectMeta = { id: string; name: string; updated: number; named: number; of: number; postsOk: number; leadsOk: number; running: boolean };
 
 async function ask(message: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke("chat-about-notes", {
@@ -74,7 +82,7 @@ const enc = encodeURIComponent;
 /* Pure pieces of the chat, kept outside the component so they never remount. */
 const Dots = () => <span className="ob-loop-dots" aria-hidden><i /><i /><i /></span>;
 const Bot = ({ children, wide }: { children: React.ReactNode; wide?: boolean }) => (
-  <div className={`fc-msg bot${wide ? " wide" : ""}`}><span className="fc-av" aria-hidden><i /></span><div className="fc-body">{children}</div></div>
+  <div className={`fc-msg bot${wide ? " wide" : ""}`}><span className="fc-av" aria-hidden><BrainoMascot variant="foundry" size={24} /></span><div className="fc-body">{children}</div></div>
 );
 const Me = ({ children }: { children: React.ReactNode }) => <div className="fc-msg me"><div className="fc-bubble">{children}</div></div>;
 const Wait = ({ text }: { text: string }) => <div className="fc-wait"><Dots /><span>{text}</span></div>;
@@ -93,11 +101,13 @@ const Ring = ({ n, of }: { n: number; of: number }) => {
 };
 
 
-export default function FoundryApp() {
-  const { theme, toggle } = useAffTheme();
-  const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (_) { return null; } }, []);
+type ProjectProps = { id: string; active: boolean; seed: string; theme: string; toggle: () => void; onMeta: (m: Partial<ProjectMeta> & { id: string }) => void; onHome: () => void };
 
-  const [desc, setDesc] = useState<string>(saved?.desc || "");
+function FoundryProject({ id, active, seed, theme, toggle, onMeta, onHome }: ProjectProps) {
+  const STORE = keyOf(id);
+  const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (_) { return null; } }, [STORE]);
+
+  const [desc, setDesc] = useState<string>(saved?.desc || seed || "");
   const [link, setLink] = useState<string>(saved?.link || "");
   const [about, setAbout] = useState<string>(saved?.about || "");
   const [brief, setBrief] = useState<Brief | null>(saved?.brief || null);
@@ -110,11 +120,12 @@ export default function FoundryApp() {
   const [done, setDone] = useState<Record<string, "approved" | "skipped">>(saved?.done || {});
   const [busy, setBusy] = useState<Record<string, string>>({});
   const [err, setErr] = useState<string>("");
+  const [started, setStarted] = useState<boolean>(saved?.started ?? !!(saved?.brief || saved?.desc || seed));
+  const [hello, setHello] = useState<string>(saved?.hello || "");
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done })); } catch (_) { /* private window */ }
-  }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done]);
-  useEffect(() => { document.title = "Braino Foundry · Get found"; }, []);
+    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello })); } catch (_) { /* private window */ }
+  }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello]);
 
   const setB = (k: string, v: string) => setBusy((b) => { const n = { ...b }; if (v) n[k] = v; else delete n[k]; return n; });
   const fail = (e: unknown) => setErr(String((e as Error)?.message || e));
@@ -236,7 +247,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   ];
   const values: Record<string, string> = { desc, link, about };
   const setters: Record<string, (v: string) => void> = { desc: setDesc, link: setLink, about: setAbout };
-  const [step, setStep] = useState<number>(saved?.brief ? 3 : 0);
+  const [line] = useState(() => READY[Math.floor(Math.random() * READY.length)]);
+  const [step, setStep] = useState<number>(saved?.brief ? 3 : (!saved && seed) ? 1 : 0);
   const [draft, setDraft] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string>("");
@@ -244,6 +256,14 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const working = Object.values(busy)[0] || "";
+  const [view, setView] = useState<"chat" | "overview" | "approvals">("chat");
+  const pendingCount = postCards.filter((c) => !done[`post-${c.id}`]).length + (leads || []).filter((l) => !done[`lead-${l.url}`]).length;
+  const postsOk = postCards.filter((c) => done[`post-${c.id}`] === "approved").length;
+  const leadsOk = (leads || []).filter((l) => done[`lead-${l.url}`] === "approved").length;
+  useEffect(() => {
+    onMeta({ id, name: brief?.product || (desc ? desc.slice(0, 40) : "New project"), named: answers ? namedCount : -1, of: answers ? answers.length : 0, postsOk, leadsOk, running: !!working });
+  }, [brief, desc, answers, namedCount, postsOk, leadsOk, working]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (active) document.title = `${brief?.product || "New project"} · Braino Foundry`; }, [active, brief]);
   const asking = !brief && step < 3;
   const q = asking ? QUESTIONS[step] : null;
 
@@ -259,11 +279,33 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     setStep((s) => s + 1);
   }
   function send() {
+    if (!started) { if (!draft.trim()) return; setHello(draft.trim()); setStarted(true); setDraft(""); return; }
     if (asking) return answer(draft);
     if (confirmed && brief && draft.trim() && !busy.content) { void runContent(brief, fixes, draft.trim()); setDraft(""); }
   }
+  /* Voice: speech lands in the same flow as typed text, and he answers out
+     loud. Uses the /chat voice hook (browser speech in, Fish voice out). */
+  const turnRef = useRef<(t: string) => Promise<string>>(async () => "");
+  turnRef.current = async (text: string) => {
+    const t = text.trim();
+    if (!started) { setHello(t); setStarted(true); return `${GREETING} ${QUESTIONS[0].ask}`; }
+    if (asking && q) {
+      const skip = q.optional && /^(skip|no|nothing|none|not yet|nope)\b/i.test(t);
+      answer(skip ? "" : t);
+      return QUESTIONS[step + 1] ? QUESTIONS[step + 1].ask : "Thanks. Give me a moment to write your brief.";
+    }
+    if (brief && !confirmed) {
+      if (/\b(yes|yeah|yep|run|go|correct|right|looks good)\b/i.test(t)) { void confirmBrief(); return "Running it now. Everything shows up here, and nothing goes out until you say yes."; }
+      return `Here is what I heard. ${brief.oneLine} Say yes to run it, or tap Edit to change it.`;
+    }
+    if (brief && confirmed && !busy.content) { void runContent(brief, fixes, t); return "Writing that post now. It will wait for your approval."; }
+    return "I am still working. Give me a moment.";
+  };
+  const onTranscript = useCallback((t: string) => turnRef.current(t), []);
+  const voice = useBrainoVoice({ onTranscript });
+  useEffect(() => { if (!active && voice.active) voice.stop(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function editBrief() { setBrief(null); setStep(0); setDraft(desc); }
-  function newSession() { reset(); setStep(0); setDraft(""); setEdits({}); setEditing(""); }
 
   /* ── Small pieces ── */
   // The run as a timeline: what is done, what is live, what is next.
@@ -362,50 +404,93 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     );
   };
 
-  const placeholder = q ? q.ph : !brief ? "Reading what you wrote" : !confirmed ? "Check the brief above first" : "Ask for a post about something you shipped today";
+  const placeholder = !started ? "Say hi whenever you're ready" : q ? q.ph : !brief ? "Reading what you wrote" : !confirmed ? "Check the brief above first" : "Ask for a post about something you shipped today";
   const maxRival = Math.max(namedCount, ...rivals.map((r) => r[1]), 1);
+  const opticsBlock = answers && brief ? (
+                      <>
+                        <p>I asked AI the {answers.length} questions your buyers ask. You were named in <b>{namedCount}</b>.{rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}{google ? <> On Google you are on page one for <b>{googleHits}</b> of {google.length}.</> : null}</p>
+                        <div className="fc-card fc-viz">
+                          <div className="fc-viz-l">
+                            <Ring n={namedCount} of={answers.length} />
+                            <p className="fc-mini">AI answers naming you</p>
+                            {google && <p className="fc-sub">Google page one: <b>{googleHits} of {google.length}</b></p>}
+                          </div>
+                          <div className="fc-viz-r">
+                            <p className="fc-mini">Mentions across {answers.length} answers</p>
+                            <div className="fc-bars">
+                              <div className="fc-bar me"><span>You</span><i><em style={{ width: `${(namedCount / maxRival) * 100}%` }} /></i><b>{namedCount}</b></div>
+                              {rivals.map(([n, c]) => <div className="fc-bar" key={n}><span title={n}>{n}</span><i><em style={{ width: `${(c / maxRival) * 100}%` }} /></i><b>{c}</b></div>)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="fc-card fc-heat">
+                          <div className="fc-heat-h"><p className="fc-mini">Question by question</p><div className="fc-key"><span><i className="y" />Named</span><span><i className="n" />Missing</span><span><i className="x" />Not checked</span></div></div>
+                          <div className="fc-grid">
+                            <span className="h q">Buyer question</span><span className="h">AI</span><span className="h">Google</span>
+                            {answers.map((a, i) => {
+                              const yes = a.names.some((n) => mentions(n, brief));
+                              const g = google?.find((x) => x.query === a.question) || (i < 3 ? google?.[i] : undefined);
+                              const gy = g ? g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) : null;
+                              return (
+                                <div className="fc-grid-row" key={a.question}>
+                                  <span className="q" title={`AI named: ${a.names.join(", ")}${g ? `\nGoogle top: ${g.results.slice(0, 3).map((r) => host(r.url, r.title)).join(", ")}` : ""}`}>{a.question}</span>
+                                  <span className={`cell ${yes ? "y" : "n"}`} aria-label={yes ? "Named" : "Missing"} />
+                                  <span className={`cell ${gy == null ? "x" : gy ? "y" : "n"}`} aria-label={gy == null ? "Not checked" : gy ? "Named" : "Missing"} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {fixes && (
+                          <>
+                            <p>Here is what to publish, and where, so they start naming you.</p>
+                            <ol className="fc-fixes">{fixes.map((f) => <li key={f.question}><span className="fc-where">{f.where}</span><p>{f.what}</p><small>For "{f.question}"</small></li>)}</ol>
+                          </>
+                        )}
+                      </>
+  ) : null;
 
   return (
-    <div className="aff fc" data-theme={theme}>
-      <aside className="fc-rail">
-        <Link to="/foundry" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
-        <div className="fc-prod">Braino Foundry</div>
-        <button className="fc-new" onClick={newSession}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>New session</button>
-        <div className="fc-rail-label">Sessions</div>
-        <div className="fc-past on">{brief ? brief.product : "New session"}</div>
-        <div className="fc-rail-foot">
-          <div className="fc-legend"><span><i className="o" />Optics</span><span><i className="c" />Content</span><span><i className="r" />Outreach</span></div>
-          <p>Nothing goes out without your approval.</p>
-          <button className="fc-theme" onClick={toggle}>{theme === "dark" ? "Light mode" : "Dark mode"}</button>
-        </div>
-      </aside>
-
-      <main className="fc-main">
+    <>
+      <main className="fc-main" hidden={!active}>
         <header className="fc-top">
-          <Link to="/foundry" className="fc-brand fc-only-m"><img src="/affective-logo.png" alt="Affective" /></Link>
-          <span className="fc-title">{brief ? brief.product : "Braino Foundry"}</span>
+          <button className="fc-icon fc-only-m" onClick={onHome} aria-label="All projects"><svg className="fc-ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></button>
+          <span className="fc-title">{brief ? brief.product : "New project"}</span>
+          <div className="fc-tabs" role="tablist">
+            <button role="tab" aria-selected={view === "chat"} className={view === "chat" ? "on" : ""} onClick={() => setView("chat")}>Chat</button>
+            <button role="tab" aria-selected={view === "overview"} className={view === "overview" ? "on" : ""} onClick={() => setView("overview")}>Overview</button>
+            <button role="tab" aria-selected={view === "approvals"} className={view === "approvals" ? "on" : ""} onClick={() => setView("approvals")}>Approvals{pendingCount > 0 ? <em>{pendingCount}</em> : null}</button>
+          </div>
           <div className="fc-top-r">
             {working && <span className="fc-live"><i />{working}</span>}
             <button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
-            <button className="fc-icon fc-only-m" onClick={newSession} aria-label="New session">+</button>
           </div>
         </header>
 
+        {view === "chat" ? (<>
         <div className="fc-scroll">
           <div className="fc-col">
-            <Bot>
-              <p className="fc-hello">Hi, I am Braino Foundry. I help people find what you are building.</p>
-              <p>Three quick questions. Then I check where you are invisible, write posts that fix it, and find people asking for it today. You approve every single thing before it goes anywhere.</p>
-            </Bot>
+            {!started && !brief ? (
+              <div className="fc-ready">
+                <div className="fc-mascot"><BrainoMascot variant="foundry" size={120} /></div>
+                <p className="fc-ready-line">{line}</p>
+                <p className="fc-ready-sub">Type below, or tap the mic and talk.</p>
+              </div>
+            ) : (
+              <>
+                {hello && <Me>{hello}</Me>}
+                <Bot><p className="fc-hello">{GREETING}</p></Bot>
+              </>
+            )}
 
-            {QUESTIONS.map((qq, i) => (i < step || brief) ? (
+            {started && QUESTIONS.map((qq, i) => (i < step || brief) ? (
               <div key={qq.key} className="fc-pair">
                 <Bot><p className="fc-q">{qq.ask}</p></Bot>
                 <Me>{values[qq.key] || <em>Skipped</em>}</Me>
               </div>
             ) : null)}
 
-            {q && (
+            {started && q && (
               <Bot>
                 <div className="ob-step fc-ask" key={q.key}>
                   <p className="ob-eyebrow">{q.eyebrow}</p>
@@ -457,49 +542,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                 {(answers || busy.optics) && (
                   <Bot wide>
                     <Engine k="o" name="Optics" sub="Where you are invisible" />
-                    {answers ? (
-                      <>
-                        <p>I asked AI the {answers.length} questions your buyers ask. You were named in <b>{namedCount}</b>.{rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}{google ? <> On Google you are on page one for <b>{googleHits}</b> of {google.length}.</> : null}</p>
-                        <div className="fc-card fc-viz">
-                          <div className="fc-viz-l">
-                            <Ring n={namedCount} of={answers.length} />
-                            <p className="fc-mini">AI answers naming you</p>
-                            {google && <p className="fc-sub">Google page one: <b>{googleHits} of {google.length}</b></p>}
-                          </div>
-                          <div className="fc-viz-r">
-                            <p className="fc-mini">Mentions across {answers.length} answers</p>
-                            <div className="fc-bars">
-                              <div className="fc-bar me"><span>You</span><i><em style={{ width: `${(namedCount / maxRival) * 100}%` }} /></i><b>{namedCount}</b></div>
-                              {rivals.map(([n, c]) => <div className="fc-bar" key={n}><span title={n}>{n}</span><i><em style={{ width: `${(c / maxRival) * 100}%` }} /></i><b>{c}</b></div>)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="fc-card fc-heat">
-                          <div className="fc-heat-h"><p className="fc-mini">Question by question</p><div className="fc-key"><span><i className="y" />Named</span><span><i className="n" />Missing</span><span><i className="x" />Not checked</span></div></div>
-                          <div className="fc-grid">
-                            <span className="h q">Buyer question</span><span className="h">AI</span><span className="h">Google</span>
-                            {answers.map((a, i) => {
-                              const yes = a.names.some((n) => mentions(n, brief));
-                              const g = google?.find((x) => x.query === a.question) || (i < 3 ? google?.[i] : undefined);
-                              const gy = g ? g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) : null;
-                              return (
-                                <div className="fc-grid-row" key={a.question}>
-                                  <span className="q" title={`AI named: ${a.names.join(", ")}${g ? `\nGoogle top: ${g.results.slice(0, 3).map((r) => host(r.url, r.title)).join(", ")}` : ""}`}>{a.question}</span>
-                                  <span className={`cell ${yes ? "y" : "n"}`} aria-label={yes ? "Named" : "Missing"} />
-                                  <span className={`cell ${gy == null ? "x" : gy ? "y" : "n"}`} aria-label={gy == null ? "Not checked" : gy ? "Named" : "Missing"} />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        {fixes && (
-                          <>
-                            <p>Here is what to publish, and where, so they start naming you.</p>
-                            <ol className="fc-fixes">{fixes.map((f) => <li key={f.question}><span className="fc-where">{f.where}</span><p>{f.what}</p><small>For "{f.question}"</small></li>)}</ol>
-                          </>
-                        )}
-                      </>
-                    ) : null}
+                    {answers ? opticsBlock : null}
                     {busy.optics && <Wait text={busy.optics} />}
                   </Bot>
                 )}
@@ -537,18 +580,219 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
               ref={inputRef}
               rows={1}
               value={draft}
-              disabled={!asking && !confirmed}
+              disabled={started && !asking && !confirmed}
               placeholder={placeholder}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             />
-            <button type="submit" className="fc-send" aria-label="Send" disabled={asking ? !draft.trim() : (!confirmed || !draft.trim() || !!busy.content)}>
+            <button type="button" className={`fc-mic${voice.active ? " on" : ""}`} aria-label="Talk to Braino" onClick={() => voice.toggle()}>
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            </button>
+            <button type="submit" className="fc-send" aria-label="Send" disabled={!started || asking ? !draft.trim() : (!confirmed || !draft.trim() || !!busy.content)}>
               <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
             </button>
           </form>
           <p className="fc-fine">Braino Foundry never posts on its own. You approve everything.</p>
         </div>
+        </>) : (
+        <div className="fc-scroll">
+          <div className="fc-col fc-ov">
+            {view === "approvals" && confirmed && brief ? (
+              <>
+                <div className="fc-ov-h"><p className="ob-eyebrow">Approvals</p><h1>{pendingCount ? `${pendingCount} waiting for your yes.` : "All caught up."}</h1><p className="fc-note">Approve copies the text and opens the platform. Braino Foundry never posts on its own.</p></div>
+                <section className="fc-sec"><Engine k="c" name="Posts" sub="Content" />
+                  {posts ? <div className="fc-list">{[...postCards].sort((a, z) => Number(!!done[`post-${a.id}`]) - Number(!!done[`post-${z.id}`])).map((c) => <div key={c.id}>{PostCard({ c })}</div>)}</div> : <Wait text={busy.content || "Posts land here after Optics"} />}
+                </section>
+                <section className="fc-sec"><Engine k="r" name="Replies" sub="Outreach" />
+                  {leads ? (leads.length ? <div className="fc-list">{[...leads].sort((a, z) => Number(!!done[`lead-${a.url}`]) - Number(!!done[`lead-${z.url}`])).map((l) => <div key={l.url}>{LeadCard({ l })}</div>)}</div> : <p className="fc-note">Nobody found asking about this today.</p>) : <Wait text={busy.outreach || "Waiting"} />}
+                </section>
+              </>
+            ) : !confirmed || !brief ? (
+              <div className="fc-empty">
+                <p className="fc-big">Nothing to show yet.</p>
+                <p>Answer three quick questions in Chat and confirm your brief. Your scorecard, posts and people show up here.</p>
+                <button className="ob-btn" onClick={() => setView("chat")}>Go to chat</button>
+              </div>
+            ) : (
+              <>
+                <div className="fc-ov-h">
+                  <p className="ob-eyebrow">{brief.product}</p>
+                  <h1>{brief.oneLine}</h1>
+                </div>
+                <div className="fc-kpi-row">
+                  <div><span>AI answers naming you</span><b>{answers ? <>{namedCount}<small> of {answers.length}</small></> : "..."}</b></div>
+                  <div><span>Google page one</span><b>{google ? <>{googleHits}<small> of {google.length}</small></> : "..."}</b></div>
+                  <div><span>Posts approved</span><b>{postsOk}<small> of {postCards.length || 5}</small></b></div>
+                  <div><span>Replies approved</span><b>{leadsOk}<small> of {leads ? leads.length : "..."}</small></b></div>
+                </div>
+                {working && <Wait text={working} />}
+                <section className="fc-sec"><Engine k="o" name="Optics" sub="Where you are invisible" />{opticsBlock || <Wait text={busy.optics || "Waiting"} />}</section>
+                <section className="fc-sec fc-next">
+                  <div><Engine k="c" name="Content" sub={posts ? `${postCards.length} posts written` : "Posts that fix it"} /><Engine k="r" name="Outreach" sub={leads ? `${leads.length} people asking` : "People asking today"} /></div>
+                  <p>{pendingCount ? <><b>{pendingCount}</b> {pendingCount === 1 ? "thing is" : "things are"} waiting for your yes.</> : posts || leads ? "Nothing waiting. You are all caught up." : busy.content || busy.outreach || "Posts and people land in Approvals."}</p>
+                  <button className="ob-btn is-coral" onClick={() => setView("approvals")}>Open Approvals</button>
+                </section>
+              </>
+            )}
+          </div>
+        </div>
+        )}
+        {voice.active && (
+          <div className="fc-voice" role="dialog" aria-label="Voice mode">
+            <div className={`fc-mascot big ${voice.status}`}><BrainoMascot variant="foundry" size={170} /></div>
+            <p className="fc-v-status">{voice.status === "listening" ? "Listening" : voice.status === "thinking" ? "Thinking" : voice.status === "speaking" ? "Speaking" : voice.status === "connecting" ? "Getting ready" : voice.status === "error" ? "Something went wrong" : "Here"}</p>
+            {voice.userText && <p className="fc-v-you">{voice.userText}</p>}
+            {voice.brainoText && <p className="fc-v-him">{voice.brainoText}</p>}
+            {voice.error && <p className="fc-v-err">{voice.error}</p>}
+            <button className="ob-btn" onClick={() => voice.stop()}>End voice</button>
+          </div>
+        )}
       </main>
+    </>
+  );
+}
+
+/* ── Projects ────────────────────────────────────────────────────────────
+   Each project is one product with its own chat, results and approvals, saved
+   under its own key. Opened projects stay mounted, so a run keeps going while
+   you look at another one. */
+const newId = () => Math.random().toString(36).slice(2, 10);
+function loadList(): ProjectMeta[] {
+  try {
+    const l = JSON.parse(localStorage.getItem(LIST) || "null");
+    if (Array.isArray(l)) return l;
+    const old = localStorage.getItem(LEGACY);
+    if (old) {
+      const id = newId();
+      const o = JSON.parse(old);
+      localStorage.setItem(keyOf(id), old);
+      const first: ProjectMeta = { id, name: o?.brief?.product || "My first project", updated: Date.now(), named: -1, of: 0, postsOk: 0, leadsOk: 0, running: false };
+      localStorage.setItem(LIST, JSON.stringify([first]));
+      return [first];
+    }
+  } catch (_) { /* private window */ }
+  return [];
+}
+const ago = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return "Just now"; if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60); if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24); return d === 1 ? "Yesterday" : `${d} days ago`;
+};
+
+export default function FoundryApp() {
+  const { theme, toggle } = useAffTheme();
+  const [list, setList] = useState<ProjectMeta[]>(loadList);
+  const [active, setActive] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string[]>([]);
+  const [seeds, setSeeds] = useState<Record<string, string>>({});
+  const [menu, setMenu] = useState<string>("");
+  const [draft, setDraft] = useState("");
+
+  useEffect(() => { try { localStorage.setItem(LIST, JSON.stringify(list)); } catch (_) { /* private window */ } }, [list]);
+  useEffect(() => { if (!active) document.title = "Braino Foundry"; }, [active]);
+  useEffect(() => { const close = () => setMenu(""); window.addEventListener("click", close); return () => window.removeEventListener("click", close); }, []);
+
+  function open(id: string) { setActive(id); setOpened((o) => o.includes(id) ? o : [...o, id]); }
+  function create(seed = "") {
+    const id = newId();
+    setSeeds((s) => ({ ...s, [id]: seed }));
+    setList((l) => [{ id, name: seed ? seed.slice(0, 40) : "New project", updated: Date.now(), named: -1, of: 0, postsOk: 0, leadsOk: 0, running: false }, ...l]);
+    open(id); setDraft("");
+  }
+  function rename(id: string) {
+    const cur = list.find((p) => p.id === id);
+    const name = window.prompt("Rename project", cur?.name || "");
+    if (name && name.trim()) setList((l) => l.map((p) => p.id === id ? { ...p, name: name.trim(), custom: true } as ProjectMeta : p));
+  }
+  function remove(id: string) {
+    if (!window.confirm("Delete this project? Its chat, results and approvals go too.")) return;
+    try { localStorage.removeItem(keyOf(id)); } catch (_) { /* fine */ }
+    setList((l) => l.filter((p) => p.id !== id)); setOpened((o) => o.filter((x) => x !== id));
+    if (active === id) setActive(null);
+  }
+  const onMeta = useCallback((m: Partial<ProjectMeta> & { id: string }) => {
+    setList((l) => l.map((p) => {
+      if (p.id !== m.id) return p;
+      const custom = (p as ProjectMeta & { custom?: boolean }).custom;
+      const changed = m.named !== p.named || m.postsOk !== p.postsOk || m.leadsOk !== p.leadsOk || (!custom && m.name !== p.name) || m.running !== p.running;
+      return changed ? { ...p, ...m, name: custom ? p.name : (m.name || p.name), updated: Date.now() } : p;
+    }));
+  }, []);
+
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const sorted = [...list].sort((a, z) => z.updated - a.updated);
+
+  return (
+    <div className="aff fc" data-theme={theme}>
+      <aside className="fc-rail">
+        <Link to="/foundry" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
+        <button className="fc-prod" onClick={() => setActive(null)}>Braino Foundry</button>
+        <button className="fc-new" onClick={() => create()}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>New project</button>
+        <div className="fc-rail-label">Projects</div>
+        <div className="fc-plist">
+          {sorted.map((p) => (
+            <div key={p.id} className={`fc-pitem${active === p.id ? " on" : ""}`}>
+              <button className="fc-pbtn" onClick={() => open(p.id)}>
+                <span>{p.running && <i className="fc-run" />}{p.name}</span><small>{ago(p.updated)}</small>
+              </button>
+              <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setMenu(menu === p.id ? "" : p.id); }}>...</button>
+              {menu === p.id && (
+                <div className="fc-menu" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => { setMenu(""); rename(p.id); }}>Rename</button>
+                  <button className="del" onClick={() => { setMenu(""); remove(p.id); }}>Delete</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {!list.length && <p className="fc-none">No projects yet.</p>}
+        </div>
+        <div className="fc-rail-foot">
+          <button className="fc-theme" onClick={toggle}>{theme === "dark" ? "Light mode" : "Dark mode"}</button>
+        </div>
+      </aside>
+
+      {!active && (
+        <main className="fc-main">
+          <header className="fc-top fc-top-home">
+            <Link to="/foundry" className="fc-brand fc-only-m"><img src="/affective-logo.png" alt="Affective" /></Link>
+            <span className="fc-title">Braino Foundry</span>
+            <div className="fc-top-r"><button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button></div>
+          </header>
+          <div className="fc-scroll">
+            <div className="fc-home">
+              <div className="fc-mascot home"><BrainoMascot variant="foundry" size={92} /></div>
+              <h1 className="fc-greet">{greet}. What are you building?</h1>
+              <form className="fc-composer big" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) create(draft.trim()); }}>
+                <textarea rows={2} value={draft} placeholder="Describe it in your own words. Jargon is fine." onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (draft.trim()) create(draft.trim()); } }} />
+                <button type="submit" className="fc-send" aria-label="Start project" disabled={!draft.trim()}><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg></button>
+              </form>
+              <p className="fc-home-sub">Each product gets its own project: a chat, a scorecard, posts and people to reply to. You approve everything.</p>
+              {list.length > 0 && (
+                <>
+                  <div className="fc-home-h"><h2>Your projects</h2><span>{list.length}</span></div>
+                  <div className="fc-pgrid">
+                    {sorted.map((p) => (
+                      <button key={p.id} className="fc-pcard" onClick={() => open(p.id)}>
+                        <div className="fc-pcard-h"><b>{p.name}</b>{p.running ? <span className="fc-tagrun"><i className="fc-run" />Running</span> : <small>{ago(p.updated)}</small>}</div>
+                        <div className="fc-pstats">
+                          <div><span>Named by AI</span><b>{p.named >= 0 ? <>{p.named}<small>/{p.of}</small></> : "-"}</b>{p.named >= 0 && <i className="fc-pbar"><em style={{ width: `${p.of ? (p.named / p.of) * 100 : 0}%` }} /></i>}</div>
+                          <div><span>Posts approved</span><b>{p.postsOk}</b></div>
+                          <div><span>Replies approved</span><b>{p.leadsOk}</b></div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </main>
+      )}
+      {opened.filter((id) => list.some((p) => p.id === id)).map((id) => (
+        <FoundryProject key={id} id={id} active={active === id} seed={seeds[id] || ""} theme={theme} toggle={toggle} onMeta={onMeta} onHome={() => setActive(null)} />
+      ))}
     </div>
   );
 }

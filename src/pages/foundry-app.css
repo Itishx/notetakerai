@@ -265,3 +265,122 @@
 .fc .ob-btn.is-outline { color: var(--a-ink); background: transparent; }
 .fc .ob-btn:not(.is-coral):not(.is-outline) { background: var(--a-ink); color: var(--a-bg); }
 @media (max-width: 640px) { .fc .fc-sum div { align-items: flex-start; } .fc .fc-sum b { text-align: left; } }
+
+/* ── Projects ── */
+.fc-main[hidden] { display: none !important; }
+.fc button.fc-prod { border: 0; background: none; cursor: pointer; text-align: left; font-family: var(--a-display); font-size: 19px; }
+.fc-ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fc-navi { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 14px !important; text-align: left; }
+.fc-navi svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.fc-navi:hover, .fc-navi.on { background: rgba(var(--a-shade), .06); }
+.fc[data-theme="dark"] .fc-navi:hover, .fc[data-theme="dark"] .fc-navi.on, .fc[data-theme="dark"] .fc-pitem.on, .fc[data-theme="dark"] .fc-pitem:hover { background: rgba(255,255,255,.07); }
+.fc-plist { display: grid; gap: 2px; overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.fc-pitem { position: relative; display: flex; align-items: center; border-radius: 8px; }
+.fc-pitem:hover, .fc-pitem.on { background: rgba(var(--a-shade), .06); }
+.fc-pbtn { flex: 1; min-width: 0; display: grid; gap: 1px; padding: 7px 10px; border: 0; background: none; cursor: pointer; text-align: left; }
+.fc-pbtn span { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 7px; }
+.fc-pbtn small { font-size: 11.5px; color: var(--a-ink-faint); }
+.fc-more { flex: none; width: 28px; height: 28px; margin-right: 4px; border: 0; border-radius: 6px; background: none; cursor: pointer; color: var(--a-ink-faint) !important; letter-spacing: 1px; opacity: 0; }
+.fc-pitem:hover .fc-more, .fc-pitem.on .fc-more { opacity: 1; }
+.fc-menu { position: absolute; right: 4px; top: 34px; z-index: 30; display: grid; min-width: 130px; padding: 4px; border: 1px solid var(--a-line); border-radius: 10px; background: var(--a-box); box-shadow: 0 12px 30px -8px rgba(var(--a-shade), .25); }
+.fc-menu button { padding: 8px 10px; border: 0; border-radius: 6px; background: none; cursor: pointer; text-align: left; font-size: 13.5px; }
+.fc-menu button:hover { background: rgba(var(--a-shade), .06); }
+.fc-menu .del { color: #c0463c !important; }
+.fc-none { margin: 4px 10px; font-size: 13px; color: var(--a-ink-faint); }
+.fc-run { flex: none; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c); animation: fc-pulse 1.4s ease-in-out infinite; }
+
+.fc-tabs { display: flex; gap: 2px; padding: 3px; margin-left: 10px; border-radius: 10px; background: rgba(var(--a-shade), .06); flex: none; }
+.fc[data-theme="dark"] .fc-tabs { background: rgba(255,255,255,.07); }
+.fc-tabs button { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border: 0; border-radius: 7px; background: none; cursor: pointer; font-size: 13px !important; font-weight: 550; color: var(--a-ink-soft) !important; }
+.fc-tabs button.on { background: var(--a-box); color: var(--a-ink) !important; box-shadow: 0 1px 3px rgba(var(--a-shade), .12); }
+.fc-tabs em { font-style: normal; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: var(--c); color: #fff; font-size: 10.5px; display: grid; place-items: center; }
+
+/* Home */
+.fc-home { width: min(780px, calc(100% - 40px)); margin: 0 auto; padding: clamp(48px, 12vh, 120px) 0 60px; }
+.fc-greet { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 28px; font-family: var(--a-display); font-weight: 400; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.02em; text-align: center; }
+.fc-av.big { width: 34px; height: 34px; border-radius: 10px; margin: 0; }
+.fc-composer.big { padding: 16px 12px 12px 20px; border-radius: 22px; }
+.fc-composer.big textarea { min-height: 56px; }
+.fc-home-sub { margin: 14px 0 0; text-align: center; font-size: 13.5px; color: var(--a-ink-faint); }
+.fc-home-h { display: flex; align-items: baseline; gap: 10px; margin: 56px 0 14px; }
+.fc-home-h h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.fc-home-h span { font-size: 13px; color: var(--a-ink-faint); }
+.fc-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.fc-pcard { display: grid; gap: 16px; padding: 16px 18px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); cursor: pointer; text-align: left; transition: border-color .15s, transform .2s; }
+.fc-pcard:hover { border-color: var(--a-line-strong); transform: translateY(-1px); }
+.fc-pcard-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-width: 0; }
+.fc-pcard-h b { font-family: var(--a-display); font-size: 18px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-pcard-h small { flex: none; font-size: 12px; color: var(--a-ink-faint); }
+.fc-tagrun { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--c); }
+.fc-pstats { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+.fc-pstats > div { display: grid; gap: 3px; align-content: start; }
+.fc-pstats span { font-size: 11px; color: var(--a-ink-faint); }
+.fc-pstats b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fc-pstats b small { font-size: 12px; color: var(--a-ink-faint); font-weight: 500; }
+.fc-pbar { height: 4px; border-radius: 2px; background: rgba(var(--a-shade), .08); overflow: hidden; }
+.fc-pbar em { display: block; height: 100%; background: var(--o); }
+
+/* Project overview */
+.fc-ov { gap: 32px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+.fc-ov-h .ob-eyebrow { margin: 0 0 8px; font-size: 11px; }
+.fc-ov-h h1 { margin: 0; font-family: var(--a-display); font-weight: 400; font-size: clamp(22px, 2.6vw, 28px); line-height: 1.3; letter-spacing: -.01em; }
+.fc-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); }
+.fc-kpi-row > div { display: grid; gap: 6px; padding: 16px 18px; border-left: 1px solid var(--a-line); }
+.fc-kpi-row > div:first-child { border-left: 0; }
+.fc-kpi-row span { font-size: 12px; color: var(--a-ink-faint); }
+.fc-kpi-row b { font-family: var(--a-display); font-size: 30px; font-weight: 400; }
+.fc-kpi-row b small { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--a-ink-faint); }
+.fc-sec { font-size: 15px; line-height: 1.55; }
+.fc-sec > p { margin: 0 0 10px; }
+.fc-empty { padding: 60px 0; text-align: center; display: grid; justify-items: center; gap: 4px; }
+.fc-empty p { margin: 0; color: var(--a-ink-soft); max-width: 420px; }
+.fc-empty .fc-big { color: var(--a-ink); }
+.fc-empty .ob-btn { margin-top: 18px; padding: 11px 22px; font-size: 14px; }
+
+@media (max-width: 640px) {
+  .fc-tabs { margin-left: auto; }
+  .fc-top .fc-title { flex: 1; }
+  .fc-top-r { margin-left: 0; }
+  .fc-top-home .fc-top-r { margin-left: auto; }
+  .fc-home { width: calc(100% - 28px); padding-top: 40px; }
+  .fc-greet { font-size: 26px; flex-direction: column; gap: 10px; }
+  .fc-pgrid { grid-template-columns: 1fr; }
+  .fc-kpi-row { grid-template-columns: 1fr 1fr; }
+  .fc-kpi-row > div:nth-child(3) { border-left: 0; }
+  .fc-kpi-row > div:nth-child(n+3) { border-top: 1px solid var(--a-line); }
+}
+
+/* ── Braino himself ── */
+.fc-av { background: none !important; width: 26px; height: 30px; margin-top: -4px; display: block; overflow: visible; }
+.fc-av svg { display: block; }
+.fc-msg.bot:has(.fc-wait) .fc-av svg, .fc-mascot.thinking svg, .fc-mascot.connecting svg { animation: fc-think 1.1s ease-in-out infinite; }
+@keyframes fc-think { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-3px) rotate(3deg); } }
+.fc-mascot { display: flex; justify-content: center; }
+.fc-mascot svg { animation: ob-float 4.5s ease-in-out infinite; }
+.fc-mascot.home { margin-bottom: 10px; }
+.fc-mascot.speaking svg { animation: fc-talk .45s ease-in-out infinite; }
+.fc-mascot.listening svg { animation: ob-float 2.2s ease-in-out infinite; }
+@keyframes fc-talk { 50% { transform: scale(1.04) translateY(-2px); } }
+.fc-ready { min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; }
+.fc-ready-line { margin: 18px 0 0; font-family: var(--a-display); font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -.02em; }
+.fc-ready-sub { margin: 0; font-size: 14px; color: var(--a-ink-faint); }
+.fc-mic { flex: none; width: 36px; height: 36px; border: 1px solid var(--a-line); border-radius: 11px; background: none; cursor: pointer; display: grid; place-items: center; }
+.fc-mic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.fc-mic.on { border-color: #d9645b; color: #d9645b !important; }
+.fc-voice { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--a-bg); animation: ob-in .35s cubic-bezier(.16,1,.3,1) both; }
+.fc-main { position: relative; }
+.fc-v-status { margin: 18px 0 0; font-size: 13px; font-weight: 600; color: #d9645b; }
+.fc-v-you { margin: 0; max-width: 560px; font-size: 16px; color: var(--a-ink-soft); }
+.fc-v-him { margin: 0; max-width: 620px; font-family: var(--a-display); font-size: clamp(20px, 2.6vw, 26px); line-height: 1.4; }
+.fc-v-err { margin: 0; font-size: 13.5px; color: #c0463c; }
+.fc-voice .ob-btn { margin-top: 18px; padding: 12px 26px; font-size: 14.5px; }
+.fc-next { display: grid; gap: 12px; padding: 20px 22px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); }
+.fc-next > div { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.fc-next .fc-eng { margin: 0; }
+.fc-next p { margin: 0; }
+.fc-next .ob-btn { justify-self: start; padding: 11px 22px; font-size: 14px; }
+@media (max-width: 640px) {
+  .fc-tabs button { padding: 5px 9px; }
+  .fc-top .fc-title { display: none; }
+  .fc-tabs { margin-left: 0; }
+}
