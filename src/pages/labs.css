@@ -59,3 +59,19 @@
 .lb-post h3 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: clamp(26px, 2.6vw, 34px); line-height: 1.1; color: var(--a-ink); }
 .lb-post p { margin: 0; font: 400 16px/1.55 var(--ao-sf); color: var(--a-ink-soft); }
 .lb-post-go { margin-top: auto; padding-top: 8px; font: 500 14px/1 var(--ao-sf); color: var(--a-ink); }
+
+/* The one big Foundry block (2026-10-22). */
+.lb-feature { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0; margin-top: 18px; border: 1px solid var(--a-line); border-radius: 28px; overflow: hidden; background: var(--a-box); color: var(--a-ink); text-decoration: none; transition: transform .25s, box-shadow .25s; }
+.lb-feature:hover { transform: translateY(-3px); box-shadow: 0 30px 60px -40px rgba(22,21,15,.45); }
+.lb-feature-art { background: var(--a-surface); border-right: 1px solid var(--a-line); display: grid; place-items: center; padding: 40px; min-height: 360px; }
+.lb-feature-art svg { width: 100%; max-width: 440px; }
+.lb-f-line { fill: none; stroke: var(--a-line-strong); stroke-width: 1.5; stroke-dasharray: 4 5; }
+.lb-f-node rect { fill: var(--a-box); stroke-width: 1.5; }
+.lb-f-node.o rect { stroke: #6b52c4; } .lb-f-node.c rect { stroke: #d9645b; } .lb-f-node.r rect { stroke: #3a8f5f; }
+.lb-f-node text, .lb-f-mid { font-family: var(--a-display); font-size: 18px; text-anchor: middle; fill: var(--a-ink); }
+.lb-f-mid { font-size: 16px; fill: var(--a-ink-soft); }
+.lb-feature-copy { padding: 48px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.lb-feature-copy h2 { font-family: var(--a-display); font-weight: 500; font-size: clamp(32px, 4vw, 52px); line-height: 1.05; letter-spacing: -.02em; margin: 0; }
+.lb-feature-copy p { margin: 0; color: var(--a-ink-soft); font-size: 17px; line-height: 1.6; }
+.lb-feature-copy .aff-cta { align-self: flex-start; margin-top: 8px; }
+@media (max-width: 860px) { .lb-feature { grid-template-columns: 1fr; } .lb-feature-art { border-right: 0; border-bottom: 1px solid var(--a-line); min-height: 0; padding: 28px; } .lb-feature-copy { padding: 28px 22px; } }

@@ -200,28 +200,17 @@ export default function LabsPost() {
     );
   }
 
-  const { toc, Body, kicker } = entry;
+  const { Body, kicker } = entry;
   return (
-    <div className="aff lp" data-theme={theme} ref={root}>
+    <div className="aff ao lp" data-theme={theme} ref={root}>
       <AffNav theme={theme} onToggle={toggle} links={nav} />
-      <article className="lp-art">
-        <header className="lp-head">
-          <Link to="/labs#writing" className="lp-back">Writing from Labs</Link>
-          <p className="ah-kicker">{kicker}</p>
-          <h1 className="lp-title">{meta.title}</h1>
-          <p className="lp-sub">{meta.line}</p>
-          <p className="lp-meta"><span>{meta.author}</span><span><time dateTime={meta.date}>{meta.dateLabel}</time></span><span>{meta.readTime}</span></p>
-        </header>
-        <div className="lp-layout">
-          <aside className="lp-toc" aria-label="On this page">
-            <p>On this page</p>
-            <ol>{toc.map((t) => <li key={t.id}><a href={`#${t.id}`}>{t.label}</a></li>)}</ol>
-          </aside>
-          <div className="lp-body">
-            <Body />
-            <p className="lp-sign">Itish Pande, Bengaluru</p>
-          </div>
-        </div>
+      {/* Same grammar as the AffectiveOS announcement: date line, one long
+          serif headline, then a single reading column (2026-10-22). */}
+      <article className="ao-col">
+        <p className="ao-date">{meta.dateLabel} · {kicker} · {meta.readTime}</p>
+        <h1 className="ao-title">{meta.headline || meta.title}</h1>
+        <Body />
+        <p className="lp-sign">{meta.author}, Bengaluru</p>
       </article>
       <AffFooter />
     </div>

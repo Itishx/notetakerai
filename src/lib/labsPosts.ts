@@ -9,6 +9,8 @@ export type LabsPostMeta = {
   dateLabel: string;
   readTime: string;
   author: string;
+  /* The long serif headline on the article, like the AffectiveOS post. */
+  headline?: string;
 };
 
 export const LABS_POSTS: LabsPostMeta[] = [
@@ -20,6 +22,7 @@ export const LABS_POSTS: LabsPostMeta[] = [
     dateLabel: "22 October 2026",
     readTime: "6 min read",
     author: "Itish Pande",
+    headline: "Introducing Braino Foundry, a distribution co-founder that finds where buyers cannot find you, writes what fixes it, and brings you the people already asking. You approve everything.",
   },
 ];
 

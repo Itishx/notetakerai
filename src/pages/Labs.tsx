@@ -135,51 +135,29 @@ export default function Labs() {
         </div>
       </section>
 
-      <section className="lb-sec" id="engines">
-        <div className="aff-wrap">
-          <p className="ah-kicker">What we are building</p>
-          <h2 className="aff-h1 lb-sys">A system that takes care of things for you, <b>end to end.</b></h2>
-          <p className="lb-sys-one">Not a tool you operate. Three engines that feed each other: Optics finds where buyers cannot find you, Content fills those gaps in public, and Outreach reaches the people already asking. They started here as separate experiments. Now they are built together inside Braino Foundry, and you approve everything before it goes anywhere.</p>
-        </div>
-      </section>
-
-      {ENGINES.map((e) => (
-        <section key={e.id} className="lb-sec lb-sec-tight" id={e.id}>
-          <div className="aff-wrap">
-            <div className="lb-box">
-              <div className="lb-box-head">
-                <div>
-                  <p className="ah-kicker">{e.kicker}</p>
-                  <h2 className="lb-name">{e.name}</h2>
-                  <p className="lb-line">{e.line}</p>
-                </div>
-                <p className="lb-status">{e.status.map((t) => <span key={t}>{t}</span>)}</p>
-              </div>
-              <div className="lb-story">
-                {e.story.map((t) => <p key={t}>{t}</p>)}
-                {e.to ? <div className="aff-hero-cta" style={{ marginTop: 18 }}><Link to={e.to} className="aff-cta">{e.cta}</Link></div> : null}
-              </div>
-            </div>
-          </div>
-        </section>
-      ))}
-
+      {/* One big block: the Foundry announcement. Labs is the blog now. */}
       <section className="lb-sec" id="writing">
         <div className="aff-wrap">
           <p className="ah-kicker">Writing from Labs</p>
-          <h2 className="aff-h1 lb-sys">What we made, <b>and why.</b></h2>
-          <ul className="lb-posts">
-            {LABS_POSTS.map((p) => (
-              <li key={p.slug}>
-                <Link to={`/labs/${p.slug}`} className="lb-post">
-                  <span className="lb-post-meta">{p.dateLabel} · {p.readTime}</span>
-                  <h3>{p.title}</h3>
-                  <p>{p.line}</p>
-                  <span className="lb-post-go">Read the post</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {LABS_POSTS.slice(0, 1).map((p) => (
+            <Link key={p.slug} to={`/labs/${p.slug}`} className="lb-feature">
+              <div className="lb-feature-art" aria-hidden="true">
+                <svg viewBox="0 0 400 260">
+                  <path d="M200 60 C 300 70, 330 150, 300 200 M250 220 C 200 240, 150 240, 110 210 M90 190 C 70 140, 110 70, 170 62" className="lb-f-line" />
+                  <g className="lb-f-node o"><rect x="140" y="30" width="120" height="48" rx="14" /><text x="200" y="60">Optics</text></g>
+                  <g className="lb-f-node c"><rect x="260" y="180" width="120" height="48" rx="14" /><text x="320" y="210">Content</text></g>
+                  <g className="lb-f-node r"><rect x="20" y="180" width="120" height="48" rx="14" /><text x="80" y="210">Outreach</text></g>
+                  <text x="200" y="150" className="lb-f-mid">You approve</text>
+                </svg>
+              </div>
+              <div className="lb-feature-copy">
+                <span className="lb-post-meta">{p.dateLabel} · Announcement · {p.readTime}</span>
+                <h2>{p.title}</h2>
+                <p>{p.line} Three engines that started here in Labs, now working together.</p>
+                <span className="aff-cta">Read the announcement</span>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 

@@ -85,3 +85,8 @@
   .lp-eco-join { display: none; }
   .lp-eco-brain { margin-top: 14px; }
 }
+
+/* Inside the AffectiveOS reading column, keep figure text small and the button readable. */
+.ao-col .lp-steps p, .ao-col .lp-eco p { font-size: 13px; line-height: 1.5; }
+.ao-col .lp-list li { font-size: inherit; }
+.ao-col .lp-cta .aff-cta { color: var(--a-bg); text-decoration: none; }
