@@ -559,16 +559,33 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                               </div>
                             ))}</div>
                             {openFix && made[openFix] && (() => { const m = made[openFix]; return (
-                              <div className="fc-made">
-                                <div className="fc-made-h"><div><small>Ready to publish</small><b>{m.title}</b></div><button className="fc-x" aria-label="Close" onClick={() => setOpenFix("")}>×</button></div>
-                                <div className="fc-made-grid">
-                                  <div className="fc-made-text"><pre>{m.content}</pre><button className="ob-btn fc-sm" onClick={() => void copy(m.content)}>Copy text</button></div>
-                                  <div className="fc-made-how">
-                                    <small>Where: {m.where}</small>
-                                    <ol>{m.steps.map((x) => <li key={x}>{x}</li>)}</ol>
-                                    {m.link && <a className="ob-btn is-coral fc-sm" href={m.link} target="_blank" rel="noreferrer" onClick={() => void copy(m.content)}>Copy and open</a>}
+                              <div className="fc-sheet-wrap" onClick={() => setOpenFix("")}>
+                                <aside className="fc-sheet" role="dialog" aria-label={m.title} onClick={(e) => e.stopPropagation()}>
+                                  <header className="fc-sheet-h">
+                                    <div><small>Ready to publish on {m.where}</small><h2>{m.title}</h2></div>
+                                    <button className="fc-x" aria-label="Close" onClick={() => setOpenFix("")}>×</button>
+                                  </header>
+                                  <div className="fc-sheet-body">
+                                    <section>
+                                      <p className="fc-sheet-k">1. Copy this</p>
+                                      <div className="fc-doc">{m.content.split("\n").map((ln, i) => {
+                                        const t = ln.trim();
+                                        if (!t) return null;
+                                        if (/^#{1,6}\s/.test(t)) return <h4 key={i}>{t.replace(/^#+\s*/, "")}</h4>;
+                                        if (/^[-*]\s/.test(t)) return <p key={i} className="li">{t.replace(/^[-*]\s*/, "")}</p>;
+                                        return <p key={i}>{t.replace(/\*\*/g, "")}</p>;
+                                      })}</div>
+                                    </section>
+                                    <section>
+                                      <p className="fc-sheet-k">2. Put it here</p>
+                                      <ol className="fc-steps">{m.steps.map((x, i) => <li key={x}><span>{i + 1}</span><p>{x}</p></li>)}</ol>
+                                    </section>
                                   </div>
-                                </div>
+                                  <footer className="fc-sheet-f">
+                                    <button className="ob-btn is-outline" onClick={() => void copy(m.content)}>Copy text</button>
+                                    {m.link && <a className="ob-btn is-coral" href={m.link} target="_blank" rel="noreferrer" onClick={() => void copy(m.content)}>Copy and open {m.where}</a>}
+                                  </footer>
+                                </aside>
                               </div>
                             ); })()}
                           </>
