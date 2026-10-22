@@ -46,20 +46,57 @@ function WhereTabs() {
 }
 
 /* What the founder actually sees: one card per engine. */
+/* What the founder actually sees, one joined panel with three cells (2026-10-22). */
 function EngineCards() {
   return (
-    <div className="fl-cards aff-reveal">
-      <div className="fl-card fl-c-o"><small>Optics · scorecard</small>
-        {[["“Best invoicing tool for freelancers”", "Not named"], ["“Alternatives to Zoho Invoice”", "Not named"], ["“How to chase late payments”", "Named"]].map(([q, r]) => <div key={q} className="fl-card-row"><span>{q}</span><em className={r === "Named" ? "ok" : ""}>{r}</em></div>)}
+    <div className="fl-joint aff-reveal">
+      <div className="fl-cell fl-c-o">
+        <p className="fl-cell-k"><i />Optics<span>Where you're missing</span></p>
+        <div className="fl-score"><b>0</b><span>of 8 AI answers name you</span></div>
+        {[["Best invoicing tool for freelancers", false], ["Alternatives to Zoho Invoice", false], ["How to chase late payments", true]].map(([q, ok]) => (
+          <div key={String(q)} className="fl-row"><span>{q}</span><em className={ok ? "ok" : ""}>{ok ? "Named" : "Missing"}</em></div>
+        ))}
       </div>
-      <div className="fl-card fl-c-c"><small>Content · LinkedIn</small>
-        <p>Most freelancers don't lose money on bad clients. They lose it on invoices nobody follows up on. Here is what we changed...</p>
-        <div className="fl-card-go"><span>Edit</span><b>Approve</b></div>
+      <div className="fl-cell fl-c-c">
+        <p className="fl-cell-k"><i />Content<span>A post that fixes it</span></p>
+        <div className="fl-li">
+          <div className="fl-li-h"><span className="fl-av">AK</span><div><b>Ananya Kapoor</b><small>Founder at Invoicely</small></div><em>in</em></div>
+          <p>Most freelancers don't lose money on bad clients. They lose it on invoices nobody follows up on. Here is what we changed... <u>see more</u></p>
+        </div>
+        <div className="fl-go"><span>Edit</span><b>Approve</b></div>
       </div>
-      <div className="fl-card fl-c-r"><small>Outreach · r/freelance</small>
-        <p className="fl-card-q">"Client is 60 days late, what do I even say?"</p>
-        <p>Been there. A short, friendly nudge with the invoice attached works better than you'd think...</p>
-        <div className="fl-card-go"><span>Skip</span><b>Approve</b></div>
+      <div className="fl-cell fl-c-r">
+        <p className="fl-cell-k"><i />Outreach<span>A person asking today</span></p>
+        <div className="fl-rd">
+          <small>r/freelance · 2h</small>
+          <p className="fl-rd-q">"Client is 60 days late, what do I even say?"</p>
+          <div className="fl-meter"><span>Ready to buy</span><i><em style={{ width: "82%" }} /></i></div>
+        </div>
+        <p className="fl-reply">Been there. A short, friendly nudge with the invoice attached works better than you'd think...</p>
+        <div className="fl-go"><span>Skip</span><b>Approve</b></div>
+      </div>
+    </div>
+  );
+}
+
+/* "How it works": a short guide that opens over the page. */
+const GUIDE = [
+  ["Tell it what you're building", "Three quick questions. A link helps, but your own words are enough."],
+  ["It checks where you're invisible", "It asks AI and Google what your buyers ask, and shows who gets named instead of you."],
+  ["It does the work", "The pages, posts and replies that fix each gap, written in your voice."],
+  ["You say yes", "Nothing goes out on its own. Approve, and it copies the text and opens the site."],
+  ["It runs again every week", "Your brand gets more visible on autopilot, with you in the loop."],
+];
+function Guide({ onClose }: { onClose: () => void }) {
+  useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  return (
+    <div className="fl-guide-wrap" onClick={onClose}>
+      <div className="fl-guide" role="dialog" aria-label="How Braino Foundry works" onClick={(e) => e.stopPropagation()}>
+        <button className="fl-guide-x" onClick={onClose} aria-label="Close">×</button>
+        <p className="ah-kicker">How it works</p>
+        <h3>More people find you every week. You only say yes.</h3>
+        <ol>{GUIDE.map(([h, p], i) => <li key={h}><span>{i + 1}</span><div><b>{h}</b><p>{p}</p></div></li>)}</ol>
+        <Link to="/foundry/app" className="aff-cta">Start now</Link>
       </div>
     </div>
   );
@@ -76,6 +113,7 @@ const FAQS = [
 export default function FoundryLanding() {
   const { theme, toggle } = useAffTheme();
   const root = useAffReveal([]);
+  const [guide, setGuide] = useState(false);
   useLitWords([]);
   useGrowHero();
   useEffect(() => { document.title = "Braino Foundry · Get your product seen"; }, []);
@@ -87,7 +125,8 @@ export default function FoundryLanding() {
 
   return (
     <div className="aff fl" data-theme={theme} ref={root}>
-      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["Labs", "/labs"]]} />
+      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["Labs", "/labs"]]} go={["Start now. Find out why you\u2019re invisible.", "/foundry/app"]} />
+      {guide && <Guide onClose={() => setGuide(false)} />}
 
       <header className="aff-hero">
         <div className="aff-wrap">
@@ -98,11 +137,11 @@ export default function FoundryLanding() {
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                Meet Braino Foundry. It finds where buyers can't find you, writes what fixes it, and brings you the people already asking. You only approve.
+                Braino Foundry makes your brand more visible every week, on autopilot. It finds where buyers can't find you, writes what fixes it, and brings you the people already asking. You stay in the loop and only say yes.
               </p>
               <div className="aff-hero-cta">
                 <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
-                <a href="#engines" className="aff-cta aff-cta-ghost">How it works</a>
+                <button type="button" className="aff-cta aff-cta-ghost" onClick={() => setGuide(true)}>How it works</button>
               </div>
             </div>
           </div>

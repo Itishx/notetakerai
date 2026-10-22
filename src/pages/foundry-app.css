@@ -685,3 +685,48 @@
 .fc-rail-foot .fc-brand img { height: 18px; }
 .fc-theme-i { width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 15px; }
 .fc-theme-i:hover { background: rgba(var(--a-shade), .06); }
+
+/* Sources: where you were actually found, with links. */
+.fc-proof { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--a-line); display: grid; gap: 10px; }
+.fc-proof-h { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fc-proof-row { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; }
+.fc-proof-row small { display: block; color: var(--a-ink-faint); font-size: 12.5px; }
+.fc-proof-row a { color: var(--a-ink); text-decoration: underline; text-underline-offset: 3px; }
+.fc-proof-none { margin: 14px 0 0; font-size: 13.5px; color: var(--a-ink-faint); }
+
+/* Header breathes: tabs only; run steps in their own row. */
+.fc-striprow { flex: none; display: flex; justify-content: center; padding: 8px 20px 10px; border-bottom: 1px solid var(--a-line); overflow-x: auto; }
+
+/* Sidebar footer: you + settings. */
+.fc-rail-foot { position: relative; display: block; padding: 10px 0 0; }
+.fc-user { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; text-align: left; }
+.fc-user:hover { background: rgba(var(--a-shade), .06); }
+.fc-user > svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .6; flex: none; }
+.fc-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--a-ink); color: var(--a-bg); font-size: 12px; font-weight: 700; flex: none; }
+.fc-user-n { flex: 1; min-width: 0; display: grid; }
+.fc-user-n b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-user-n small { font-size: 12px; color: var(--a-ink-faint); }
+.fc-settings { position: absolute; left: 0; right: 0; bottom: 56px; z-index: 40; padding: 14px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); box-shadow: 0 18px 40px -16px rgba(var(--a-shade), .35); display: grid; gap: 10px; animation: fc-rise .25s ease both; }
+.fc-settings-h { margin: 0 0 2px; font-size: 13px; font-weight: 700; }
+.fc-set-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13.5px; }
+.fc-set-row input { width: 130px; padding: 6px 9px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-bg); color: var(--a-ink); font: inherit; font-size: 13.5px; }
+.fc-set-row small { color: var(--a-ink-faint); }
+.fc-seg.sm button { padding: 5px 10px; font-size: 12.5px; }
+.fc-set-link { font-size: 13.5px; color: var(--a-ink) !important; text-decoration: none; padding: 4px 0; }
+.fc-set-link:hover { text-decoration: underline; }
+.fc-set-fine { margin: 2px 0 0; font-size: 11.5px; color: var(--a-ink-faint); }
+
+/* What to publish next: a stacked list like the site's FAQ. */
+.fc-fixlist { margin-top: 12px; border-top: 1px solid var(--a-line); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+.fc-fixrow { border-bottom: 1px solid var(--a-line); }
+.fc-fixrow summary { list-style: none; display: flex; align-items: center; gap: 14px; padding: 16px 4px; cursor: pointer; }
+.fc-fixrow summary::-webkit-details-marker { display: none; }
+.fc-fixn { flex: none; width: 24px; font-family: var(--a-display); font-size: 18px; color: var(--o); }
+.fc-fixt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.fc-fixt b { font-size: 15px; font-weight: 600; line-height: 1.4; }
+.fc-fixt small { font-size: 12.5px; color: var(--a-ink-faint); }
+.fc-fixrow summary i { font-style: normal; font-size: 20px; color: var(--a-ink-faint); transition: transform .2s; }
+.fc-fixrow[open] summary i { transform: rotate(45deg); }
+.fc-fixbody { padding: 0 4px 18px 42px; display: grid; gap: 12px; justify-items: start; animation: fc-rise .3s ease both; }
+.fc-fixbody p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--a-ink-soft); }
+.fc-fixbody em { font-style: normal; color: var(--a-ink); }

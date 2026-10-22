@@ -14,7 +14,7 @@ import "./foundry-app.css";
    Language: GPT-5.6 through the chat-about-notes edge function (the model and
    its key stay on the server). Search: Apify through /api/foundry-apify. */
 
-type Brief = { product: string; oneLine: string; buyer: string; problem: string; site: string; questions: string[]; redditPhrases: string[]; voice: string };
+type Brief = { founder?: string; product: string; oneLine: string; buyer: string; problem: string; site: string; questions: string[]; redditPhrases: string[]; voice: string };
 type AiAnswer = { question: string; names: string[] };
 type Google = { query: string; results: { title: string; url: string; description: string }[] };
 type Fix = { question: string; where: string; what: string };
@@ -57,14 +57,21 @@ async function askJson<T>(message: string): Promise<T> {
   catch (_) { return parseLoose<T>(await ask(prompt)); }
 }
 
+/* The search route can answer with nothing (not deployed, or a crash). Never
+   let that surface as "Unexpected end of JSON input". */
+async function readJson(r: Response): Promise<Record<string, any>> {
+  const t = await r.text();
+  if (!t) return { error: r.status === 404 ? "Search is not available here. Run it on affctve.com, or start the dev server with the search route." : `Search answered with nothing (${r.status})` };
+  try { return JSON.parse(t); } catch (_) { return { error: `Search answered badly (${r.status})` }; }
+}
 async function apifyStart(kind: "google" | "reddit", list: string[]) {
   const r = await fetch("/api/foundry-apify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(kind === "google" ? { kind, queries: list } : { kind, searches: list }),
   });
-  const j = await r.json();
-  if (!r.ok || !j.runId) throw new Error(j.error || "Search did not start");
+  const j = await readJson(r);
+  if (!r.ok || !j.runId) throw new Error(/token|authenticat/i.test(String(j.error)) ? "Search is not set up yet: the Apify token is missing." : (j.error || "Search did not start"));
   return j.runId as string;
 }
 async function apifyWait<T>(kind: "google" | "reddit", runId: string, onTick?: (s: number) => void): Promise<T> {
@@ -72,7 +79,7 @@ async function apifyWait<T>(kind: "google" | "reddit", runId: string, onTick?: (
   for (;;) {
     await new Promise((r) => setTimeout(r, 5000));
     onTick?.(Math.round((Date.now() - started) / 1000));
-    const j = await fetch(`/api/foundry-apify?run=${runId}&kind=${kind}`).then((r) => r.json());
+    const j = await fetch(`/api/foundry-apify?run=${runId}&kind=${kind}`).then(readJson);
     if (j.status === "SUCCEEDED") return j.items as T;
     if (["FAILED", "ABORTED", "TIMED-OUT"].includes(j.status)) throw new Error(`Search ${j.status.toLowerCase()}`);
     if (Date.now() - started > 9 * 60 * 1000) throw new Error("Search took too long");
@@ -80,11 +87,27 @@ async function apifyWait<T>(kind: "google" | "reddit", runId: string, onTick?: (
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+/* AI names: the model hands back product names, so compare names to names. */
 function mentions(text: string, brief: Brief) {
   const t = norm(text);
   const name = norm(brief.product);
   const host = norm((brief.site || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].split(".")[0]);
-  return (name.length > 2 && t.includes(name)) || (host.length > 2 && t.includes(host));
+  return (name.length > 2 && (t === name || t.includes(name))) || (host.length > 2 && t.includes(host));
+}
+/* Google: a page only counts if it is on your own site, or names the product
+   exactly as written ("RentOnTime"), never ordinary words that happen to spell
+   it ("collect rent on time"). Returns the page that proves it. */
+const siteHost = (b: Brief) => (b.site || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+function googleProof(results: { title: string; url: string; description: string }[], b: Brief) {
+  const h = siteHost(b);
+  const exact = new RegExp(`(^|[^A-Za-z0-9])${b.product.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Za-z0-9]|$)`);
+  const multiWord = /\s/.test(b.product.trim());
+  return results.find((r) => {
+    const u = r.url.toLowerCase();
+    if (h && h.includes(".") && (u.includes(`//${h}`) || u.includes(`.${h}`))) return true;
+    // A one-word brand must appear with its own capitals; a multi-word name must appear in quotes-level exact form in the title.
+    return multiWord ? exact.test(r.title) && /[A-Z]/.test(b.product) : exact.test(`${r.title} ${r.description}`);
+  });
 }
 
 async function copy(text: string) {
@@ -127,6 +150,7 @@ function FoundryProject({ id, name, active, seed, theme, toggle, onMeta, onHome 
   const [desc, setDesc] = useState<string>(saved?.desc || seed || "");
   const [link, setLink] = useState<string>(saved?.link || "");
   const [about, setAbout] = useState<string>(saved?.about || "");
+  const [linkedin, setLinkedin] = useState<string>(saved?.linkedin || "");
   const [brief, setBrief] = useState<Brief | null>(saved?.brief || null);
   /* "Do it": for each fix, the finished piece plus where and how to publish it.
      Kept under its own key so it survives reloads. */
@@ -141,7 +165,7 @@ function FoundryProject({ id, name, active, seed, theme, toggle, onMeta, onHome 
     setMaking(f.question);
     try {
       const m = await askJson<Made>(`You are Braino Foundry, a distribution co-founder doing the work for a first-time founder who knows nothing about marketing.
-Product: ${brief.product}. ${brief.oneLine}. Buyer: ${brief.buyer}. Problem: ${brief.problem}. Website: ${brief.site || "none yet"}. Voice: ${brief.voice}.
+Product: ${brief.product}. ${brief.oneLine}. Buyer: ${brief.buyer}. Problem: ${brief.problem}. Website: ${brief.site || "none yet"}. Voice: ${brief.voice}. Founder: ${brief.founder || "not given"}.
 The fix to carry out: "${f.what}" on ${f.where}, so that AI assistants and Google name this product when people ask "${f.question}".
 Write the finished piece, ready to paste, in the founder's voice. If it is a page (FAQ, comparison, guide), write the full page text with headings in plain markdown. If it is a Reddit or forum answer, write the full answer, helpful first, mentioning the product once and honestly. No em-dashes.
 Then say exactly where to publish it and how, for someone who has never done it: 3 to 6 short steps, starting with creating an account if one is usually needed.
@@ -167,20 +191,34 @@ JSON: {"title": string, "content": string, "where": string, "link": "the best UR
   const [history, setHistory] = useState<RunEntry[]>(saved?.history || []);
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history })); } catch (_) { /* private window */ }
-  }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history]);
+    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, linkedin, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history })); } catch (_) { /* private window */ }
+  }, [desc, link, about, linkedin, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history]);
 
   const setB = (k: string, v: string) => setBusy((b) => { const n = { ...b }; if (v) n[k] = v; else delete n[k]; return n; });
   const fail = (e: unknown) => setErr(String((e as Error)?.message || e));
 
   async function makeBrief() {
     setErr(""); setB("brief", "Reading what you wrote");
+    // The founder's LinkedIn, read through Google (public headline and summary). Best effort, never blocks the brief.
+    let founder = "";
+    const slug = (linkedin.match(/linkedin\.com\/in\/([^/?#\s]+)/i) || [])[1];
+    if (slug) {
+      setB("brief", "Reading your LinkedIn");
+      try {
+        const id = await apifyStart("google", [`site:linkedin.com/in/${slug}`]);
+        const g = await Promise.race([apifyWait<Google[]>("google", id), new Promise<Google[]>((r) => setTimeout(() => r([]), 75000))]);
+        const top = (g[0]?.results || []).find((r) => r.url.toLowerCase().includes(slug.toLowerCase())) || g[0]?.results?.[0];
+        if (top) founder = `${top.title}. ${top.description}`;
+      } catch (_) { /* fine: the brief still works without it */ }
+      setB("brief", "Reading what you wrote");
+    }
     try {
       const b = await askJson<Brief>(`A founder described what they are building, in their own words (often jargon). Turn it into a plain brief.
 What they're building: """${desc}"""
 Link they shared: ${link || "none"}
-About them: """${about || "not given"}"""
-Return: {"product": "the product's name (make a short one if none)", "oneLine": "two plain sentences a 12-year-old understands: what it does and for whom", "buyer": "who buys it", "problem": "the problem in the buyer's own words", "site": "${link || ""}", "questions": ["8 questions a buyer would type into ChatGPT or Google when looking for a product like this, without naming it"], "redditPhrases": ["3 short phrases (2 to 4 words) buyers would use on Reddit when complaining about this problem"], "voice": "how this founder should sound in posts, one line"}`);
+About them, in their words: """${about || "not given"}"""
+Their LinkedIn (public headline): """${founder || "not found"}"""
+Return: {"product": "the product's name (make a short one if none)", "oneLine": "two plain sentences a 12-year-old understands: what it does and for whom", "buyer": "who buys it", "problem": "the problem in the buyer's own words", "site": "${link || ""}", "questions": ["8 questions a buyer would type into ChatGPT or Google when looking for a product like this, without naming it"], "redditPhrases": ["3 short phrases (2 to 4 words) buyers would use on Reddit when complaining about this problem"], "voice": "how this founder should sound in posts, one line", "founder": "one line on who the founder is and why people should trust them, from LinkedIn and their own words; empty if nothing given"}`);
       setBrief({ ...b, site: link || b.site || "" }); setConfirmed(false); setAnswers(null); setGoogle(null); setFixes(null); setPosts(null); setLeads(null); setDone({});
     } catch (e) { fail(e); } finally { setB("brief", ""); }
   }
@@ -214,7 +252,7 @@ Return: [{"question": "...", "where": "the place, 1 to 3 words", "what": "one sh
   async function runContent(b: Brief, fx: Fix[] | null, extra = "") {
     setB("content", "Writing your posts");
     try {
-      const p = await askJson<Posts>(`Write public posts for this founder, in their voice (${b.voice}). They are posts for an audience, not messages to one person.
+      const p = await askJson<Posts>(`Write public posts for this founder, in their voice (${b.voice}). Who they are: ${b.founder || "not given"}; use it where a personal angle makes the post more believable. They are posts for an audience, not messages to one person.
 Product: ${b.product}. ${b.oneLine} Buyer: ${b.buyer}. Problem: ${b.problem}.
 ${extra ? `The founder asked: write about "${extra}".` : `Answer these questions buyers ask, where the product is currently not named:\n${(fx || []).map((f) => `- ${f.question}`).join("\n")}`}
 Rules: native to each platform, useful first, no hashtag spam, no em-dashes, never invent customers or numbers.
@@ -232,7 +270,7 @@ Return: {"x": "a post or short thread, max 280 characters per part, parts separa
       if (!unique.length) { setLeads([]); return; }
       setB("outreach", "Reading each post");
       const judged = await askJson<{ i: number; fit: boolean; intent: number; why: string; message: string }[]>(`A founder sells: ${b.product}. ${b.oneLine} Buyer: ${b.buyer}.
-Below are Reddit posts. Keep only real people who have this problem and are asking for help now (drop celebrations, promotions, other founders' launches, off-topic). For each kept post: intent 0 to 100 (how ready they are), why in one short line, and a reply in the founder's voice (${b.voice}) that helps first, answers their actual post, mentions the product once and only if it fits. No em-dashes.
+Below are Reddit posts. Keep only real people who have this problem and are asking for help now (drop celebrations, promotions, other founders' launches, off-topic). For each kept post: intent 0 to 100 (how ready they are), why in one short line, and a reply in the founder's voice (${b.voice}; who they are: ${b.founder || "not given"}) that helps first, answers their actual post, mentions the product once and only if it fits. No em-dashes.
 ${unique.map((p, i) => `[${i}] r/${p.community.replace(/^r\//, "")} · ${p.title}\n${p.body.slice(0, 400)}`).join("\n\n")}
 Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
       const l = judged.filter((j) => j.fit && unique[j.i]).sort((a, z) => z.intent - a.intent).map((j) => ({ ...unique[j.i], intent: j.intent, why: j.why, message: j.message }));
@@ -274,7 +312,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     answers.forEach((a) => a.names.forEach((n) => { if (!mentions(n, brief)) c.set(n, (c.get(n) || 0) + 1); }));
     return [...c.entries()].sort((a, z) => z[1] - a[1]).slice(0, 4);
   }, [answers, brief]);
-  const googleHits = google && brief ? google.filter((g) => g.results.some((r) => mentions(`${r.title} ${r.url}`, brief))).length : 0;
+  const googleHits = google && brief ? google.filter((g) => !!googleProof(g.results, brief)).length : 0;
   const approved = Object.values(done).filter((v) => v === "approved").length;
 
   const postCards: { id: string; label: string; text: string; url: string }[] = posts ? [
@@ -290,12 +328,13 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
      The conversation is derived from the session state, so a reload rebuilds
      the same thread. Questions come one at a time, in the onboarding style. */
   const QUESTIONS = [
-    { key: "desc", eyebrow: "Question 1 of 3", ask: "What are you building?", note: "In your own words. Jargon is fine, I will play it back plainly.", ph: "An app that reminds PG tenants to pay and collects rent on UPI", hints: ["A tool that turns lecture audio into notes", "A marketplace for home bakers in Pune"], optional: false },
-    { key: "link", eyebrow: "Question 2 of 3", ask: "Got a link I can look at?", note: "Website, GitHub or a doc. Skip if there is nothing yet.", ph: "yourproduct.com", hints: [] as string[], optional: true },
-    { key: "about", eyebrow: "Question 3 of 3", ask: "And a line about you?", note: "So the posts sound like you, not like a brand.", ph: "Solo founder, 5 hours a week", hints: ["Solo founder, building nights and weekends", "Two of us, first 20 users"], optional: true },
+    { key: "desc", eyebrow: "Question 1 of 4", ask: "What are you building?", note: "In your own words. Jargon is fine, I will play it back plainly.", ph: "An app that reminds PG tenants to pay and collects rent on UPI", hints: ["A tool that turns lecture audio into notes", "A marketplace for home bakers in Pune"], optional: false },
+    { key: "link", eyebrow: "Question 2 of 4", ask: "Got a link I can look at?", note: "Website, GitHub or a doc. Skip if there is nothing yet.", ph: "yourproduct.com", hints: [] as string[], optional: true },
+    { key: "linkedin", eyebrow: "Question 3 of 4", ask: "Who's building it? Paste your LinkedIn.", note: "I'll read it, so posts sound like you and people trust who is behind it.", ph: "linkedin.com/in/yourname", hints: [] as string[], optional: true },
+    { key: "about", eyebrow: "Question 4 of 4", ask: "Why are you the one building this?", note: "One honest line. This is what makes people listen.", ph: "I ran a PG for 3 years and chased rent every month", hints: ["I lived the problem myself", "I build for this industry at my day job", "Solo founder, nights and weekends"], optional: true },
   ];
-  const values: Record<string, string> = { desc, link, about };
-  const setters: Record<string, (v: string) => void> = { desc: setDesc, link: setLink, about: setAbout };
+  const values: Record<string, string> = { desc, link, linkedin, about };
+  const setters: Record<string, (v: string) => void> = { desc: setDesc, link: setLink, linkedin: setLinkedin, about: setAbout };
   const [line] = useState(() => READY[Math.floor(Math.random() * READY.length)]);
   const [step, setStep] = useState<number>(saved?.brief ? 3 : (!saved && seed) ? 1 : 0);
   const [draft, setDraft] = useState("");
@@ -538,7 +577,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                             {answers.map((a, i) => {
                               const yes = a.names.some((n) => mentions(n, brief));
                               const g = google?.find((x) => x.query === a.question) || (i < 3 ? google?.[i] : undefined);
-                              const gy = g ? g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) : null;
+                              const gy = g ? !!googleProof(g.results, brief) : null;
                               return (
                                 <div className="fc-grid-row" key={a.question}>
                                   <span className="q" title={`AI named: ${a.names.join(", ")}${g ? `\nGoogle top: ${g.results.slice(0, 3).map((r) => host(r.url, r.title)).join(", ")}` : ""}`}>{a.question}</span>
@@ -548,15 +587,30 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                               );
                             })}
                           </div>
+                          {(() => {
+                            const found = [
+                              ...answers.filter((a) => a.names.some((n) => mentions(n, brief))).map((a) => ({ q: a.question, where: "AI answer", title: `Named as ${a.names.find((n) => mentions(n, brief))}`, url: "" })),
+                              ...(google || []).map((g) => ({ g, r: googleProof(g.results, brief) })).filter((x) => x.r).map(({ g, r }) => ({ q: g.query, where: "Google", title: r!.title, url: r!.url })),
+                            ];
+                            return found.length ? (
+                              <div className="fc-proof">
+                                <p className="fc-proof-h">Where you were found</p>
+                                {found.map((f) => <div key={f.where + f.q} className="fc-proof-row"><span className="fc-where">{f.where}</span><div><small>{f.q}</small>{f.url ? <a href={f.url} target="_blank" rel="noreferrer">{f.title}</a> : <b>{f.title}</b>}</div></div>)}
+                              </div>
+                            ) : <p className="fc-proof-none">Not found anywhere yet. That is normal for a new product, and it is what the fixes below are for.</p>;
+                          })()}
                         </div>
                         {fixes && (
                           <>
                             <p>What to publish next, so AI starts recommending you.</p>
-                            <div className="fc-fixcards">{fixes.slice(0, 5).map((f) => (
-                              <div key={f.question} className={`fc-fixcard${openFix === f.question ? " on" : ""}`}>
-                                <span className="fc-where">{f.where}</span><b>{f.what}</b><small>Fixes: {f.question}</small>
-                                <button className="fc-doit" disabled={!!making} onClick={() => void doIt(f)}>{making === f.question ? <><Dots /> Writing it</> : made[f.question] ? "Show it" : "Do it"}</button>
-                              </div>
+                            <div className="fc-fixlist">{fixes.slice(0, 5).map((f, i) => (
+                              <details key={f.question} className="fc-fixrow" open={i === 0}>
+                                <summary><span className="fc-fixn">{i + 1}</span><span className="fc-fixt"><b>{f.what}</b><small>{f.where}</small></span><i aria-hidden="true">+</i></summary>
+                                <div className="fc-fixbody">
+                                  <p>This fixes the question <em>"{f.question}"</em>, where AI names someone else today.</p>
+                                  <button className="fc-doit" disabled={!!making} onClick={() => void doIt(f)}>{making === f.question ? <><Dots /> Writing it</> : made[f.question] ? "Show what I wrote" : "Do it for me"}</button>
+                                </div>
+                              </details>
                             ))}</div>
                             {openFix && made[openFix] && (() => { const m = made[openFix]; return (
                               <div className="fc-sheet-wrap" onClick={() => setOpenFix("")}>
@@ -691,15 +745,13 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           <button className="fc-icon fc-only-m" onClick={onHome} aria-label="All projects"><svg className="fc-ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></button>
           <span className="fc-title">{name || (brief ? brief.product : "New project")}</span>
           <div className="fc-tabs" role="tablist">
-            <button role="tab" aria-selected={view === "chat"} className={view === "chat" ? "on" : ""} onClick={() => setView("chat")}>Chat</button>
             <button role="tab" aria-selected={view === "overview"} className={view === "overview" ? "on" : ""} onClick={() => setView("overview")}>Overview</button>
+            <button role="tab" aria-selected={view === "chat"} className={view === "chat" ? "on" : ""} onClick={() => setView("chat")}>Chat</button>
             <button role="tab" aria-selected={view === "approvals"} className={view === "approvals" ? "on" : ""} onClick={() => setView("approvals")}>Approvals{pendingCount > 0 ? <em>{pendingCount}</em> : null}</button>
           </div>
-          {confirmed && brief && <Strip />}
-          <div className="fc-top-r">
-            <button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
-          </div>
         </header>
+        {/* Run steps get their own quiet row under the tabs, so the header never crowds. */}
+        {confirmed && brief && <div className="fc-striprow"><Strip /></div>}
 
         {view === "chat" ? (<>
         <div className="fc-scroll">
@@ -745,6 +797,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                   <div className="ob-summary fc-sum">
                     <div><span>Buyer</span><b>{brief.buyer}</b></div>
                     <div><span>Their problem</span><b>{brief.problem}</b></div>
+                    {brief.founder ? <div><span>You</span><b>{brief.founder}</b></div> : null}
                     <div><span>Your voice</span><b>{brief.voice}</b></div>
                   </div>
                   {!confirmed && (
@@ -928,6 +981,10 @@ export default function FoundryApp() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [sure, setSure] = useState("");
   const [menuAt, setMenuAt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // The founder's name and settings live on this device (there is no sign-in yet).
+  const [me, setMe] = useState<string>(() => { try { return localStorage.getItem("foundry-me") || ""; } catch (_) { return ""; } });
+  const [settings, setSettings] = useState(false);
+  useEffect(() => { try { localStorage.setItem("foundry-me", me); } catch (_) { /* fine */ } }, [me]);
 
   useEffect(() => { try { localStorage.setItem(LIST, JSON.stringify(list)); } catch (_) { /* private window */ } }, [list]);
   useEffect(() => { if (!active) document.title = "Braino Foundry"; }, [active]);
@@ -939,7 +996,7 @@ export default function FoundryApp() {
     const t = window.setInterval(() => document.querySelectorAll(".fc textarea").forEach((el) => { if ((el as HTMLTextAreaElement).value === "") (el as HTMLTextAreaElement).style.height = ""; }), 400);
     return () => { document.removeEventListener("input", onInput); window.clearInterval(t); };
   }, []);
-  useEffect(() => { const close = () => setMenu(""); window.addEventListener("click", close); return () => window.removeEventListener("click", close); }, []);
+  useEffect(() => { const close = () => { setMenu(""); setSettings(false); }; window.addEventListener("click", close); return () => window.removeEventListener("click", close); }, []);
 
   function open(id: string) { setActive(id); setOpened((o) => o.includes(id) ? o : [...o, id]); }
   function create(seed = "") {
@@ -1018,8 +1075,24 @@ export default function FoundryApp() {
           {!list.length && <p className="fc-none">No projects yet.</p>}
         </div>
         <div className="fc-rail-foot">
-          <Link to="/" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
-          <button className="fc-theme-i" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
+          <button className="fc-user" onClick={(e) => { e.stopPropagation(); setSettings((v) => !v); }}>
+            <span className="fc-avatar">{(me || "You").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span>
+            <span className="fc-user-n"><b>{me || "Your name"}</b><small>Braino Foundry · Free</small></span>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+          </button>
+          {settings && (
+            <div className="fc-settings" onClick={(e) => e.stopPropagation()}>
+              <p className="fc-settings-h">Settings</p>
+              <label className="fc-set-row"><span>Your name</span><input value={me} placeholder="Itish" onChange={(e) => setMe(e.target.value)} /></label>
+              <div className="fc-set-row"><span>Appearance</span>
+                <div className="fc-seg sm">{(["light", "dark"] as const).map((t) => <button key={t} className={theme === t ? "on" : ""} onClick={() => { if (theme !== t) toggle(); }}>{t === "light" ? "Light" : "Dark"}</button>)}</div>
+              </div>
+              <div className="fc-set-row"><span>Projects</span><small>{list.length} on this device</small></div>
+              <Link to="/foundry" className="fc-set-link">How Braino Foundry works</Link>
+              <Link to="/" className="fc-set-link">Affective home</Link>
+              <p className="fc-set-fine">Everything is saved in this browser. Sign-in comes later.</p>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -1028,7 +1101,7 @@ export default function FoundryApp() {
           <header className="fc-top fc-top-home">
             <Link to="/foundry" className="fc-brand fc-only-m"><img src="/affective-logo.png" alt="Affective" /></Link>
             <span className="fc-title">Braino Foundry</span>
-            <div className="fc-top-r"><button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button></div>
+
           </header>
           <div className="fc-scroll">
             <div className="fc-home">

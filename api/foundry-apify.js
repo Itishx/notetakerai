@@ -2,6 +2,7 @@
    never reaches the browser. Two calls:
      POST { kind: "google", queries: [...] }        -> { runId }
      POST { kind: "reddit", searches: [...] }        -> { runId }
+     POST { kind: "site", url: "https://..." }       -> { runId }  (about 5 pages, slim text)
      GET  ?run=<runId>                               -> { status, items? }
    Runs are started and then polled, because the Reddit actor takes minutes
    and a serverless function cannot wait that long. */
@@ -15,6 +16,8 @@ const ACTORS = {
   // scraper took over 7 minutes and matched single words across all of Reddit
   // (tested 2026-10-22). Google finds the threads where the problem is asked.
   reddit: "apify~google-search-scraper",
+  // The founder's own website, read for the product card (2026-10-23).
+  site: "apify~website-content-crawler",
 };
 
 function clean(list, max) {
@@ -35,6 +38,13 @@ function inputFor(kind, body) {
     if (!searches.length) return null;
     return { queries: searches.map((q) => `site:reddit.com ${q}`).join("\n"), maxPagesPerQuery: 1, resultsPerPage: 10, quickDateRange: "y1" };
   }
+  if (kind === "site") {
+    let url = String(body.url || "").trim();
+    if (!url) return null;
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    try { new URL(url); } catch (_) { return null; }
+    return { startUrls: [{ url }], maxCrawlPages: 5, maxCrawlDepth: 1, crawlerType: "cheerio", saveMarkdown: false, saveHtml: false, removeCookieWarnings: true };
+  }
   return null;
 }
 
@@ -44,6 +54,13 @@ function slim(kind, items) {
     return items.map((q) => ({
       query: q?.searchQuery?.term || "",
       results: (q?.organicResults || []).slice(0, 10).map((r) => ({ title: r.title || "", url: r.url || "", description: (r.description || "").slice(0, 220) })),
+    }));
+  }
+  if (kind === "site") {
+    return items.slice(0, 5).map((p) => ({
+      url: p?.url || "",
+      title: String(p?.metadata?.title || "").slice(0, 160),
+      text: String(p?.text || "").replace(/\s+/g, " ").slice(0, 2500),
     }));
   }
   return items
@@ -65,7 +82,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
       const runId = String(req.query?.run || "").replace(/[^A-Za-z0-9]/g, "");
-      const kind = req.query?.kind === "reddit" ? "reddit" : "google";
+      const kind = req.query?.kind === "reddit" ? "reddit" : req.query?.kind === "site" ? "site" : "google";
       if (!runId) return res.status(400).json({ error: "run is required" });
       const run = await fetch(`${API}/actor-runs/${runId}?token=${TOKEN}`).then((r) => r.json());
       const status = run?.data?.status || "UNKNOWN";
@@ -75,9 +92,9 @@ export default async function handler(req, res) {
     }
     if (req.method !== "POST") return res.status(405).json({ error: "POST or GET" });
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const kind = body.kind === "reddit" ? "reddit" : body.kind === "google" ? "google" : "";
+    const kind = ["reddit", "google", "site"].includes(body.kind) ? body.kind : "";
     const input = kind ? inputFor(kind, body) : null;
-    if (!input) return res.status(400).json({ error: "kind and queries/searches are required" });
+    if (!input) return res.status(400).json({ error: "kind and queries, searches or url are required" });
     const started = await fetch(`${API}/acts/${ACTORS[kind]}/runs?token=${TOKEN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

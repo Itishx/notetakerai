@@ -100,7 +100,7 @@ export function useAffReveal(deps: unknown[] = []) {
 }
 
 /* `braino` puts his name in the corner instead of the company's, for his own page. */
-export function AffNav({ theme, onToggle, links, braino = false }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean }) {
+export function AffNav({ theme, onToggle, links, braino = false, go }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean; go?: [string, string] }) {
   const items = links || [["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
   return (
     <nav className="aff-nav">
@@ -114,7 +114,7 @@ export function AffNav({ theme, onToggle, links, braino = false }: { theme: stri
         )}
         <div className="aff-nav-links">
           {items.map(([label, to]) => to.startsWith("#") ? <a key={to} href={to}>{label}</a> : <Link key={to} to={to}>{label}</Link>)}
-          <Link to="/braino#early-access" className="aff-nav-go">Join the waitlist</Link>
+          <Link to={go ? go[1] : "/braino#early-access"} className="aff-nav-go">{go ? go[0] : "Join the waitlist"}</Link>
           <AffThemeToggle theme={theme as "light" | "dark"} onToggle={onToggle} />
         </div>
       </div>
@@ -138,16 +138,16 @@ export function AffFooter() {
               <h4><Link to="/braino">Braino</Link></h4>
               <ul>
                 <li><Link to="/braino">Braino Companion</Link></li>
-                <li><Link to="/braino#early-access">Join the waitlist</Link></li>
                 <li><Link to="/foundry">Braino Co-founder</Link></li>
+                <li><Link to="/braino#early-access">Join the waitlist</Link></li>
               </ul>
             </nav>
             <nav className="aff-foot-col">
               <h4>Company</h4>
               <Link to="/affectiveos">AffectiveOS</Link>
-              <Link to="/labs">Labs</Link>
               <Link to="/trust">Trust &amp; privacy</Link>
               <Link to="/contact">Contact</Link>
+              <Link to="/labs">Labs</Link>
             </nav>
           </div>
           <p className="aff-foot-rule">Everything on this page is built and running in our private beta. Nothing here is a roadmap.</p>

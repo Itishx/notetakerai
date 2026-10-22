@@ -32,6 +32,32 @@ function getExtensionVersion() {
 
 const extensionVersion = getExtensionVersion();
 
+/* Local dev: serve Vercel's /api/foundry-apify route from the same file, so
+   Braino Foundry's search works on localhost (needs APIFY_TOKEN in .env.local). */
+function foundryApi() {
+  return {
+    name: "foundry-api",
+    configureServer(server: { middlewares: { use: (path: string, fn: (req: any, res: any) => void) => void }; ssrLoadModule: (p: string) => Promise<any> }) {
+      server.middlewares.use("/api/foundry-apify", async (req, res) => {
+        try {
+          const env = fs.existsSync(".env.local") ? fs.readFileSync(".env.local", "utf8") : "";
+          const tok = (env.match(/^APIFY_TOKEN=(.*)$/m) || [])[1];
+          if (tok && !process.env.APIFY_TOKEN) process.env.APIFY_TOKEN = tok.trim().replace(/^["']|["']$/g, "");
+          let body = "";
+          for await (const c of req) body += c;
+          const url = new URL(req.originalUrl || req.url, "http://localhost");
+          const mod = await server.ssrLoadModule(path.resolve(__dirname, "./api/foundry-apify.js"));
+          const out = { code: 200, headers: {} as Record<string, string> };
+          await mod.default(
+            { method: req.method, query: Object.fromEntries(url.searchParams), body: body ? JSON.parse(body) : {} },
+            { setHeader: (k: string, v: string) => { out.headers[k] = v; }, status(c: number) { out.code = c; return this; }, json(d: unknown) { res.statusCode = out.code; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(d)); } },
+          );
+        } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   server: {
     host: "::",
@@ -40,7 +66,7 @@ export default defineConfig({
       overlay: false,
     },
   },
-  plugins: [react()],
+  plugins: [react(), foundryApi()],
   define: {
     __EXTENSION_VERSION__: JSON.stringify(extensionVersion),
   },

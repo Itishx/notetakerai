@@ -729,15 +729,16 @@ export default function Affective() {
                 <h4><Link to="/braino">Braino</Link></h4>
                 <ul>
                   <li><Link to="/braino">Braino Companion</Link></li>
-                  <li><Link to="/braino#early-access">Join the waitlist</Link></li>
                   <li><Link to="/foundry">Braino Co-founder</Link></li>
+                  <li><Link to="/braino#early-access">Join the waitlist</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
-                <Link to="/labs">Labs</Link>
-                <Link to="/braino#early-access">Join the waitlist</Link>
+                <Link to="/affectiveos">AffectiveOS</Link>
+                <Link to="/trust">Trust &amp; privacy</Link>
                 <Link to="/contact">Contact</Link>
+                <Link to="/labs">Labs</Link>
               </nav>
             </div>
             <p className="aff-foot-rule">
