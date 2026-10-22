@@ -23,7 +23,8 @@ type RedditPost = { title: string; body: string; url: string; community: string;
 type Lead = RedditPost & { intent: number; why: string; message: string };
 
 const LEGACY = "foundry-session-v1";
-const GREETING = "Hi, I'm Braino Foundry. I help get what you're building seen. Three quick questions.";
+/* A plain "hi" gets a plain question back; anything longer is taken as the answer to it. */
+const isHi = (t: string) => /^(hi|hey|hello|yo|sup|hola|namaste|ready|start|let's go)\b/i.test(t.trim()) && t.trim().split(/\s+/).length <= 4;
 const READY = ["Ready when you are.", "What are we getting seen today?", "Tell me what you're building.", "Fresh page. Your move.", "I'm listening."];
 const LIST = "foundry-projects-v1";
 const keyOf = (id: string) => `foundry-project-${id}`;
@@ -82,7 +83,7 @@ const enc = encodeURIComponent;
 /* Pure pieces of the chat, kept outside the component so they never remount. */
 const Dots = () => <span className="ob-loop-dots" aria-hidden><i /><i /><i /></span>;
 const Bot = ({ children, wide }: { children: React.ReactNode; wide?: boolean }) => (
-  <div className={`fc-msg bot${wide ? " wide" : ""}`}><span className="fc-av" aria-hidden><BrainoMascot variant="foundry" size={24} /></span><div className="fc-body">{children}</div></div>
+  <div className={`fc-msg bot${wide ? " wide" : ""}`}><div className="fc-body">{children}</div></div>
 );
 const Me = ({ children }: { children: React.ReactNode }) => <div className="fc-msg me"><div className="fc-bubble">{children}</div></div>;
 const Wait = ({ text }: { text: string }) => <div className="fc-wait"><Dots /><span>{text}</span></div>;
@@ -279,7 +280,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     setStep((s) => s + 1);
   }
   function send() {
-    if (!started) { if (!draft.trim()) return; setHello(draft.trim()); setStarted(true); setDraft(""); return; }
+    if (!started) { const t = draft.trim(); if (!t) return; setStarted(true); setDraft(""); if (isHi(t)) setHello(t); else answer(t); return; }
     if (asking) return answer(draft);
     if (confirmed && brief && draft.trim() && !busy.content) { void runContent(brief, fixes, draft.trim()); setDraft(""); }
   }
@@ -288,7 +289,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   const turnRef = useRef<(t: string) => Promise<string>>(async () => "");
   turnRef.current = async (text: string) => {
     const t = text.trim();
-    if (!started) { setHello(t); setStarted(true); return `${GREETING} ${QUESTIONS[0].ask}`; }
+    if (!started) { setStarted(true); if (isHi(t)) { setHello(t); return QUESTIONS[0].ask; } answer(t); return QUESTIONS[1].ask; }
     if (asking && q) {
       const skip = q.optional && /^(skip|no|nothing|none|not yet|nope)\b/i.test(t);
       answer(skip ? "" : t);
@@ -404,7 +405,29 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     );
   };
 
-  const placeholder = !started ? "Say hi whenever you're ready" : q ? q.ph : !brief ? "Reading what you wrote" : !confirmed ? "Check the brief above first" : "Ask for a post about something you shipped today";
+  const placeholder = !started ? "Say hi, or tell me what you're building" : q ? q.ph : !brief ? "Reading what you wrote" : !confirmed ? "Check the brief above first" : "Ask for a post about something you shipped today";
+  const composer = (
+          <form className="fc-composer cl" onSubmit={(e) => { e.preventDefault(); send(); }}>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={draft}
+              disabled={started && !asking && !confirmed}
+              placeholder={placeholder}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            />
+            <div className="fc-cl-row">
+              <span className="fc-cl-hint">{voice.active ? "Listening" : "Enter to send"}</span>
+            <button type="button" className={`fc-mic${voice.active ? " on" : ""}`} aria-label="Talk to Braino" onClick={() => voice.toggle()}>
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            </button>
+            <button type="submit" className="fc-send" aria-label="Send" disabled={!started || asking ? !draft.trim() : (!confirmed || !draft.trim() || !!busy.content)}>
+              <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            </button>
+            </div>
+          </form>
+  );
   const maxRival = Math.max(namedCount, ...rivals.map((r) => r[1]), 1);
   const opticsBlock = answers && brief ? (
                       <>
@@ -472,15 +495,11 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           <div className="fc-col">
             {!started && !brief ? (
               <div className="fc-ready">
-                <div className="fc-mascot"><BrainoMascot variant="foundry" size={120} /></div>
-                <p className="fc-ready-line">{line}</p>
-                <p className="fc-ready-sub">Type below, or tap the mic and talk.</p>
+                <h1 className="fc-ready-line"><span className="fc-ready-m"><BrainoMascot variant="foundry" size={44} /></span>{line}</h1>
+                {composer}
               </div>
             ) : (
-              <>
-                {hello && <Me>{hello}</Me>}
-                <Bot><p className="fc-hello">{GREETING}</p></Bot>
-              </>
+              <>{hello && <Me>{hello}</Me>}</>
             )}
 
             {started && QUESTIONS.map((qq, i) => (i < step || brief) ? (
@@ -492,11 +511,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
 
             {started && q && (
               <Bot>
-                <div className="ob-step fc-ask" key={q.key}>
-                  <p className="ob-eyebrow">{q.eyebrow}</p>
-                  <div className="ob-progress fc-prog"><span style={{ width: `${((step + 1) / 3) * 100}%` }} /></div>
-                  <p className="fc-q big">{q.ask}</p>
-                  <p className="fc-note">{q.note}</p>
+                <div className="fc-ask" key={q.key}>
+                  <p className="fc-q">{q.ask} <span className="fc-note">{q.note}</span></p>
                   {(q.hints.length > 0 || q.optional) && (
                     <div className="ob-suggests">
                       {q.hints.map((h) => <button key={h} className="ob-suggest" onClick={() => setDraft(h)}>{h}</button>)}
@@ -574,24 +590,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           </div>
         </div>
 
-        <div className="fc-dock">
-          <form className="fc-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={draft}
-              disabled={started && !asking && !confirmed}
-              placeholder={placeholder}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            />
-            <button type="button" className={`fc-mic${voice.active ? " on" : ""}`} aria-label="Talk to Braino" onClick={() => voice.toggle()}>
-              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-            </button>
-            <button type="submit" className="fc-send" aria-label="Send" disabled={!started || asking ? !draft.trim() : (!confirmed || !draft.trim() || !!busy.content)}>
-              <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
-            </button>
-          </form>
+        <div className="fc-dock" hidden={!started && !brief}>
+          {(started || brief) && composer}
           <p className="fc-fine">Braino Foundry never posts on its own. You approve everything.</p>
         </div>
         </>) : (
