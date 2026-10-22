@@ -1,112 +1,157 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
-import { AffNav, AffFooter } from "@/components/affPage";
+import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
 import "./affective.css";
+import "./affective-home.css";
+import "./affectiveos-page.css";
 import "./foundry-landing.css";
 
-/* Foundry landing (2026-10-22): what it is, then the way in to the app. */
+/* Braino Foundry (2026-10-22). Built from the homepage's own pieces (affPage,
+   affective-home.css): the hero and its growing picture, lit lines, the
+   product box, the questions and the closing block, so it reads as one site. */
 const ENGINES = [
-  { k: "o", name: "Optics", line: "Find where you're invisible", body: "Asks your buyers' questions to AI assistants and Google. Are you named? Who is instead? Which questions do you lose?" },
-  { k: "c", name: "Content", line: "Make you worth finding", body: "Writes public posts for X, LinkedIn, Reddit, Instagram and Threads, in your voice, answering exactly the questions you lose." },
-  { k: "r", name: "Outreach", line: "Start conversations", body: "Finds people describing your problem on Reddit, keeps the real ones, and drafts one help-first message each." },
+  { key: "Engine 1", h: "Optics", p: "Asks your buyers' questions to AI assistants and Google. Are you named? Who is named instead? Which questions do you lose?" },
+  { key: "Engine 2", h: "Content", p: "Writes public posts for X, LinkedIn, Reddit, Instagram and Threads, in your voice, answering the exact questions you lose." },
+  { key: "Engine 3", h: "Outreach", p: "Finds people describing your problem on Reddit, keeps the real ones, and drafts one help-first message to each." },
 ];
 const FLOWS = [
-  ["Get found", "Nobody finds me on Google or in AI answers", ["o", "c", "r"]],
-  ["I shipped something", "I just launched a feature, tell people", ["c", "r", "o"]],
-  ["Find my first customers", "I need people to talk to this week", ["r", "c", "o"]],
-  ["Stay visible every week", "Ongoing, with my approval", ["o", "c", "r"]],
-] as const;
-const NAME = { o: "Optics", c: "Content", r: "Outreach" } as const;
+  { h: "Get found", p: "“Nobody finds me on Google or in AI answers.” Optics finds the questions you lose, Content answers them, Outreach messages the people asking." },
+  { h: "I shipped something", p: "“I just launched a feature.” Content turns it into five posts, Outreach tells the people who asked for it, Optics watches you get named." },
+  { h: "Find my first customers", p: "“I need people to talk to this week.” Outreach finds them, Content writes about what they keep asking, Optics adds it to your weekly check." },
+  { h: "Stay visible every week", p: "A Monday scorecard, this week's posts and your follow-ups, waiting for your yes." },
+];
+const FAQS = [
+  { q: "Is this a content generator?", a: "No. Content tools guess what to post. Braino Foundry starts from what your buyers are asking right now, then writes the posts that answer it and finds the people asking." },
+  { q: "Does it post for me?", a: "Never on its own. Every post and every message waits for your approval. Approve copies the text and opens the platform, and you post." },
+  { q: "What do I need to start?", a: "A few lines about what you're building. A website, a GitHub repo or a doc helps, but even an idea in your own words is enough." },
+  { q: "Where does it look?", a: "AI assistants, Google, and Reddit threads where people describe the problem you solve." },
+];
 
 export default function FoundryLanding() {
   const { theme, toggle } = useAffTheme();
-  useEffect(() => { document.title = "Foundry · Get your product seen"; }, []);
+  const root = useAffReveal([]);
+  useLitWords([]);
+  useGrowHero();
+  useEffect(() => { document.title = "Braino Foundry · Get your product seen"; }, []);
+  useEffect(() => {
+    const prev = document.body.style.background;
+    document.body.style.background = "#f4f2ec";
+    return () => { document.body.style.background = prev; };
+  }, []);
+
   return (
-    <div className="aff fl" data-theme={theme}>
-      <AffNav theme={theme} onToggle={toggle} links={[["How it works", "#engines"], ["Workflows", "#workflows"], ["Open Foundry", "/foundry/app"]]} />
+    <div className="aff fl" data-theme={theme} ref={root}>
+      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["AffectiveOS", "/affectiveos"], ["Open Foundry", "/foundry/app"]]} />
 
-      <section className="fl-hero">
+      <header className="aff-hero">
         <div className="aff-wrap">
-          <div className="aff-kicker">Foundry · a distribution co-founder</div>
-          <h1 className="fl-h1">Building got easy.<br /><em>Getting seen</em> didn't.</h1>
-          <p className="fl-lede">Foundry finds where buyers can't find you, writes the posts that fix it, and brings you the people already asking for what you built. You only approve.</p>
-          <div className="fl-cta">
-            <Link to="/foundry/app" className="fl-go">Open Foundry</Link>
-            <a href="#engines" className="fl-ghost">How it works</a>
-          </div>
-          <div className="fl-proof">
-            <div><b>8 of 8</b><span>founders we interviewed named distribution their biggest problem</span></div>
-            <div><b>6.3 hrs</b><span>a week the average owner spends on social media alone</span></div>
-            <div><b>40%</b><span>of AI answer citations come from Reddit, where your buyers ask</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="fl-moment">
-        <div className="aff-wrap">
-          <div className="fl-moment-card">
-            <div className="aff-kicker">What a founder sees in about a minute</div>
-            <p>"We asked AI the 8 questions your buyers ask. You were named in <b>0</b>. Your competitor in <b>7</b>. Here are <b>5 posts</b> that answer them, and <b>the people asking</b> on Reddit, each with a reply in your voice."</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="fl-sec" id="engines">
-        <div className="aff-wrap">
-          <div className="aff-kicker">Three engines</div>
-          <h2 className="fl-h2">Each does one job. Each feeds the next.</h2>
-          <div className="fl-engines">
-            {ENGINES.map((e, i) => (
-              <article key={e.k} className={`fl-engine ${e.k}`}>
-                <span className="fl-num">0{i + 1}</span>
-                <h3>{e.name}</h3>
-                <div className="fl-engine-line">{e.line}</div>
-                <p>{e.body}</p>
-              </article>
-            ))}
-          </div>
-          <p className="fl-note"><b>Content</b> is public posts for everyone. <b>Outreach</b> is a message to one person. Nothing goes out without your approval.</p>
-        </div>
-      </section>
-
-      <section className="fl-sec alt" id="workflows">
-        <div className="aff-wrap">
-          <div className="aff-kicker">Workflows</div>
-          <h2 className="fl-h2">You pick what you need. Foundry runs the engines in order.</h2>
-          <div className="fl-flows">
-            {FLOWS.map(([name, when, order]) => (
-              <div className="fl-flow" key={name}>
-                <div><h3>{name}</h3><span>"{when}"</span></div>
-                <div className="fl-chain">{order.map((k, i) => <span key={k}><i className={k}>{NAME[k]}</i>{i < 2 ? <em>→</em> : null}</span>)}</div>
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              <span className="aff-h1-line">Building got easy.</span>
+              <b>Getting seen didn't.</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="aff-hero-one">
+                Meet Braino Foundry. It finds where buyers can't find you, writes what fixes it, and brings you the people already asking. You only approve.
+              </p>
+              <div className="aff-hero-cta">
+                <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
+                <a href="#engines" className="aff-cta aff-cta-ghost">How it works</a>
               </div>
+            </div>
+          </div>
+        </div>
+        <figure className="aff-hero-shot" data-grow>
+          <img src="/braino-waitlist-forest.png" alt="A dark forest with one small tree lit up in a clearing." width={1956} height={804} loading="eager" decoding="async" />
+        </figure>
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p className="aff-strip-label">Gets you seen where buyers look</p>
+            <ul className="aff-strip-names fl-where">
+              {["ChatGPT", "Google", "Reddit", "LinkedIn", "X", "Threads"].map((n) => <li key={n}><span>{n}</span></li>)}
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <section className="hb6" id="engines">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Meet Braino Foundry</p>
+          <h2 className="aff-h1 ah-os-line hb6-big" data-lit>
+            <Lit text="A co-founder for the one job nobody has time for: getting seen." />
+          </h2>
+          <div className="ah-os-say hb6-say aff-reveal">
+            <p>8 of the 8 founders we interviewed named distribution their biggest problem, and none of them pays for a tool to fix it. They post into the void, hunt for customers by hand, and never know what worked.</p>
+          </div>
+          <div className="hb6-box aff-reveal">
+            <div className="hb6-head">
+              <div>
+                <p className="ah-kicker">Three engines</p>
+                <div className="hb5-name"><h2>Braino Foundry</h2></div>
+                <p className="hb6-line">Each engine does one job, and each one feeds the next. Nothing is posted or sent without your yes.</p>
+              </div>
+              <div className="hb6-side">
+                <div className="hb5-go">
+                  <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
+                </div>
+              </div>
+            </div>
+            <ul className="hb4-does hb6-jobs fl-engines">
+              {ENGINES.map((e, i) => <li key={e.h} className={`is-key fl-e${i}`}><small>{e.key}</small><h3>{e.h}</h3><p>{e.p}</p></li>)}
+            </ul>
+          </div>
+          <div className="hb6-demo">
+            <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Find out where you're invisible." /></h2>
+            <p className="hb6-story aff-reveal">In about a minute, a founder sees it in one sentence:</p>
+            <figure className="fl-moment aff-reveal">
+              <p>"We asked AI the 8 questions your buyers ask. You were named in <b>0</b>. Your competitor in <b>7</b>. Here are <b>5 posts</b> that answer them, and <b>the people asking</b> on Reddit, each with a reply in your voice."</p>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section className="ah-os" id="workflows">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Workflows</p>
+          <h2 className="aff-h1 ah-os-line" data-lit>
+            <Lit text="You pick what you need this week. Braino Foundry runs the engines in the right order." />
+          </h2>
+          <ul className="hb4-does fl-flows aff-reveal">
+            {FLOWS.map((f) => <li key={f.h}><h3>{f.h}</h3><p>{f.p}</p></li>)}
+          </ul>
+        </div>
+      </section>
+
+      <section className="hb2-faq">
+        <div className="aff-wrap hb2-faq-split">
+          <div className="hb2-faq-side">
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
+            <p>Anything else? <Link to="/foundry/app">Try it</Link> and see for yourself.</p>
+          </div>
+          <div className="hb2-faq-list">
+            {FAQS.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}<i aria-hidden="true">+</i></summary>
+                <p>{f.a}</p>
+              </details>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="fl-sec">
-        <div className="aff-wrap fl-steps">
-          <div>
-            <div className="aff-kicker">How it works</div>
-            <h2 className="fl-h2">Five minutes, start to finish.</h2>
+      <section className="hb-end">
+        <div className="hb-end-glow" aria-hidden="true" />
+        <div className="aff-wrap hb-end-in aff-reveal">
+          <h2 className="aff-h1 hb-end-line">Get your product <span className="hb-end-braino">seen.</span></h2>
+          <p className="hb-end-p">Tell Braino Foundry what you're building. It takes about a minute.</p>
+          <div className="hb-go">
+            <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
+            <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
           </div>
-          <ol>
-            <li><b>Tell it what you're building.</b> In your own words. It plays it back in two plain lines.</li>
-            <li><b>See where you're invisible.</b> AI answers and Google, question by question.</li>
-            <li><b>Get the posts that fix it.</b> Five platforms, your voice.</li>
-            <li><b>Meet the people asking.</b> A reply written for each.</li>
-            <li><b>Approve.</b> Foundry copies it and opens the platform. You post.</li>
-          </ol>
         </div>
       </section>
 
-      <section className="fl-end">
-        <div className="aff-wrap">
-          <h2 className="fl-h2">Get your product seen.</h2>
-          <Link to="/foundry/app" className="fl-go">Open Foundry</Link>
-        </div>
-      </section>
       <AffFooter />
     </div>
   );
