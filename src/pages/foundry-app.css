@@ -667,3 +667,21 @@
 .fc-sheet-f { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 32px; border-top: 1px solid var(--a-line); background: var(--a-bg); }
 .fc-sheet-f .ob-btn { text-decoration: none; display: inline-flex; align-items: center; }
 @media (max-width: 640px) { .fc-sheet-h, .fc-sheet-body, .fc-sheet-f { padding-left: 18px; padding-right: 18px; } .fc-sheet-f { flex-direction: column-reverse; } .fc-sheet-f .ob-btn { justify-content: center; } }
+
+/* Wider, Claude-style rail (2026-10-22). */
+.fc { grid-template-columns: 288px 1fr; }
+.fc-rail { padding: 16px 12px 14px; gap: 2px; }
+.fc-rail-top { display: flex; align-items: center; padding: 2px 6px 14px; }
+.fc-prod { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--a-display); font-size: 21px; letter-spacing: -.01em; }
+.fc-nav { display: grid; gap: 2px; }
+.fc-nav-i { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 0; border-radius: 10px; background: none; cursor: pointer; font-size: 15px; color: var(--a-ink) !important; text-decoration: none; text-align: left; }
+.fc-nav-i svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.fc-nav-i:hover, .fc-nav-i.on { background: rgba(var(--a-shade), .06); }
+.fc-nav-i.fc-new { border: 0; background: rgba(var(--a-shade), .07); font-weight: 500; }
+.fc-rail-label { margin: 26px 12px 6px; font-size: 13px; font-weight: 500; }
+.fc-pbtn { padding: 8px 12px; }
+.fc-pbtn span { font-size: 14.5px; }
+.fc-rail-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px 8px 0; border-top: 1px solid var(--a-line); }
+.fc-rail-foot .fc-brand img { height: 18px; }
+.fc-theme-i { width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 15px; }
+.fc-theme-i:hover { background: rgba(var(--a-shade), .06); }

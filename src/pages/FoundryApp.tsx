@@ -976,9 +976,16 @@ export default function FoundryApp() {
   return (
     <div className="aff fc" data-theme={theme}>
       <aside className="fc-rail">
-        <Link to="/foundry" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
-        <button className="fc-prod" onClick={() => setActive(null)}>Braino Foundry</button>
-        <button className="fc-new" onClick={() => create()}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>New project</button>
+        {/* Claude-style rail (2026-10-22): wordmark, a few icon rows, then the projects. */}
+        <div className="fc-rail-top">
+          <button className="fc-prod" onClick={() => setActive(null)}><BrainoMascot variant="foundry" size={22} />Braino Foundry</button>
+        </div>
+        <nav className="fc-nav">
+          <button className="fc-nav-i fc-new" onClick={() => create()}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>New project</button>
+          <button className={`fc-nav-i${!active ? " on" : ""}`} onClick={() => setActive(null)}><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" /></svg>Home</button>
+          <Link className="fc-nav-i" to="/foundry"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v5h1" /></svg>How it works</Link>
+          <Link className="fc-nav-i" to="/labs/introducing-braino-foundry"><svg viewBox="0 0 24 24"><path d="M6 4h9l4 4v12H6z M14 4v5h5" /></svg>The announcement</Link>
+        </nav>
         <div className="fc-rail-label">Projects</div>
         <div className="fc-plist">
           {sorted.map((p) => (
@@ -987,7 +994,7 @@ export default function FoundryApp() {
                 <input className="fc-pedit" autoFocus value={renaming.name} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} onBlur={saveName} onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setRenaming(null); }} />
               ) : (
               <button className="fc-pbtn" onClick={() => open(p.id)}>
-                <span>{p.running && <i className="fc-run" />}{p.name}</span><small>{ago(p.updated)}</small>
+                <span>{p.running && <i className="fc-run" />}{p.name}</span>
               </button>
               )}
               <button className="fc-more" aria-label="Project menu" onClick={(e) => { e.stopPropagation(); setSure(""); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuAt({ x: Math.max(8, r.right - 200), y: r.bottom + 6 }); setMenu(menu === p.id ? "" : p.id); }}><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
@@ -1011,7 +1018,8 @@ export default function FoundryApp() {
           {!list.length && <p className="fc-none">No projects yet.</p>}
         </div>
         <div className="fc-rail-foot">
-          <button className="fc-theme" onClick={toggle}>{theme === "dark" ? "Light mode" : "Dark mode"}</button>
+          <Link to="/" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
+          <button className="fc-theme-i" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
         </div>
       </aside>
 
