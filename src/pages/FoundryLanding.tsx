@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { NotchSheet } from "./aff-figures";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
@@ -21,10 +22,67 @@ const FLOWS = [
   { h: "Find my first customers", p: "“I need people to talk to this week.” Outreach finds them, Content writes about what they keep asking, Optics adds it to your weekly check." },
   { h: "Stay visible every week", p: "A Monday scorecard, this week's posts and your follow-ups, waiting for your yes." },
 ];
+const SAYS = [
+  { ask: "Braino, where am I invisible?", got: "Named in 0 of 8 AI answers. Your competitor in 7." },
+  { ask: "Write this week's posts.", got: "5 posts ready, one for each platform. Waiting for your yes." },
+  { ask: "Who is asking about this on Reddit?", got: "6 real threads. A reply drafted for each one." },
+];
+const PLACES = [
+  { k: "On a Mac", h: "Just say it.", p: "In the Braino Mac app, Foundry is voice first. Ask out loud and Braino runs the engines while you keep working.", ui: "mac" },
+  { k: "Chrome and Windows", h: "The same Foundry on the web.", p: "No Mac? Open Braino Foundry in any browser. Same engines, same approvals, nothing to install.", ui: "web" },
+  { k: "Already have Braino", h: "Switch it on.", p: "If you have Braino on your Mac, or get him later, you simply switch Foundry on. It plugs into the same little guy you already talk to.", ui: "switch" },
+];
+
+/* A tiny drawing of each place Foundry runs, so the section shows rather than tells. */
+function PlaceUI({ ui }: { ui: string }) {
+  if (ui === "mac") return (
+    <div className="fl-ui fl-ui-mac"><div className="fl-ui-notch"><i /><span>Find who is asking on Reddit</span></div><div className="fl-ui-lines"><b /><b /><b /></div></div>
+  );
+  if (ui === "web") return (
+    <div className="fl-ui fl-ui-web"><div className="fl-ui-bar"><i /><i /><i /><span>affctve.com/foundry/app</span></div><div className="fl-ui-chat"><p className="me">Get me found.</p><p>On it. Checking 8 questions your buyers ask.</p></div></div>
+  );
+  return (
+    <div className="fl-ui fl-ui-switch"><div className="fl-ui-row"><span>Braino Foundry</span><em className="on" /></div><div className="fl-ui-row"><span>Voice</span><em className="on" /></div><div className="fl-ui-row"><span>Memory</span><em className="on" /></div></div>
+  );
+}
+
+function SpeakDemo() {
+  const [n, setN] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => setN((i) => (i + 1) % SAYS.length), 3600); return () => window.clearInterval(t); }, []);
+  const s = SAYS[n];
+  return (
+    <div className="fl-speak" key={n}>
+      <NotchSheet className="fl-speak-ask" label="You" done={false}>{s.ask}</NotchSheet>
+      <NotchSheet className="fl-speak-got" label="Braino">{s.got}</NotchSheet>
+    </div>
+  );
+}
+
+/* What the founder actually sees: one card per engine. */
+function EngineCards() {
+  return (
+    <div className="fl-cards aff-reveal">
+      <div className="fl-card fl-c-o"><small>Optics · scorecard</small>
+        {[["“Best invoicing tool for freelancers”", "Not named"], ["“Alternatives to Zoho Invoice”", "Not named"], ["“How to chase late payments”", "Named"]].map(([q, r]) => <div key={q} className="fl-card-row"><span>{q}</span><em className={r === "Named" ? "ok" : ""}>{r}</em></div>)}
+      </div>
+      <div className="fl-card fl-c-c"><small>Content · LinkedIn</small>
+        <p>Most freelancers don't lose money on bad clients. They lose it on invoices nobody follows up on. Here is what we changed...</p>
+        <div className="fl-card-go"><span>Edit</span><b>Approve</b></div>
+      </div>
+      <div className="fl-card fl-c-r"><small>Outreach · r/freelance</small>
+        <p className="fl-card-q">"Client is 60 days late, what do I even say?"</p>
+        <p>Been there. A short, friendly nudge with the invoice attached works better than you'd think...</p>
+        <div className="fl-card-go"><span>Skip</span><b>Approve</b></div>
+      </div>
+    </div>
+  );
+}
+
 const FAQS = [
   { q: "Is this a content generator?", a: "No. Content tools guess what to post. Braino Foundry starts from what your buyers are asking right now, then writes the posts that answer it and finds the people asking." },
   { q: "Does it post for me?", a: "Never on its own. Every post and every message waits for your approval. Approve copies the text and opens the platform, and you post." },
   { q: "What do I need to start?", a: "A few lines about what you're building. A website, a GitHub repo or a doc helps, but even an idea in your own words is enough." },
+  { q: "Do I need a Mac?", a: "No. On a Mac, Braino Foundry runs inside the Braino app and you can just talk to it. On Chrome or Windows, the website does the same job." },
   { q: "Where does it look?", a: "AI assistants, Google, and Reddit threads where people describe the problem you solve." },
 ];
 
@@ -42,7 +100,7 @@ export default function FoundryLanding() {
 
   return (
     <div className="aff fl" data-theme={theme} ref={root}>
-      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["AffectiveOS", "/affectiveos"], ["Open Foundry", "/foundry/app"]]} />
+      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["Labs", "/labs"]]} />
 
       <header className="aff-hero">
         <div className="aff-wrap">
@@ -104,10 +162,29 @@ export default function FoundryLanding() {
           <div className="hb6-demo">
             <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Find out where you're invisible." /></h2>
             <p className="hb6-story aff-reveal">In about a minute, a founder sees it in one sentence:</p>
+            <EngineCards />
             <figure className="fl-moment aff-reveal">
               <p>"We asked AI the 8 questions your buyers ask. You were named in <b>0</b>. Your competitor in <b>7</b>. Here are <b>5 posts</b> that answer them, and <b>the people asking</b> on Reddit, each with a reply in your voice."</p>
             </figure>
           </div>
+        </div>
+      </section>
+
+      <section className="hb6 fl-speak-sec">
+        <div className="aff-wrap">
+          <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
+          <p className="hb6-story aff-reveal">On a Mac, Braino Foundry is just Braino. Ask him out loud where you're invisible, and the answer comes back in the notch while you keep working.</p>
+          <figure className="fl-speak-stage aff-reveal"><SpeakDemo /></figure>
+        </div>
+      </section>
+
+      <section className="ah-os" id="everywhere">
+        <div className="aff-wrap">
+          <p className="ah-kicker">One brain, wherever you work</p>
+          <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Talk to it on your Mac. Open it in any browser. It's the same Braino." /></h2>
+          <ul className="fl-places aff-reveal">
+            {PLACES.map((p) => <li key={p.k}><PlaceUI ui={p.ui} /><small>{p.k}</small><h3>{p.h}</h3><p>{p.p}</p></li>)}
+          </ul>
         </div>
       </section>
 

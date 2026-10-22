@@ -506,6 +506,7 @@ export default function Affective() {
           </Link>
           <div className="aff-nav-links">
             <Link to="/braino">Braino</Link>
+            <Link to="/foundry">Foundry</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
             <Link to="/braino#early-access" className="aff-nav-go">Join the waitlist</Link>
@@ -729,6 +730,7 @@ export default function Affective() {
                 <ul>
                   <li><Link to="/braino">For everyone</Link></li>
                   <li><Link to="/braino#early-access">Join the waitlist</Link></li>
+                  <li><Link to="/foundry">Braino Foundry</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">

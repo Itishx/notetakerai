@@ -101,7 +101,7 @@ export function useAffReveal(deps: unknown[] = []) {
 
 /* `braino` puts his name in the corner instead of the company's, for his own page. */
 export function AffNav({ theme, onToggle, links, braino = false }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean }) {
-  const items = links || [["Braino", "/braino"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
+  const items = links || [["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
   return (
     <nav className="aff-nav">
       <div className="aff-nav-in">
@@ -139,6 +139,7 @@ export function AffFooter() {
               <ul>
                 <li><Link to="/braino">For everyone</Link></li>
                 <li><Link to="/braino#early-access">Join the waitlist</Link></li>
+                <li><Link to="/foundry">Braino Foundry</Link></li>
               </ul>
             </nav>
             <nav className="aff-foot-col">

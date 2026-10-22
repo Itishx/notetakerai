@@ -10,3 +10,52 @@
 .fl-flows li { list-style: none; padding: 24px 0; border-top: 1px solid var(--a-line); }
 .fl-flows h3 { font-family: var(--a-display); font-weight: 500; font-size: 26px; margin: 0 0 8px; }
 .fl-flows p { color: var(--a-ink-soft); font-size: 16px; line-height: 1.6; margin: 0; }
+
+/* Product cards: what the founder sees from each engine. */
+.fl-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 28px 0 8px; }
+.fl-card { background: var(--a-box); border: 1px solid var(--a-line); border-radius: 20px; padding: 20px; box-shadow: 0 18px 40px -28px rgba(22,21,15,.35); font-size: 14px; line-height: 1.5; }
+.fl-card small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
+.fl-c-o small { color: var(--o); } .fl-c-c small { color: var(--c); } .fl-c-r small { color: var(--r); }
+.fl-card p { margin: 0 0 12px; color: var(--a-ink-soft); }
+.fl-card-q { color: var(--a-ink) !important; font-family: var(--a-display); font-size: 16px; }
+.fl-card-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--a-line); }
+.fl-card-row span { color: var(--a-ink-soft); }
+.fl-card-row em { font-style: normal; font-weight: 600; font-size: 12px; color: var(--c); white-space: nowrap; }
+.fl-card-row em.ok { color: var(--r); }
+.fl-card-go { display: flex; justify-content: flex-end; gap: 8px; }
+.fl-card-go span, .fl-card-go b { font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--a-line-strong); }
+.fl-card-go b { background: var(--a-ink); color: var(--a-bg); border-color: var(--a-ink); }
+
+/* Speak section: the notch asks, Braino answers. */
+.fl-speak-stage { margin: 24px 0 0; padding: 56px 24px; border-radius: 28px; background: radial-gradient(90% 120% at 50% 0%, #2b2617, #0f0e0a); display: grid; place-items: center; min-height: 260px; }
+.fl-speak { display: grid; gap: 14px; justify-items: center; animation: flIn .5s ease both; }
+.fl-speak .ns { max-width: 520px; }
+.fl-speak-got { animation: flIn .5s .9s ease both; }
+@keyframes flIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Everywhere: three places, each with a small drawing. */
+.fl-places { list-style: none; padding: 0; margin: 40px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.fl-places li { background: var(--a-box); border: 1px solid var(--a-line); border-radius: 24px; padding: 20px 20px 26px; }
+.fl-places small { display: block; margin: 18px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--a-foundry); }
+.fl-places h3 { font-family: var(--a-display); font-weight: 500; font-size: 24px; margin: 0 0 8px; }
+.fl-places p { margin: 0; color: var(--a-ink-soft); font-size: 15px; line-height: 1.6; }
+.fl-ui { height: 150px; border-radius: 16px; overflow: hidden; position: relative; border: 1px solid var(--a-line); font-size: 12px; }
+.fl-ui-mac { background: linear-gradient(160deg, #3b5a4a, #1b2a22); }
+.fl-ui-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #000; color: #fff; border-radius: 0 0 16px 16px; padding: 10px 16px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+.fl-ui-notch i { width: 8px; height: 8px; border-radius: 50%; background: #7ee2a8; box-shadow: 0 0 10px #7ee2a8; }
+.fl-ui-lines { position: absolute; left: 18px; right: 18px; bottom: 18px; display: grid; gap: 8px; }
+.fl-ui-lines b { height: 10px; border-radius: 6px; background: rgba(255,255,255,.18); }
+.fl-ui-lines b:nth-child(2) { width: 70%; } .fl-ui-lines b:nth-child(3) { width: 45%; }
+.fl-ui-web { background: var(--a-surface); }
+.fl-ui-bar { display: flex; gap: 5px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--a-line); }
+.fl-ui-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--a-line-strong); }
+.fl-ui-bar span { margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--a-bg); color: var(--a-ink-faint); font-size: 11px; }
+.fl-ui-chat { padding: 12px 14px; display: grid; gap: 8px; }
+.fl-ui-chat p { margin: 0; font-family: var(--a-display); color: var(--a-ink); }
+.fl-ui-chat p.me { justify-self: end; background: var(--a-bg); border: 1px solid var(--a-line); padding: 6px 12px; border-radius: 14px; font-family: inherit; }
+.fl-ui-switch { background: var(--a-surface); padding: 14px 16px; display: grid; gap: 4px; align-content: center; }
+.fl-ui-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--a-line); font-size: 13px; }
+.fl-ui-row:last-child { border: 0; }
+.fl-ui-row em { width: 34px; height: 20px; border-radius: 999px; background: var(--r); position: relative; }
+.fl-ui-row em::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+@media (max-width: 900px) { .fl-cards, .fl-places { grid-template-columns: 1fr; } }
