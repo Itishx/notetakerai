@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { Topic, TopicSource } from "./store";
 import type { PageProps } from "./types";
 import { approvePost, setPost, setTopic } from "./actions";
-import { writeArticle } from "./engines";
+import { checkClaims, writeArticle } from "./engines";
 import { copy } from "./lib";
 import { ItemTable, type TableRow } from "./components/table";
 import { WeekStrip } from "./components/charts";
@@ -21,7 +21,13 @@ function TopicItem({ t, p, up }: { t: Topic; p: PageProps["p"]; up: PageProps["u
   const [err, setErr] = useState("");
   async function write() {
     setBusy(true); setErr("");
-    try { const article = await writeArticle(p, t); setTopic(up, t.id, { article, articleStatus: "waiting" }); setOpen(true); }
+    try {
+      const article = await writeArticle(p, t);
+      setTopic(up, t.id, { article, articleStatus: "waiting", claims: undefined }); setOpen(true);
+      // Then every claim in it is checked, so nothing invented goes out.
+      const claims = await checkClaims(p, article).catch(() => undefined);
+      if (claims) setTopic(up, t.id, { claims });
+    }
     catch (_) { setErr("Could not write it right now. Try again in a moment."); }
     finally { setBusy(false); }
   }
@@ -37,6 +43,15 @@ function TopicItem({ t, p, up }: { t: Topic; p: PageProps["p"]; up: PageProps["u
             <button className="fx-link" onClick={() => void copy(t.article || "")}>Copy</button>
             <button className="fx-link" disabled={busy} onClick={() => void write()}>{busy ? "Rewriting" : "Rewrite"}</button>
           </div>
+          {t.claims && (() => {
+            const need = t.claims.filter((c) => c.basis === "source");
+            return (
+              <div className={`fx-claims ${need.length ? "warn" : "ok"}`}>
+                <b>{t.claims.length} claim{t.claims.length === 1 ? "" : "s"} checked. {need.length ? `${need.length} need${need.length === 1 ? "s" : ""} a source before you publish.` : "All stand on your details or common knowledge."}</b>
+                {need.length > 0 && <ul>{need.map((c, i) => <li key={i}>{c.text}<small>{c.why}</small></li>)}</ul>}
+              </div>
+            );
+          })()}
           {open && <div className="fx-article">{t.article.split("\n").map((ln, i) => {
             const x = ln.trim();
             if (!x) return null;

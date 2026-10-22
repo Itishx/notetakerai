@@ -15,7 +15,7 @@ export type BuyerCard = { buyer: string; questions: string[]; redditPhrases: str
 export type Quote = { id: string; text: string; url: string; community: string; at: number };
 export type Gap = { id: string; question: string; rivals: string[]; at: number };
 export type TopicSource = "reddit" | "optics" | "objection" | "founder";
-export type Topic = { id: string; title: string; source: TopicSource; sourceText: string; at: number; article?: string; articleStatus?: Status };
+export type Topic = { id: string; title: string; source: TopicSource; sourceText: string; at: number; article?: string; articleStatus?: Status; claims?: Claim[] };
 export type Objection = { id: string; text: string; person: string; answer: string; at: number };
 export type Activity = { id: string; at: number; who: ActorKind; text: string };
 
@@ -30,11 +30,17 @@ export type Memory = {
   activity: Activity[];
 };
 
-export type AiAnswer = { question: string; names: string[] };
+/* names: everyone named across the runs, most often first; counts: how often
+   each was named; hits: in how many runs you were named; answer: what the AI
+   actually said, word for word (2026-10-23, after EchoRanked). */
+export type AiAnswer = { question: string; names: string[]; counts?: number[]; hits?: number; runs?: number; answer?: string };
+export type Bot = { name: string; who: string; allowed: boolean };
+export type CrawlCheck = { at: number; ok: boolean; note: string; robots: boolean; bots: Bot[]; homeStatus: number; homeWords: number };
+export type Claim = { text: string; basis: "yours" | "common" | "source"; why: string };
 export type GoogleRow = { query: string; found: string; results: { title: string; url: string; description: string }[] };
 export type Fix = { id: string; question: string; where: string; what: string; from?: "optics" | "objection"; done?: boolean };
 export type Made = { title: string; content: string; where: string; link: string; steps: string[] };
-export type Optics = { at: number; answers: AiAnswer[]; google: GoogleRow[]; googleNote: string; fixes: Fix[]; made: Record<string, Made> } | null;
+export type Optics = { at: number; answers: AiAnswer[]; google: GoogleRow[]; googleNote: string; fixes: Fix[]; made: Record<string, Made>; crawl?: CrawlCheck } | null;
 
 export type Platform = "x" | "linkedin" | "reddit" | "instagram" | "threads";
 export type Status = "waiting" | "approved" | "skipped";

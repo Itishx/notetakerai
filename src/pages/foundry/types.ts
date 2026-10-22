@@ -1,4 +1,4 @@
-import type { Engine, Project, Settings } from "./store";
+import type { AiAnswer, Engine, Project, Settings } from "./store";
 import { DAY, mentions } from "./lib";
 
 export type PageId = "dashboard" | "optics" | "content" | "outreach" | "approvals" | "memory";
@@ -12,7 +12,30 @@ export type PageProps = {
   me: Settings;
 };
 
-export const namedCount = (p: Project) => p.optics ? p.optics.answers.filter((a) => a.names.some((n) => mentions(n, p.memory.product.name, p.memory.product.site))).length : 0;
+/* Named or not, per question. With several runs, "named" means most of them;
+   the range below says how sure that is. */
+export const isNamed = (p: Project, a: AiAnswer) => a.runs ? (a.hits || 0) * 2 > a.runs : a.names.some((n) => mentions(n, p.memory.product.name, p.memory.product.site));
+export const namedCount = (p: Project) => p.optics ? p.optics.answers.filter((a) => isNamed(p, a)).length : 0;
+/* AI answers change every time you ask. Low: named in every run. High: named
+   in at least one. The truth is somewhere between, and we say so. */
+export function namedRange(p: Project) {
+  const ans = p.optics?.answers || [];
+  if (!ans.some((a) => a.runs)) { const n = namedCount(p); return { low: n, high: n, runs: 1 }; }
+  return { low: ans.filter((a) => (a.hits || 0) >= (a.runs || 1)).length, high: ans.filter((a) => (a.hits || 0) > 0).length, runs: Math.max(...ans.map((a) => a.runs || 1)) };
+}
+/* Share of voice: of every name AI gave across all runs, how many were you. */
+export function shareOfVoice(p: Project) {
+  const c = new Map<string, number>();
+  let total = 0, you = 0;
+  (p.optics?.answers || []).forEach((a) => a.names.forEach((n, i) => {
+    const k = a.counts?.[i] ?? 1;
+    total += k;
+    if (mentions(n, p.memory.product.name, p.memory.product.site)) you += k;
+    else c.set(n, (c.get(n) || 0) + k);
+  }));
+  const board = [{ name: p.memory.product.name || "You", value: you, you: true }, ...[...c.entries()].map(([name, value]) => ({ name, value, you: false }))].sort((a, z) => z.value - a.value);
+  return { total, you, pct: total ? Math.round((you / total) * 100) : 0, board };
+}
 export const waitingCount = (p: Project) => p.posts.filter((x) => x.status === "waiting").length + p.people.filter((x) => x.status === "waiting" && x.message && x.stage === "found").length + p.memory.topics.filter((t) => t.article && (t.articleStatus || "waiting") === "waiting").length;
 export const followUpDue = (p: Project) => p.people.filter((x) => x.stage === "messaged" && Date.now() - x.stageAt >= 3 * DAY);
 

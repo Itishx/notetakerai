@@ -1,5 +1,6 @@
-import { apifyStart, apifyWait, ask, askJson, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, uid, type GoogleQuery, type RedditPost, type SitePage } from "./lib";
-import { log, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource } from "./store";
+import { apifyStart, apifyWait, ask, askJson, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type RedditPost, type SitePage } from "./lib";
+import { namedCount } from "./types";
+import { log, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim } from "./store";
 
 /* The three engines and the memory between them (2026-10-23).
    Optics: they find you. Content: they see you. Outreach: you reach them.
@@ -93,11 +94,29 @@ export async function runOptics(ctx: Ctx) {
   const googleRun = apifyStart("google", gq);
   googleRun.catch(() => undefined);
   try {
-    const ai = await askJson<{ question: string; names: string[] }[]>(`You are a general AI assistant, like ChatGPT, answering everyday users. For each question below, answer as you normally would by recommending specific products, apps, companies or services. Return only the names you would recommend, best first, up to 5 per question.
+    /* Asked three times, because an AI answer changes every time you ask
+       (2026-10-23). One run of 8 questions is a coin toss; three give a range
+       we can stand behind. Three model calls instead of one. */
+    const RUNS = 3;
+    const ask1 = () => askJson<{ question: string; names: string[]; answer: string }[]>(`You are a general AI assistant, like ChatGPT, answering everyday users. For each question below, answer as you normally would by recommending specific products, apps, companies or services.
 Questions:
 ${qs.map((q, i) => `${i + 1}. ${q}`).join("\n")}
-Return: [{"question": "...", "names": ["..."]}]`);
-    const answers = qs.map((q, i) => ({ question: q, names: (ai[i]?.names || []).map(clean).slice(0, 5) }));
+Return for each: "answer" (your answer as you would say it to the user, 2 to 3 sentences) and "names" (the products you recommended in it, best first, up to 5).
+Return: [{"question": "...", "answer": "...", "names": ["..."]}]`);
+    const samples = (await Promise.allSettled(Array.from({ length: RUNS }, ask1))).filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<{ question: string; names: string[]; answer: string }[]>).value);
+    if (!samples.length) throw new Error("The AI check did not answer");
+    const answers = qs.map((q, i) => {
+      const c = new Map<string, { name: string; n: number }>();
+      let hits = 0, said = "", saidUs = "";
+      samples.forEach((sm) => {
+        const names = (sm[i]?.names || []).map(clean).slice(0, 5);
+        if (names.some((n) => mentions(n, product.name, product.site))) { hits += 1; saidUs = saidUs || clean(sm[i]?.answer || ""); }
+        said = said || clean(sm[i]?.answer || "");
+        names.forEach((n) => { const k = n.toLowerCase(); const e = c.get(k); if (e) e.n += 1; else c.set(k, { name: n, n: 1 }); });
+      });
+      const ranked = [...c.values()].sort((a, z) => z.n - a.n).slice(0, 8);
+      return { question: q, names: ranked.map((x) => x.name), counts: ranked.map((x) => x.n), hits, runs: samples.length, answer: saidUs || said };
+    });
     ctx.busy("optics", "Checking Google page one");
     let google: GoogleQuery[] = [];
     let googleNote = "";
@@ -105,7 +124,7 @@ Return: [{"question": "...", "names": ["..."]}]`);
     catch (e) { googleNote = searchNote(e); }
     const rows = google.map((g) => { const hit = googleProof(g.results, product.name, product.site); return { query: g.query, found: hit?.url || "", results: g.results.slice(0, 5) }; });
     ctx.busy("optics", "Writing your fixes");
-    const lost = answers.filter((a) => !a.names.some((n) => mentions(n, product.name, product.site)));
+    const lost = answers.filter((a) => a.hits * 2 <= a.runs);
     const fx = await askJson<{ question: string; where: string; what: string }[]>(`${about(p0)}
 AI assistants do not name this product for these buyer questions (who they name instead in brackets):
 ${lost.map((a) => `- ${a.question} [${a.names.join(", ")}]`).join("\n") || "- (named everywhere, suggest pages that make it stronger)"}
@@ -117,7 +136,7 @@ Return: [{"question": "...", "where": "the place, 1 to 3 words", "what": "one sh
       const fixes: Fix[] = [...fx.slice(0, 5).map((f) => ({ id: uid(), question: clean(f.question), where: clean(f.where), what: clean(f.what), from: "optics" as const })), ...keep];
       const gaps = lost.map((a) => ({ id: uid(), question: a.question, rivals: a.names.slice(0, 3), at: Date.now() }));
       const named = answers.length - lost.length;
-      let n: Project = { ...p, searchNote: googleNote || p.searchNote, optics: { at: Date.now(), answers, google: rows, googleNote, fixes, made: {} }, memory: { ...p.memory, gaps } };
+      let n: Project = { ...p, searchNote: googleNote || p.searchNote, optics: { at: Date.now(), answers, google: rows, googleNote, fixes, made: {}, crawl: p.optics?.crawl }, memory: { ...p.memory, gaps } };
       n = log(n, "optics", `Checked ${answers.length} buyer questions. Named in ${named} of ${answers.length}`);
       if (rows.length) n = log(n, "optics", `Checked Google page one for ${rows.length} searches, found on ${rows.filter((r) => r.found).length}`);
       if (quote && rows.length) n = log(n, "memory", `A buyer quote from Outreach became an Optics search: "${quote.slice(0, 60)}"`);
@@ -125,6 +144,29 @@ Return: [{"question": "...", "where": "the place, 1 to 3 words", "what": "one sh
       return n;
     });
   } finally { ctx.busy("optics", ""); }
+}
+
+/* Can AI read your site? (2026-10-23) If ChatGPT's or Claude's crawler is
+   blocked, nothing else on this page can work. No search token needed. */
+export async function checkCrawl(site: string): Promise<CrawlCheck> {
+  const r = await fetch("/api/foundry-apify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "crawl", url: site }) });
+  const j = await readJson(r);
+  if (!r.ok || j.error) throw new Error(j.error || "Could not check the site");
+  return { at: Date.now(), ...(j as Omit<CrawlCheck, "at">) };
+}
+
+/* Every factual claim in an article, sorted by what it stands on, so
+   nothing invented goes out under the founder's name. */
+export async function checkClaims(p: Project, article: string): Promise<Claim[]> {
+  const r = await askJson<{ claims: { text: string; basis: string; why: string }[] }>(`${about(p)}
+Below is an article written for this founder. List every factual claim in it (numbers, comparisons, statements about the product, the market or other companies). For each, say what it stands on:
+"yours": it comes from the product or founder details above.
+"common": widely known and safe without a source.
+"source": it needs a source before publishing, or it may be wrong.
+Article:
+"""${article.slice(0, 6000)}"""
+Return: {"claims": [{"text": "the claim, short", "basis": "yours|common|source", "why": "a few words"}]}`);
+  return (r.claims || []).slice(0, 20).map((c) => ({ text: clean(c.text), basis: (["yours", "common", "source"].includes(c.basis) ? c.basis : "source") as Claim["basis"], why: clean(c.why || "") }));
 }
 
 export async function makeFix(p: Project, f: Fix): Promise<Made> {
@@ -333,7 +375,7 @@ export async function runAll(ctx: Ctx) {
   finally { ctx.busy("outreach", ""); }
   ctx.update((p) => {
     const o = p.optics;
-    const named = o ? o.answers.filter((a) => a.names.some((n) => mentions(n, p.memory.product.name, p.memory.product.site))).length : 0;
+    const named = namedCount(p);
     const entry: RunEntry = {
       at: p.lastRun || Date.now(), named, of: o?.answers.length || 0, google: o?.google.filter((g) => g.found).length || 0,
       posts: p.posts.filter((x) => x.status === "waiting").length, people: p.people.length,

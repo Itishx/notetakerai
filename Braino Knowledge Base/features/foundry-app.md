@@ -121,3 +121,19 @@ What changed, from Itish's walkthrough:
 Files: `src/pages/foundry/Dashboard.tsx`, `Approvals.tsx`, `Content.tsx`, `FoundryRoot.tsx`, `actions.ts`, `engines.ts` (`writeArticle`), `store.ts` (`Topic.article`, `Settings.photo`), `types.ts`, `components/table.tsx` (new), `components/ui.tsx` (Hint is a no-op), `foundry.css`.
 
 Honest limitations: articles cost one model call each and are not checked for facts beyond the prompt's rules. The photo lives only in this browser. The Apify token is still missing locally, so site, LinkedIn and Reddit reads fall back to what you typed.
+
+## Get found, outdoing EchoRanked + plain-words site (23 Oct 2026)
+
+**Status:** MVP, local, not pushed yet. **Released:** October 23, 2026.
+
+Get found (`src/pages/foundry/Optics.tsx`, `engines.ts`, `types.ts`):
+- **Ranges, not one number.** Each buyer question is asked 3 times (3 model calls instead of 1, in parallel, about 9 seconds). The score reads "named in 2 to 4 of 8": low is every run, high is at least one.
+- **What AI said, word for word**, under every question.
+- **Leaderboard and share of voice**: every name AI gave across all runs, ranked, with your % of them.
+- **Can AI read your site?** Checks robots.txt for GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, PerplexityBot, Google-Extended, Bingbot and CCBot, plus whether the home page has words without JavaScript. Gives the exact robots.txt lines to fix it. Runs in `api/foundry-apify.js` (`kind: "crawl"`), no Apify token needed.
+- **Articles have their claims checked**: every factual claim is sorted into "from your details", "common knowledge" or "needs a source", and the ones needing a source are listed before you publish. One extra model call per article.
+- **Your real buyer questions**: paste them, or upload the Queries export from Google Search Console; the top 8 by impressions are used.
+
+Not done: connecting Google Search Console directly (needs Google sign-in), daily scans (needs a server schedule).
+
+Website (`src/pages/FoundryLanding.tsx`): rewritten in plain outcomes, no engine names. Three steps (tell us what you built, we do most of the work, people find you and some buy), a Pricing section (Free to try, Foundry $33 a month) and a Services section, **Done for you at $299 a month** (we run it, write, post after your yes, reply to people, weekly report). Nav: How it works, Pricing, Done for you, Braino. Pricing decided by Itish on 23 Oct 2026. Checkout is not wired yet: both plan buttons start the free app, Done for you goes to /contact.

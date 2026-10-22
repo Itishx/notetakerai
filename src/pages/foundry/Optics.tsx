@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { copy, hostOf, mentions } from "./lib";
-import { makeFix } from "./engines";
+import { checkCrawl, makeFix } from "./engines";
 import { log, type Fix } from "./store";
-import { namedCount, type PageProps } from "./types";
-import { Bars, Ring } from "./components/charts";
+import { isNamed, namedCount, namedRange, shareOfVoice, type PageProps } from "./types";
+import { Ring } from "./components/charts";
 import { Busy, Empty, Hint, Note, PageHead, Section, SideSheet } from "./components/ui";
 
 export default function Optics({ p, up, busy, run }: PageProps) {
@@ -13,11 +13,57 @@ export default function Optics({ p, up, busy, run }: PageProps) {
   const [making, setMaking] = useState("");
   const [err, setErr] = useState("");
   const named = namedCount(p);
-  const rivals = useMemo(() => {
-    const c = new Map<string, number>();
-    (o?.answers || []).forEach((a) => a.names.forEach((n) => { if (!mentions(n, name, site)) c.set(n, (c.get(n) || 0) + 1); }));
-    return [...c.entries()].sort((a, z) => z[1] - a[1]).slice(0, 5).map(([n, v]) => ({ name: n, value: v }));
-  }, [o, name, site]);
+  const range = namedRange(p);
+  const sov = useMemo(() => shareOfVoice(p), [p]);
+  const rivals = sov.board.filter((r) => !r.you).slice(0, 5);
+  const [checking, setChecking] = useState(false);
+  const [crawlErr, setCrawlErr] = useState("");
+  async function crawl() {
+    if (!site) { setCrawlErr("Add your website on Product and founder first."); return; }
+    setChecking(true); setCrawlErr("");
+    try {
+      const c = await checkCrawl(site);
+      up((q) => log({ ...q, optics: q.optics ? { ...q.optics, crawl: c } : { at: 0, answers: [], google: [], googleNote: "", fixes: [], made: {}, crawl: c } }, "optics", c.ok ? "Checked: AI crawlers can read your site" : `Checked your site: ${c.note}`));
+    } catch (e) { setCrawlErr(String((e as Error).message || e)); }
+    finally { setChecking(false); }
+  }
+  const [paste, setPaste] = useState("");
+  /* Your real search questions (2026-10-23): paste them, or drop the Queries
+     export from Google Search Console. Top 8 by how often people searched. */
+  function applyQuestions(text: string) {
+    const rows = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const csv = rows[0] && /,|\t/.test(rows[0]) && /quer|search/i.test(rows[0]);
+    let qs: string[];
+    if (csv) {
+      const sep = rows[0].includes("\t") ? "\t" : ",";
+      const head = rows[0].split(sep).map((h) => h.replace(/"/g, "").trim().toLowerCase());
+      const qi = Math.max(0, head.findIndex((h) => /quer|search/.test(h)));
+      const ii = head.findIndex((h) => /impression/.test(h));
+      qs = rows.slice(1).map((r) => r.split(sep).map((c) => c.replace(/^"|"$/g, "").trim()))
+        .map((c) => ({ q: c[qi] || "", n: ii >= 0 ? Number(String(c[ii]).replace(/[^0-9.]/g, "")) || 0 : 0 }))
+        .filter((x) => x.q.split(/\s+/).length >= 3).sort((a, z) => z.n - a.n).map((x) => x.q);
+    } else qs = rows;
+    qs = [...new Set(qs)].slice(0, 8);
+    if (!qs.length) return;
+    up((q) => log({ ...q, memory: { ...q.memory, buyer: { ...q.memory.buyer, questions: qs } } }, "you", `Gave ${qs.length} real buyer questions${csv ? " from Search Console" : ""}`));
+    setPaste("");
+  }
+  const crawlBlock = (
+    <Section title="Can AI read your site?" explain={o?.crawl ? { note: o.crawl.note, blocked: o.crawl.bots.filter((b) => !b.allowed).map((b) => b.who) } : undefined}
+      actions={<button className="fx-ghost" disabled={checking} onClick={() => void crawl()}>{checking ? "Checking" : o?.crawl ? "Check again" : "Check my site"}</button>}>
+      {crawlErr && <Note tone="warn">{crawlErr}</Note>}
+      {o?.crawl ? (
+        <>
+          <p className={`fx-crawl-v ${o.crawl.ok ? "y" : "n"}`}>{o.crawl.note}</p>
+          <ul className="fx-bots">{o.crawl.bots.map((b) => <li key={b.name} className={b.allowed ? "y" : "n"}><i />{b.who}<small>{b.allowed ? "Can read" : "Blocked"}</small></li>)}</ul>
+          {o.crawl.bots.some((b) => !b.allowed) && (
+            <div className="fx-fixbox"><small>The fix: add this to your robots.txt</small><pre className="fx-piece">{o.crawl.bots.filter((b) => !b.allowed).map((b) => `User-agent: ${b.name}\nAllow: /`).join("\n\n")}</pre><button className="fx-ghost" onClick={() => void copy(o.crawl!.bots.filter((b) => !b.allowed).map((b) => `User-agent: ${b.name}\nAllow: /`).join("\n\n"))}>Copy</button></div>
+          )}
+          {o.crawl.homeStatus > 0 && o.crawl.homeWords < 80 && <Note>Your home page shows about {o.crawl.homeWords} words without JavaScript. Most AI crawlers do not run JavaScript, so put your main words in the page itself (server rendering or a static page).</Note>}
+        </>
+      ) : <p className="fx-small">Checks whether ChatGPT, Claude, Perplexity, Gemini and Copilot are allowed to read {site ? site.replace(/^https?:\/\//, "") : "your site"}. If they are blocked, nothing else on this page can work. Takes a few seconds.</p>}
+    </Section>
+  );
 
   async function doIt(f: Fix) {
     setOpen(f); setErr("");
@@ -33,43 +79,58 @@ export default function Optics({ p, up, busy, run }: PageProps) {
 
   return (
     <div className="fx-page">
-      <PageHead engine="optics" title="Get found" status={o ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
-      {!o ? (
+      <PageHead engine="optics" title="Get found" status={o?.answers.length ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
+      {crawlBlock}
+      {!o || !o.answers.length ? (
         <Empty title="Optics has not looked yet" action={<button className="fx-btn" disabled={!!busy.optics} onClick={run.optics}>{busy.optics ? <Busy text={busy.optics} /> : "Check how buyers find me"}</button>}>
           It asks an AI assistant and Google your 8 buyer questions and shows who gets named instead of you.
         </Empty>
       ) : (
         <>
           <div className="fx-grid2">
-            <Section title="Your score" hint="How many of your buyer questions an AI assistant answers with your name. The goal is to be named in most of them." explain={{ named, of: o.answers.length }}>
+            <Section title="Your score" explain={{ named, low: range.low, high: range.high, of: o.answers.length, runs: range.runs, shareOfVoice: `${sov.pct}%` }}>
               <div className="fx-vis">
                 <Ring n={named} of={o.answers.length} label="named" />
                 <div className="fx-vis-t">
-                  <div><b className="fx-num">{named} of {o.answers.length}</b><span>AI answers name you</span></div>
+                  <div><b className="fx-num">{range.low === range.high ? `${named} of ${o.answers.length}` : `${range.low} to ${range.high} of ${o.answers.length}`}</b><span>{range.runs > 1 ? `AI answers name you, asked ${range.runs} times each` : "AI answers name you"}</span></div>
+                  <div><b className="fx-num">{sov.pct}%</b><span>of every name AI gave is you</span></div>
                   <div><b className="fx-num">{o.google.length ? `${o.google.filter((g) => g.found).length} of ${o.google.length}` : "Not checked"}</b><span>Google searches with you on page one</span></div>
                 </div>
               </div>
             </Section>
-            <Section title="Who gets named instead" hint="The names an AI assistant gave for your buyers' questions, and how many questions each one won." explain={rivals}>
-              {rivals.length ? <Bars you={{ name: name || "You", value: named }} rows={rivals} /> : <Empty title="Nobody else">You are the only name that came up.</Empty>}
+            <Section title="Leaderboard" explain={sov.board.slice(0, 6)}>
+              {sov.total ? (
+                <ol className="fx-board">
+                  {sov.board.slice(0, 6).map((r, i) => (
+                    <li key={r.name} className={r.you ? "you" : ""}>
+                      <span className="fx-board-n">{i + 1}</span>
+                      <span className="fx-board-name">{r.name}{r.you && <small>you</small>}</span>
+                      <span className="fx-bars-t"><i style={{ width: `${(r.value / Math.max(1, sov.board[0].value)) * 100}%` }} /></span>
+                      <b>{Math.round((r.value / sov.total) * 100)}%</b>
+                    </li>
+                  ))}
+                  {!sov.board.slice(0, 6).some((r) => r.you) && <li className="you"><span className="fx-board-n">{sov.board.findIndex((r) => r.you) + 1}</span><span className="fx-board-name">{name || "You"}<small>you</small></span><span className="fx-bars-t"><i style={{ width: 0 }} /></span><b>{sov.pct}%</b></li>}
+                </ol>
+              ) : <Empty title="No names yet">Run Optics to see who AI recommends.</Empty>}
             </Section>
           </div>
 
           <Section title="Question by question" hint="Each row is a question a buyer asks. AI: did the assistant name you. Google: was your site or your exact name on page one. Google only checks 3 searches per run, to keep it fast." explain={o.answers.map((a) => ({ q: a.question, named: a.names.some((n) => mentions(n, name, site)) }))}>
             {o.googleNote && <Note>{o.googleNote} The AI column still works.</Note>}
             <div className="fx-qgrid" role="table">
-              <div className="fx-qgrid-h" role="row"><span>Buyer question</span><span>AI</span><span>Google</span></div>
+              <div className="fx-qgrid-h" role="row"><span>Buyer question</span><span>AI named you</span><span>Google</span></div>
               {o.answers.map((a, i) => {
-                const ai = a.names.some((n) => mentions(n, name, site));
+                const ai = isNamed(p, a);
                 const g = o.google.find((x) => x.query.toLowerCase() === a.question.toLowerCase());
                 return (
                   <details key={i} className="fx-qrow" role="row">
                     <summary>
                       <span>{a.question}</span>
-                      <span className={`fx-yes ${ai ? "y" : "n"}`}>{ai ? "Named" : "Not named"}</span>
+                      <span className={`fx-yes ${ai ? "y" : (a.hits || 0) > 0 ? "m" : "n"}`}>{a.runs ? `${a.hits || 0} of ${a.runs}` : ai ? "Named" : "Not named"}</span>
                       <span className={`fx-yes ${g ? (g.found ? "y" : "n") : "na"}`}>{g ? (g.found ? "Page one" : "Not found") : "Not checked"}</span>
                     </summary>
                     <div className="fx-qrow-b">
+                      {a.answer && <><small>What AI said, word for word</small><blockquote className="fx-said">{a.answer}</blockquote></>}
                       <small>Where you were found</small>
                       {ai || g?.found ? (
                         <ul>{ai && <li>Named by the AI assistant</li>}{g?.found && <li><a href={g.found} target="_blank" rel="noopener noreferrer">{hostOf(g.found)}</a> on Google</li>}</ul>
@@ -108,6 +169,15 @@ export default function Optics({ p, up, busy, run }: PageProps) {
                 ))}
               </ol>
             ) : <Empty title="No fixes">You are named everywhere Optics looked. Add more buyer questions on Product and founder.</Empty>}
+          </Section>
+          <Section title="Your real buyer questions" explain={{ questions: p.memory.buyer.questions }}>
+            <p className="fx-small">Right now Optics checks questions Braino guessed from your description. Paste what people really search, one per line, or drop the Queries export from Google Search Console. The top 8 are checked on the next run.</p>
+            <textarea className="fx-paste" rows={4} value={paste} placeholder={"best app for pg rent reminders\nhow to collect rent on upi automatically"} onChange={(e) => setPaste(e.target.value)} />
+            <div className="fx-acts">
+              <button className="fx-btn sm" disabled={!paste.trim()} onClick={() => applyQuestions(paste)}>Use these</button>
+              <label className="fx-ghost fx-upload">Upload Search Console file<input type="file" accept=".csv,.tsv,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void f.text().then(applyQuestions); }} /></label>
+              {!!p.memory.buyer.questions.length && <button className="fx-link" disabled={!!busy.optics} onClick={run.optics}>Run Optics with them</button>}
+            </div>
           </Section>
         </>
       )}

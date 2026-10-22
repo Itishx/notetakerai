@@ -10,17 +10,27 @@ import "./foundry-landing.css";
 /* Braino Foundry (2026-10-22). Built from the homepage's own pieces (affPage,
    affective-home.css): the hero and its growing picture, lit lines, the
    product box, the questions and the closing block, so it reads as one site. */
+/* Plain words, not machinery (2026-10-23). The page used to say "Engine 1:
+   Optics"; a founder does not buy engines, they buy being seen and their first
+   revenue. Three steps, in the order it happens to them. */
 const ENGINES = [
-  { key: "Engine 1", h: "Optics", p: "Asks your buyers' questions to AI assistants and Google. Are you named? Who is named instead? Which questions do you lose?" },
-  { key: "Engine 2", h: "Content", p: "Writes public posts for X, LinkedIn, Reddit, Instagram and Threads, in your voice, answering the exact questions you lose." },
-  { key: "Engine 3", h: "Outreach", p: "Finds people describing your problem on Reddit, keeps the real ones, and drafts one help-first message to each." },
+  { key: "Step 1", h: "Tell us what you built.", p: "A link and a few lines. Your website, an app, a doc, or just the idea in your own words. It takes about two minutes." },
+  { key: "Step 2", h: "We do most of the work.", p: "We find where buyers can't find you, write the posts and pages that fix it, and find the people already asking for what you made. You read it and say yes." },
+  { key: "Step 3", h: "People find you. Some of them buy.", p: "AI and Google start to name you, your posts reach the right people, and the ones asking get a helpful reply from you. Every week, again." },
 ];
 const FLOWS = [
-  { h: "Get found", p: "“Nobody finds me on Google or in AI answers.” Optics finds the questions you lose, Content answers them, Outreach messages the people asking." },
-  { h: "I shipped something", p: "“I just launched a feature.” Content turns it into five posts, Outreach tells the people who asked for it, Optics watches you get named." },
-  { h: "Find my first customers", p: "“I need people to talk to this week.” Outreach finds them, Content writes about what they keep asking, Optics adds it to your weekly check." },
-  { h: "Stay visible every week", p: "A Monday scorecard, this week's posts and your follow-ups, waiting for your yes." },
+  { h: "Nobody can find me", p: "“I don't show up on Google or in ChatGPT.” We find the questions your buyers ask where someone else gets named, and write what gets you named instead." },
+  { h: "I just shipped something", p: "“I launched a feature.” We turn it into posts for every place your buyers are, and tell the people who asked for it." },
+  { h: "I need my first customers", p: "“I need people to talk to this week.” We find people describing your problem right now, and write one honest reply to each." },
+  { h: "Keep me visible", p: "Every Monday: where you stand, this week's posts and who to follow up with. All waiting for your yes." },
 ];
+/* Pricing and the done-for-you service (2026-10-23, Itish: free to try, then
+   $33 a month; Done for You at $299 a month, we run it all). */
+const PLANS = [
+  { name: "Free", price: "$0", per: "to try", line: "See where you're invisible, today.", items: ["One full check of where buyers can't find you", "Who AI and Google name instead of you", "Your first posts, written in your voice", "People asking for what you made, with a reply ready"], cta: ["Start free", "/foundry/app"] },
+  { name: "Foundry", price: "$33", per: "a month", line: "Your marketing, running every week.", items: ["Everything in Free, every week on its own", "Posts for X, LinkedIn, Reddit, Instagram and Threads", "Articles and pages that get you named by AI", "New people to talk to, and your follow-ups", "One inbox: nothing goes out without your yes"], cta: ["Start free, upgrade later", "/foundry/app"], hot: true },
+];
+const DONE = ["We run Braino Foundry for you, every week", "We write, and we post once you say yes", "We reply to the people asking, in your voice", "A short report every week: what went out, who came, who bought"];
 const WHERE = {
   web: { tab: "On the web", h: "Open it in any browser.", p: "Chrome, Safari, Edge, on Windows or Mac. Tell it what you're building, and your posts and messages land in Approvals. Nothing to install.", cta: ["Open Braino Foundry", "/foundry/app"], steps: ["Start a project", "Answer three questions", "Approve what it wrote"] },
   mac: { tab: "On your Mac", h: "Or just ask Braino.", p: "If you use the Braino Mac app, Foundry is a switch inside it. Ask out loud, and the answer shows up in the notch. The Mac app is in private beta.", cta: ["Join the waitlist", "/braino#early-access"], steps: ["Switch Foundry on", "Ask out loud", "Approve in the notch"] },
@@ -51,14 +61,14 @@ function EngineCards() {
   return (
     <div className="fl-joint aff-reveal">
       <div className="fl-cell fl-c-o">
-        <p className="fl-cell-k"><i />Optics<span>Where you're missing</span></p>
+        <p className="fl-cell-k"><i />Get found<span>Where you're missing</span></p>
         <div className="fl-score"><b>0</b><span>of 8 AI answers name you</span></div>
         {[["Best invoicing tool for freelancers", false], ["Alternatives to Zoho Invoice", false], ["How to chase late payments", true]].map(([q, ok]) => (
           <div key={String(q)} className="fl-row"><span>{q}</span><em className={ok ? "ok" : ""}>{ok ? "Named" : "Missing"}</em></div>
         ))}
       </div>
       <div className="fl-cell fl-c-c">
-        <p className="fl-cell-k"><i />Content<span>A post that fixes it</span></p>
+        <p className="fl-cell-k"><i />Be seen<span>A post that fixes it</span></p>
         <div className="fl-li">
           <div className="fl-li-h"><span className="fl-av">AK</span><div><b>Ananya Kapoor</b><small>Founder at Invoicely</small></div><em>in</em></div>
           <p>Most freelancers don't lose money on bad clients. They lose it on invoices nobody follows up on. Here is what we changed... <u>see more</u></p>
@@ -66,7 +76,7 @@ function EngineCards() {
         <div className="fl-go"><span>Edit</span><b>Approve</b></div>
       </div>
       <div className="fl-cell fl-c-r">
-        <p className="fl-cell-k"><i />Outreach<span>A person asking today</span></p>
+        <p className="fl-cell-k"><i />Reach people<span>A person asking today</span></p>
         <div className="fl-rd">
           <small>r/freelance · 2h</small>
           <p className="fl-rd-q">"Client is 60 days late, what do I even say?"</p>
@@ -103,8 +113,9 @@ function Guide({ onClose }: { onClose: () => void }) {
 }
 
 const FAQS = [
+  { q: "How much of my time does it take?", a: "About ten minutes a week. You read what we wrote, change anything that doesn't sound like you, and say yes. With Done for You, even less." },
   { q: "Is this a content generator?", a: "No. Content tools guess what to post. Braino Foundry starts from what your buyers are asking right now, then writes the posts that answer it and finds the people asking." },
-  { q: "Does it post for me?", a: "Never on its own. Every post and every message waits for your approval. Approve copies the text and opens the platform, and you post." },
+  { q: "Does it post for me?", a: "Never on its own. Every post and every message waits for your yes. On Foundry, approving copies the text and opens the site so you post it. On Done for You, we post it for you after you say yes." },
   { q: "What do I need to start?", a: "A few lines about what you're building. A website, a GitHub repo or a doc helps, but even an idea in your own words is enough." },
   { q: "Do I need a Mac?", a: "No. On a Mac, Braino Foundry runs inside the Braino app and you can just talk to it. On Chrome or Windows, the website does the same job." },
   { q: "Where does it look?", a: "AI assistants, Google, and Reddit threads where people describe the problem you solve." },
@@ -116,7 +127,7 @@ export default function FoundryLanding() {
   const [guide, setGuide] = useState(false);
   useLitWords([]);
   useGrowHero();
-  useEffect(() => { document.title = "Braino Foundry · Get your product seen"; }, []);
+  useEffect(() => { document.title = "Braino Foundry · You built it. Now get seen."; }, []);
   useEffect(() => {
     const prev = document.body.style.background;
     document.body.style.background = "#f4f2ec";
@@ -125,22 +136,22 @@ export default function FoundryLanding() {
 
   return (
     <div className="aff fl" data-theme={theme} ref={root}>
-      <AffNav theme={theme} onToggle={toggle} links={[["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["Labs", "/labs"]]} go={["Start now. Find out why you\u2019re invisible.", "/foundry/app"]} />
+      <AffNav theme={theme} onToggle={toggle} links={[["How it works", "#engines"], ["Pricing", "#pricing"], ["Done for you", "#services"], ["Braino", "/braino"]]} go={["Start free", "/foundry/app"]} />
       {guide && <Guide onClose={() => setGuide(false)} />}
 
       <header className="aff-hero">
         <div className="aff-wrap">
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
-              <span className="aff-h1-line">Building got easy.</span>
-              <b>Getting seen didn't.</b>
+              <span className="aff-h1-line">You built it.</span>
+              <b>Now get seen, and get paid.</b>
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                Braino Foundry makes your brand more visible every week, on autopilot. It finds where buyers can't find you, writes what fixes it, and brings you the people already asking. You stay in the loop and only say yes.
+                We take care of your marketing. We help you get found, get seen and make your first revenue. You tell us what you built, we do most of the work, and you just watch it happen and say yes.
               </p>
               <div className="aff-hero-cta">
-                <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
+                <Link to="/foundry/app" className="aff-cta">Start free</Link>
                 <button type="button" className="aff-cta aff-cta-ghost" onClick={() => setGuide(true)}>How it works</button>
               </div>
             </div>
@@ -163,7 +174,7 @@ export default function FoundryLanding() {
         <div className="aff-wrap">
           <p className="ah-kicker">Meet Braino Foundry</p>
           <h2 className="aff-h1 ah-os-line hb6-big" data-lit>
-            <Lit text="A co-founder for the one job nobody has time for: getting seen." />
+            <Lit text="People can't buy what they never see." />
           </h2>
           <div className="ah-os-say hb6-say aff-reveal">
             <p>8 of the 8 founders we interviewed named distribution their biggest problem, and none of them pays for a tool to fix it. They post into the void, hunt for customers by hand, and never know what worked.</p>
@@ -171,13 +182,13 @@ export default function FoundryLanding() {
           <div className="hb6-box aff-reveal">
             <div className="hb6-head">
               <div>
-                <p className="ah-kicker">Three engines</p>
+                <p className="ah-kicker">How it works</p>
                 <div className="hb5-name"><h2>Braino Foundry</h2></div>
-                <p className="hb6-line">Each engine does one job, and each one feeds the next. Nothing is posted or sent without your yes.</p>
+                <p className="hb6-line">Three steps, and the last one repeats every week. Nothing is posted or sent without your yes.</p>
               </div>
               <div className="hb6-side">
                 <div className="hb5-go">
-                  <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
+                  <Link to="/foundry/app" className="aff-cta">Start free</Link>
                 </div>
               </div>
             </div>
@@ -186,7 +197,7 @@ export default function FoundryLanding() {
             </ul>
           </div>
           <div className="hb6-demo">
-            <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Find out where you're invisible." /></h2>
+            <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="See what you get in the first minute." /></h2>
             <p className="hb6-story aff-reveal">In about a minute, a founder sees it in one sentence:</p>
             <EngineCards />
             <figure className="fl-moment aff-reveal">
@@ -206,13 +217,46 @@ export default function FoundryLanding() {
 
       <section className="ah-os" id="workflows">
         <div className="aff-wrap">
-          <p className="ah-kicker">Workflows</p>
+          <p className="ah-kicker">What you can ask for</p>
           <h2 className="aff-h1 ah-os-line" data-lit>
-            <Lit text="You pick what you need this week. Braino Foundry runs the engines in the right order." />
+            <Lit text="Tell it what you need this week. It does the rest." />
           </h2>
           <ul className="hb4-does fl-flows aff-reveal">
             {FLOWS.map((f) => <li key={f.h}><h3>{f.h}</h3><p>{f.p}</p></li>)}
           </ul>
+        </div>
+      </section>
+
+      <section className="ah-os" id="pricing">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Pricing</p>
+          <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Your buyers are already asking. Be the one they find." /></h2>
+          <div className="fl-plans aff-reveal">
+            {PLANS.map((pl) => (
+              <article key={pl.name} className={`fl-plan${pl.hot ? " hot" : ""}`}>
+                <p className="fl-plan-n">{pl.name}</p>
+                <p className="fl-plan-p"><b>{pl.price}</b><span>{pl.per}</span></p>
+                <p className="fl-plan-l">{pl.line}</p>
+                <ul>{pl.items.map((x) => <li key={x}>{x}</li>)}</ul>
+                <Link to={pl.cta[1]} className={`aff-cta${pl.hot ? "" : " aff-cta-ghost"}`}>{pl.cta[0]}</Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="ah-os" id="services">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Services</p>
+          <div className="fl-done aff-reveal">
+            <div>
+              <h2 className="aff-h1">Done for you.</h2>
+              <p className="fl-done-l">No time at all? We run your marketing for you. You talk to us, we do the work, you approve from your phone.</p>
+              <p className="fl-plan-p"><b>$299</b><span>a month</span></p>
+              <Link to="/contact" className="aff-cta">Talk to us</Link>
+            </div>
+            <ul>{DONE.map((x) => <li key={x}>{x}</li>)}</ul>
+          </div>
         </div>
       </section>
 
@@ -236,11 +280,11 @@ export default function FoundryLanding() {
       <section className="hb-end">
         <div className="hb-end-glow" aria-hidden="true" />
         <div className="aff-wrap hb-end-in aff-reveal">
-          <h2 className="aff-h1 hb-end-line">Get your product <span className="hb-end-braino">seen.</span></h2>
-          <p className="hb-end-p">Tell Braino Foundry what you're building. It takes about a minute.</p>
+          <h2 className="aff-h1 hb-end-line">You built it. Now let people <span className="hb-end-braino">find it.</span></h2>
+          <p className="hb-end-p">Right now someone is asking for exactly what you made, and someone else is answering. Tell us what you built. It takes about two minutes.</p>
           <div className="hb-go">
-            <Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link>
-            <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
+            <Link to="/foundry/app" className="aff-cta">Start free</Link>
+            <a href="#services" className="aff-cta aff-cta-ghost">Done for you</a>
           </div>
         </div>
       </section>
