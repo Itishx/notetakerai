@@ -114,6 +114,10 @@ const Ring = ({ n, of }: { n: number; of: number }) => {
 };
 
 
+type RunEntry = { at: number; named: number; of: number; postsOk: number; leadsOk: number };
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
 type ProjectProps = { id: string; active: boolean; seed: string; theme: string; toggle: () => void; onMeta: (m: Partial<ProjectMeta> & { id: string }) => void; onHome: () => void };
 
 function FoundryProject({ id, active, seed, theme, toggle, onMeta, onHome }: ProjectProps) {
@@ -135,10 +139,14 @@ function FoundryProject({ id, active, seed, theme, toggle, onMeta, onHome }: Pro
   const [err, setErr] = useState<string>("");
   const [started, setStarted] = useState<boolean>(saved?.started ?? !!(saved?.brief || saved?.desc || seed));
   const [hello, setHello] = useState<string>(saved?.hello || "");
+  const [opened, setOpened] = useState<Record<string, true>>(saved?.opened || {});
+  const [autopilot, setAutopilot] = useState<boolean>(saved?.autopilot || false);
+  const [lastRun, setLastRun] = useState<number | null>(saved?.lastRun ?? (saved?.answers ? Date.now() : null));
+  const [history, setHistory] = useState<RunEntry[]>(saved?.history || []);
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello })); } catch (_) { /* private window */ }
-  }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello]);
+    try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history })); } catch (_) { /* private window */ }
+  }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done, started, hello, opened, autopilot, lastRun, history]);
 
   const setB = (k: string, v: string) => setBusy((b) => { const n = { ...b }; if (v) n[k] = v; else delete n[k]; return n; });
   const fail = (e: unknown) => setErr(String((e as Error)?.message || e));
@@ -175,9 +183,9 @@ Return: [{"question": "...", "names": ["..."]}]`);
       const fx = await askJson<Fix[]>(`Product: ${b.product}. ${b.oneLine}
 It is not named by AI assistants for these buyer questions (who is named instead in brackets):
 ${lost.map((a) => `- ${a.question} [${a.names.join(", ")}]`).join("\n") || "- (named everywhere)"}
-For the 4 questions that matter most, say what the founder should publish and where so AI assistants and Google start naming them. Places: a Reddit answer, a LinkedIn post, an X thread, a comparison page, an FAQ page.
-Return: [{"question": "...", "where": "...", "what": "one concrete sentence"}]`);
-      setFixes(fx);
+For the 5 questions that matter most, say what the founder should publish and where so AI assistants and Google start naming them. Places: a Reddit answer, a LinkedIn post, an X thread, a comparison page, an FAQ page.
+Return: [{"question": "...", "where": "the place, 1 to 3 words", "what": "one short action, at most 12 words, starting with a verb"}]`);
+      setFixes(fx.slice(0, 5));
     } catch (e) { fail(e); } finally { setB("optics", ""); }
   }
 
@@ -212,7 +220,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
 
   async function confirmBrief() {
     if (!brief) return;
-    setConfirmed(true); setErr("");
+    setConfirmed(true); setErr(""); setLastRun(Date.now());
     const b = brief;
     // Outreach is the slow one, so it starts at the same time.
     const out = runOutreach(b);
@@ -225,7 +233,13 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
 
   function act(id: string, kind: "approved" | "skipped", text = "", url = "") {
     setDone((d) => ({ ...d, [id]: kind }));
-    if (kind === "approved") { void copy(text); if (url) window.open(url, "_blank", "noopener"); }
+    if (kind === "approved") { void copy(text); if (url) { window.open(url, "_blank", "noopener"); setOpened((o) => ({ ...o, [id]: true })); } }
+  }
+  // A fresh run: new checks, new posts, new people. Past runs stay in history.
+  function runAgain() {
+    if (!brief || Object.values(busy).some(Boolean)) return;
+    setAnswers(null); setGoogle(null); setFixes(null); setPosts(null); setLeads(null); setDone({}); setOpened({});
+    void confirmBrief();
   }
   function reset() {
     setDesc(""); setLink(""); setAbout(""); setBrief(null); setConfirmed(false); setAnswers(null); setGoogle(null); setFixes(null); setPosts(null); setLeads(null); setDone({}); setErr("");
@@ -276,6 +290,22 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   useEffect(() => {
     onMeta({ id, name: brief?.product || (desc ? desc.slice(0, 40) : "New project"), named: answers ? namedCount : -1, of: answers ? answers.length : 0, postsOk, leadsOk, running: !!working });
   }, [brief, desc, answers, namedCount, postsOk, leadsOk, working]); // eslint-disable-line react-hooks/exhaustive-deps
+  // One history entry per run, kept up to date as approvals come in.
+  useEffect(() => {
+    if (!lastRun || !answers) return;
+    const e: RunEntry = { at: lastRun, named: namedCount, of: answers.length, postsOk, leadsOk };
+    setHistory((h) => {
+      const i = h.findIndex((x) => x.at === lastRun);
+      if (i >= 0) { const o = h[i]; if (o.named === e.named && o.postsOk === e.postsOk && o.leadsOk === e.leadsOk && o.of === e.of) return h; const n = [...h]; n[i] = e; return n; }
+      return [...h, e].slice(-26);
+    });
+  }, [lastRun, answers, namedCount, postsOk, leadsOk]);
+  // Autopilot has no server scheduler: the weekly run happens when the app is
+  // open on or after the due date.
+  const nextRun = lastRun ? lastRun + WEEK : null;
+  useEffect(() => {
+    if (active && autopilot && confirmed && nextRun && Date.now() >= nextRun && !working) runAgain();
+  }, [active, autopilot, confirmed, nextRun]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (active) document.title = `${brief?.product || "New project"} · Braino Foundry`; }, [active, brief]);
   const asking = !brief && step < 3;
   const q = asking ? QUESTIONS[step] : null;
@@ -323,65 +353,81 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
   /* ── Small pieces ── */
   // The run as a timeline: what is done, what is live, what is next.
   const stages: { name: string; state: "done" | "live" | "wait"; note: string }[] = [
-    { name: "Brief", state: "done", note: "Confirmed" },
+    { name: "Brief", state: brief && confirmed ? "done" : started ? "live" : "wait", note: confirmed ? "Confirmed" : "Answer 3 questions" },
     { name: "Optics", state: answers && fixes ? "done" : busy.optics ? "live" : "wait", note: busy.optics || (fixes ? `${fixes.length} fixes` : "Next") },
     { name: "Content", state: posts && !busy.content ? "done" : busy.content ? "live" : "wait", note: busy.content || (posts ? "5 posts" : "After Optics") },
     { name: "Outreach", state: leads && !busy.outreach ? "done" : busy.outreach ? "live" : "wait", note: busy.outreach || (leads ? `${leads.length} people` : "Next") },
     { name: "You approve", state: posts && leads ? (approved ? "done" : "live") : "wait", note: approved ? `${approved} approved` : "Waiting" },
   ];
-  const Timeline = () => (
-    <ol className="fc-time">
-      {stages.map((s) => <li key={s.name} className={s.state}><i>{s.state === "done" ? <svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5" /></svg> : null}</i><b>{s.name}</b><span>{s.note}</span></li>)}
+  const curStage = Math.max(0, stages.findIndex((s) => s.state !== "done"));
+  const Strip = () => (
+    <ol className="fc-strip" aria-label="Run progress">
+      {stages.map((s, i) => <li key={s.name} className={`${s.state}${i === (stages.every((x) => x.state === "done") ? stages.length - 1 : curStage) ? " cur" : ""}`} title={s.note}><i>{s.state === "done" ? <svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5" /></svg> : null}</i><span>{s.name}</span></li>)}
     </ol>
   );
 
   const host = (u: string, fallback: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return fallback; } };
   const handle = brief ? brief.product.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 15) || "you" : "you";
-  const initial = brief ? brief.product.trim().charAt(0).toUpperCase() || "B" : "B";
 
+  const initials = brief ? (brief.product.match(/[A-Z0-9]/g) || [brief.product.charAt(0)]).slice(0, 2).join("").toUpperCase() || "B" : "B";
+  const [more, setMore] = useState<Record<string, true>>({});
+  const Ico = ({ d }: { d: string }) => <svg viewBox="0 0 24 24" className="pv-ico"><path d={d} /></svg>;
+  const I = {
+    reply: "M4 5h16v11H9l-5 4z", repost: "M7 7h11l-3-3M17 17H6l3 3M18 7v5M6 17v-5", like: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z", share: "M12 15V4M8 8l4-4 4 4M5 13v6h14v-6",
+  };
   const Preview = ({ id, text }: { id: string; text: string }) => {
-    if (id === "x" || id === "threads") return (
-      <div className={`pv pv-x ${id}`}>
-        <span className="pv-av">{initial}</span>
+    if (id === "x") return (
+      <div className="pv pv-x">
+        <span className="pv-av">{initials}</span>
         <div className="pv-main">
           <div className="pv-who"><b>{brief?.product}</b><span>@{handle} · now</span></div>
           {text.split(/\n\s*\n/).map((t, i) => <p key={i} className={i ? "pv-thread" : ""}>{t}</p>)}
-          <div className="pv-acts"><span>Reply</span><span>Repost</span><span>Like</span><span>Share</span></div>
+          <div className="pv-acts x"><Ico d={I.reply} /><Ico d={I.repost} /><Ico d={I.like} /><Ico d={I.share} /></div>
         </div>
       </div>
     );
-    if (id === "linkedin") return (
-      <div className="pv pv-li">
-        <div className="pv-head"><span className="pv-av sq">{initial}</span><div><b>{brief?.product}</b><span>Founder · now</span></div></div>
-        <p>{text}</p>
-        <div className="pv-acts"><span>Like</span><span>Comment</span><span>Repost</span><span>Send</span></div>
-      </div>
-    );
+    if (id === "linkedin") {
+      const long = text.length > 240 && !more[id];
+      return (
+        <div className="pv pv-li">
+          <div className="pv-head"><span className="pv-av">{initials}</span><div><b>{brief?.product}</b><span>Founder at {brief?.product} · now</span></div></div>
+          <p>{long ? text.slice(0, 240).replace(/\s+\S*$/, "") : text}{long && <>... <button className="pv-more" onClick={() => setMore((m) => ({ ...m, [id]: true }))}>see more</button></>}</p>
+          <div className="pv-acts li"><span><Ico d={I.like} />Like</span><span><Ico d={I.reply} />Comment</span><span><Ico d={I.repost} />Repost</span><span><Ico d={I.share} />Send</span></div>
+        </div>
+      );
+    }
     if (id === "reddit") {
       const [title, ...rest] = text.split(/\n\s*\n/);
       return (
         <div className="pv pv-rd">
-          <div className="pv-vote"><span>▲</span><b>1</b><span>▼</span></div>
-          <div className="pv-main"><small>Posted by u/{handle}</small><h4>{title}</h4><p>{rest.join("\n\n")}</p><div className="pv-acts"><span>Comment</span><span>Share</span><span>Save</span></div></div>
+          <div className="pv-vote"><svg viewBox="0 0 24 24" className="pv-ico"><path d="M12 5l7 8h-4v6H9v-6H5z" /></svg><b>1</b><svg viewBox="0 0 24 24" className="pv-ico"><path d="M12 19l7-8h-4V5H9v6H5z" /></svg></div>
+          <div className="pv-main"><small><b>r/your-subreddit</b> · Posted by u/{handle}</small><h4>{title}</h4><p>{rest.join("\n\n")}</p><div className="pv-acts"><span><Ico d={I.reply} />Comment</span><span><Ico d={I.share} />Share</span></div></div>
         </div>
       );
     }
-    const [cap, vis] = text.split(/\n\s*\n\[Visual: /);
+    const [cap] = text.split(/\n\s*\n\[Visual: /);
     return (
-      <div className="pv pv-ig">
-        <div className="pv-head"><span className="pv-av ring">{initial}</span><b>{handle}</b></div>
-        <div className="pv-img"><span>Image idea</span><p>{(vis || posts?.instagram.visual || "").replace(/\]$/, "")}</p></div>
-        <p><b>{handle}</b> {cap}</p>
+      <div className={`pv pv-sq ${id}`}>
+        <div className="pv-head"><span className="pv-av sm">{initials}</span><b>{handle}</b><span>{id === "threads" ? "Threads" : "Instagram"}</span></div>
+        <div className="pv-tile"><span className="pv-tile-mark">{initials}</span><p>{cap.length > 140 ? cap.slice(0, 140).replace(/\s+\S*$/, "") + "..." : cap}</p></div>
+        {id === "instagram" && posts?.instagram.visual && <p className="pv-vis">Image idea: {posts.instagram.visual}</p>}
+        <div className="pv-acts x"><Ico d={I.like} /><Ico d={I.reply} /><Ico d={I.repost} /><Ico d={I.share} /></div>
       </div>
     );
   };
 
+  const Chip = ({ id }: { id: string }) => <span className={`fc-chip-s ${done[id] || "waiting"}`}>{done[id] === "approved" ? (opened[id] ? "Approved, opened" : "Approved") : done[id] === "skipped" ? "Skipped" : "Waiting"}</span>;
   const Actions = ({ id, text, url, label }: { id: string; text: string; url: string; label: string }) => (
     <footer className="fc-acts">
-      <button className="ob-btn is-coral fc-sm" onClick={() => { setEditing(""); act(id, "approved", text, url); }}>{label}</button>
-      <button className="ob-btn is-outline fc-sm" onClick={() => setEditing(editing === id ? "" : id)}>{editing === id ? "Done editing" : "Edit"}</button>
-      <button className="ob-skip" onClick={() => act(id, "skipped")}>Skip</button>
-      {done[id] && <span className="fc-state">{done[id] === "approved" ? "Copied and opened" : "Skipped"}</span>}
+      {done[id] === "approved" ? (
+        <button className="ob-btn is-outline fc-sm" onClick={() => { void copy(text); window.open(url, "_blank", "noopener"); setOpened((o) => ({ ...o, [id]: true })); }}>{opened[id] ? "Copy and open again" : "Copy and open"}</button>
+      ) : (
+        <>
+          <button className="ob-btn is-coral fc-sm" onClick={() => { setEditing(""); act(id, "approved", text, url); }}>{label}</button>
+          <button className="ob-btn is-outline fc-sm" onClick={() => setEditing(editing === id ? "" : id)}>{editing === id ? "Done editing" : "Edit"}</button>
+          {done[id] !== "skipped" ? <button className="ob-skip" onClick={() => act(id, "skipped")}>Skip</button> : <button className="ob-skip" onClick={() => setDone((d) => { const n = { ...d }; delete n[id]; return n; })}>Undo skip</button>}
+        </>
+      )}
     </footer>
   );
 
@@ -389,7 +435,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     const id = `post-${c.id}`; const text = edits[id] ?? c.text;
     return (
       <article className={`fc-item ${done[id] || ""}`}>
-        <div className="fc-item-h"><span className="fc-plat">{c.label}</span><span className="fc-len">{text.length} characters</span></div>
+        <div className="fc-item-h"><span className="fc-plat">{c.label}</span><span className="fc-len">{text.length} characters</span><Chip id={id} /></div>
         {editing === id ? <textarea className="fc-edit" value={text} rows={7} onChange={(e) => setEdits((m) => ({ ...m, [id]: e.target.value }))} /> : Preview({ id: c.id, text })}
         {Actions({ id, text, url: c.url, label: `Approve, open ${c.label}` })}
       </article>
@@ -399,6 +445,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     const id = `lead-${l.url}`; const text = edits[id] ?? l.message;
     return (
       <article className={`fc-item ${done[id] || ""}`}>
+        <div className="fc-item-h"><span className="fc-plat">One person on {l.community.startsWith("r/") ? l.community : `r/${l.community}`}</span><Chip id={id} /></div>
         <div className="fc-thread">
           <div className="fc-op">
             <small>{l.community.startsWith("r/") ? l.community : `r/${l.community}`}{l.upVotes != null ? ` · ${l.upVotes} upvotes` : ""}{l.comments != null ? ` · ${l.comments} comments` : ""}</small>
@@ -408,11 +455,11 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           <div className="fc-meter"><span>How ready they are</span><i><em style={{ width: `${l.intent}%` }} /></i><b>{l.intent}</b></div>
           <p className="fc-why">{l.why}</p>
           <div className="fc-reply">
-            <span className="pv-av sm">{initial}</span>
+            <span className="pv-av sm">{initials}</span>
             {editing === id ? <textarea className="fc-edit" value={text} rows={5} onChange={(e) => setEdits((m) => ({ ...m, [id]: e.target.value }))} /> : <p>{text}</p>}
           </div>
         </div>
-        {Actions({ id, text, url: l.url, label: "Approve, open thread" })}
+        {Actions({ id, text, url: l.url, label: "Approve, open their post" })}
       </article>
     );
   };
@@ -478,12 +525,103 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                         </div>
                         {fixes && (
                           <>
-                            <p>Here is what to publish, and where, so they start naming you.</p>
-                            <ol className="fc-fixes">{fixes.map((f) => <li key={f.question}><span className="fc-where">{f.where}</span><p>{f.what}</p><small>For "{f.question}"</small></li>)}</ol>
+                            <p>What to publish next, so AI starts recommending you.</p>
+                            <div className="fc-fixcards">{fixes.slice(0, 5).map((f) => <div key={f.question} className="fc-fixcard"><span className="fc-where">{f.where}</span><b>{f.what}</b><small>Fixes: {f.question}</small></div>)}</div>
                           </>
                         )}
                       </>
   ) : null;
+
+  /* ── Overview: autopilot loop, history and a few calm charts ── */
+  const H = history.filter((h) => h.of > 0);
+  const lineChart = (() => {
+    if (H.length < 1) return null;
+    const W = 300, Hh = 110, pad = 18;
+    const max = Math.max(...H.map((h) => h.of), 1);
+    const x = (i: number) => H.length === 1 ? W / 2 : pad + (i * (W - pad * 2)) / (H.length - 1);
+    const y = (v: number) => Hh - pad - (v / max) * (Hh - pad * 2);
+    const pts = H.map((h, i) => `${x(i)},${y(h.named)}`).join(" ");
+    return (
+      <svg viewBox={`0 0 ${W} ${Hh}`} className="fc-line" role="img" aria-label="AI answers naming you, per run">
+        <line x1={pad} x2={W - pad} y1={y(0)} y2={y(0)} className="ax" />
+        <line x1={pad} x2={W - pad} y1={y(max)} y2={y(max)} className="ax dash" />
+        {H.length > 1 && <polyline points={pts} className="ln" />}
+        {H.map((h, i) => <g key={h.at}><circle cx={x(i)} cy={y(h.named)} r="3.5" className="pt" /><text x={x(i)} y={y(h.named) - 8} className="lb">{h.named}</text><text x={x(i)} y={Hh - 3} className="dt">{day(h.at)}</text></g>)}
+      </svg>
+    );
+  })();
+  const barChart = (() => {
+    if (!H.length) return null;
+    const W = 300, Hh = 110, pad = 18, max = Math.max(...H.map((h) => h.postsOk + h.leadsOk), 1);
+    const bw = Math.min(28, (W - pad * 2) / H.length - 8);
+    return (
+      <svg viewBox={`0 0 ${W} ${Hh}`} className="fc-barsvg" role="img" aria-label="Approvals per run">
+        <line x1={pad} x2={W - pad} y1={Hh - pad} y2={Hh - pad} className="ax" />
+        {H.map((h, i) => {
+          const cx = pad + ((i + 0.5) * (W - pad * 2)) / H.length;
+          const hp = (h.postsOk / max) * (Hh - pad * 2), hl = (h.leadsOk / max) * (Hh - pad * 2);
+          return <g key={h.at}><rect x={cx - bw / 2} y={Hh - pad - hp} width={bw} height={hp} className="bp" rx="2" /><rect x={cx - bw / 2} y={Hh - pad - hp - hl} width={bw} height={hl} className="bl" rx="2" /><text x={cx} y={Hh - 3} className="dt">{day(h.at)}</text></g>;
+        })}
+      </svg>
+    );
+  })();
+  const autopilotPanel = (
+    <section className="fc-auto">
+      <div className="fc-auto-l">
+        <p className="ob-eyebrow">Autopilot</p>
+        <h2>Distribution keeps running itself. You only approve.</h2>
+        <label className="fc-switch"><input type="checkbox" checked={autopilot} onChange={(e) => setAutopilot(e.target.checked)} /><i /><span>Run every week</span></label>
+        <p className="fc-auto-next">{autopilot && nextRun ? <>Next run <b>{day(nextRun)}</b></> : lastRun ? <>Last run <b>{day(lastRun)}</b></> : "Not run yet"}</p>
+        <button className="ob-btn is-outline fc-sm" disabled={!!working} onClick={runAgain}>{working ? "Running now" : "Run again now"}</button>
+        <small>Runs when you open Braino Foundry each week.</small>
+      </div>
+      <svg className="fc-loop" viewBox="0 0 220 220" role="img" aria-label="Optics, Content, Outreach, you approve, then Optics again">
+        <path id={`loop-${id}`} d="M110 30 A80 80 0 1 1 109.9 30" className="track" />
+        {([["Optics", 110, 30, "o"], ["Content", 190, 110, "c"], ["Outreach", 110, 190, "r"], ["You approve", 30, 110, "y"]] as const).map(([t, cx, cy, k]) => (
+          <g key={t}><circle cx={cx} cy={cy} r="7" className={`nd ${k}`} /><text x={cx} y={cy + (cy === 30 ? -14 : cy === 190 ? 24 : 4)} dx={cx === 190 ? -14 : cx === 30 ? 14 : 0} className={`tx${cx === 190 ? " r" : cx === 30 ? " l" : ""}`}>{t}</text></g>
+        ))}
+        <circle r="4.5" className="dot"><animateMotion dur={working ? "3s" : "8s"} repeatCount="indefinite"><mpath href={`#loop-${id}`} /></animateMotion></circle>
+      </svg>
+    </section>
+  );
+  const totalMentions = (answers || []).reduce((n, a) => n + a.names.length, 0);
+  const rivalSum = rivals.reduce((n, r) => n + r[1], 0);
+  const donutParts: [string, number, string][] = answers ? [["You", namedCount, "var(--o)"], ...rivals.map((r, i) => [r[0], r[1], `rgba(var(--a-shade), ${0.5 - i * 0.1})`] as [string, number, string]), ["Others", Math.max(0, totalMentions - namedCount - rivalSum), "rgba(var(--a-shade), .1)"]] : [];
+  const donut = (() => {
+    if (!totalMentions) return null;
+    const r = 42, c = 2 * Math.PI * r; let off = 0;
+    return (
+      <svg viewBox="0 0 120 120" className="fc-donut" role="img" aria-label="Share of AI mentions">
+        {donutParts.filter((p) => p[1] > 0).map(([n, v, col]) => { const len = (v / totalMentions) * c; const el = <circle key={n} cx="60" cy="60" r={r} stroke={col} strokeDasharray={`${len} ${c}`} strokeDashoffset={-off} transform="rotate(-90 60 60)" />; off += len; return el; })}
+        <text x="60" y="58" className="big">{Math.round((namedCount / totalMentions) * 100)}%</text>
+        <text x="60" y="76" className="small">is you</text>
+      </svg>
+    );
+  })();
+  const written = postCards.length + (leads || []).length;
+  const approvedN = postsOk + leadsOk;
+  const openedN = Object.keys(opened).filter((k) => done[k] === "approved").length;
+  const funnel: [string, number][] = [["Written for you", written], ["Approved", approvedN], ["Opened to post", openedN]];
+  const chartsBlock = (
+    <div className="fc-charts">
+      <div className="fc-card fc-chart">
+        <p className="fc-mini">AI answers naming you, per run</p>
+        {lineChart || <p className="fc-note">Shows up after your first run.</p>}
+      </div>
+      <div className="fc-card fc-chart">
+        <p className="fc-mini">Approvals per run <span className="fc-k"><i className="bp" />Posts <i className="bl" />Messages</span></p>
+        {barChart || <p className="fc-note">Shows up after your first run.</p>}
+      </div>
+      <div className="fc-card fc-chart">
+        <p className="fc-mini">Share of AI mentions</p>
+        {donut ? <div className="fc-donut-wrap">{donut}<ul>{donutParts.filter((p) => p[1] > 0).map(([n, v, col]) => <li key={n}><i style={{ background: col }} /><span>{n}</span><b>{v}</b></li>)}</ul></div> : <p className="fc-note">Shows up after Optics.</p>}
+      </div>
+      <div className="fc-card fc-chart">
+        <p className="fc-mini">From written to posted</p>
+        <div className="fc-funnel">{funnel.map(([n, v], i) => <div key={n}><span>{n}</span><i><em style={{ width: `${written ? (v / written) * 100 : 0}%`, opacity: 1 - i * 0.25 }} /></i><b>{v}</b></div>)}</div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -496,8 +634,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
             <button role="tab" aria-selected={view === "overview"} className={view === "overview" ? "on" : ""} onClick={() => setView("overview")}>Overview</button>
             <button role="tab" aria-selected={view === "approvals"} className={view === "approvals" ? "on" : ""} onClick={() => setView("approvals")}>Approvals{pendingCount > 0 ? <em>{pendingCount}</em> : null}</button>
           </div>
+          {confirmed && brief && <Strip />}
           <div className="fc-top-r">
-            {working && <span className="fc-live"><i />{working}</span>}
             <button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
           </div>
         </header>
@@ -562,10 +700,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
               <>
                 <Me>Yes, that is it. Run it.</Me>
 
-                <Bot wide>
-                  <p>On it. Here is where things are.</p>
-                  {Timeline()}
-                </Bot>
+                <Bot><p>On it. You can follow each step at the top.</p></Bot>
 
                 {(answers || busy.optics) && (
                   <Bot wide>
@@ -575,21 +710,18 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                   </Bot>
                 )}
 
-                {(posts || busy.content) && (
-                  <Bot wide>
-                    <Engine k="c" name="Content" sub="Posts that fix it" />
-                    {posts && <p>Five posts, one per platform, in your voice. This is roughly how each one will look. Approve copies the text and opens the platform.</p>}
-                    {posts && <div className="fc-list">{postCards.map((c) => <div key={c.id}>{PostCard({ c })}</div>)}</div>}
-                    {busy.content && <Wait text={busy.content} />}
-                  </Bot>
-                )}
+                {(busy.content || busy.outreach) && <Bot><Wait text={busy.content || busy.outreach} /></Bot>}
 
-                {(leads || busy.outreach) && (
+                {(posts || (leads && leads.length > 0)) && (
                   <Bot wide>
-                    <Engine k="r" name="Outreach" sub="People asking today" />
-                    {leads && (leads.length ? <p>{leads.length} people on Reddit are asking for this right now, most ready first. I wrote a reply for each.</p> : <p>Nobody found asking about this today. Try a broader brief.</p>)}
-                    {leads && leads.length > 0 && <div className="fc-list">{leads.map((l) => <div key={l.url}>{LeadCard({ l })}</div>)}</div>}
-                    {busy.outreach && <Wait text={busy.outreach} />}
+                    <div className="fc-card fc-ready-card">
+                      <div>
+                        <b>Your approvals are ready</b>
+                        <span>{postCards.length} {postCards.length === 1 ? "post" : "posts"} and {(leads || []).length} {(leads || []).length === 1 ? "message" : "messages"} {pendingCount ? "waiting for your yes" : "all handled"}</span>
+                      </div>
+                      <button className="ob-btn is-coral" onClick={() => setView("approvals")}>Open Approvals</button>
+                    </div>
+                    {leads && !leads.length && <p>Nobody on Reddit is asking about this today. I will look again next run.</p>}
                   </Bot>
                 )}
 
@@ -620,11 +752,18 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           <div className="fc-col fc-ov">
             {view === "approvals" && confirmed && brief ? (
               <>
-                <div className="fc-ov-h"><p className="ob-eyebrow">Approvals</p><h1>{pendingCount ? `${pendingCount} waiting for your yes.` : "All caught up."}</h1><p className="fc-note">Approve copies the text and opens the platform. Braino Foundry never posts on its own.</p></div>
-                <section className="fc-sec"><Engine k="c" name="Posts" sub="Content" />
+                <div className="fc-ov-h"><p className="ob-eyebrow">Approvals</p><h1>{pendingCount ? `${pendingCount} waiting for your yes.` : "All caught up."}</h1><p className="fc-note">Approve copies the text and opens the site so you can post it. Braino Foundry never posts on its own.</p></div>
+                {pendingCount > 0 && (
+                  <div className="fc-allbar">
+                    <span><b>{pendingCount}</b> waiting</span>
+                    <button className="ob-btn is-coral fc-sm" onClick={() => setDone((d) => { const n = { ...d }; postCards.forEach((c) => { if (!n[`post-${c.id}`]) n[`post-${c.id}`] = "approved"; }); (leads || []).forEach((l) => { if (!n[`lead-${l.url}`]) n[`lead-${l.url}`] = "approved"; }); return n; })}>Approve all {pendingCount}</button>
+                    <small>Marks them approved. Then open each one to post it.</small>
+                  </div>
+                )}
+                <section className="fc-sec"><Engine k="c" name="Posts to publish" sub={posts ? `${postCards.length} written for you` : "Content"} />
                   {posts ? <div className="fc-list">{[...postCards].sort((a, z) => Number(!!done[`post-${a.id}`]) - Number(!!done[`post-${z.id}`])).map((c) => <div key={c.id}>{PostCard({ c })}</div>)}</div> : <Wait text={busy.content || "Posts land here after Optics"} />}
                 </section>
-                <section className="fc-sec"><Engine k="r" name="Replies" sub="Outreach" />
+                <section className="fc-sec"><Engine k="r" name="Messages to send" sub="One person each" />
                   {leads ? (leads.length ? <div className="fc-list">{[...leads].sort((a, z) => Number(!!done[`lead-${a.url}`]) - Number(!!done[`lead-${z.url}`])).map((l) => <div key={l.url}>{LeadCard({ l })}</div>)}</div> : <p className="fc-note">Nobody found asking about this today.</p>) : <Wait text={busy.outreach || "Waiting"} />}
                 </section>
               </>
@@ -640,16 +779,18 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                   <p className="ob-eyebrow">{brief.product}</p>
                   <h1>{brief.oneLine}</h1>
                 </div>
+                {autopilotPanel}
                 <div className="fc-kpi-row">
                   <div><span>AI answers naming you</span><b>{answers ? <>{namedCount}<small> of {answers.length}</small></> : "..."}</b></div>
                   <div><span>Google page one</span><b>{google ? <>{googleHits}<small> of {google.length}</small></> : "..."}</b></div>
                   <div><span>Posts approved</span><b>{postsOk}<small> of {postCards.length || 5}</small></b></div>
-                  <div><span>Replies approved</span><b>{leadsOk}<small> of {leads ? leads.length : "..."}</small></b></div>
+                  <div><span>Messages approved</span><b>{leadsOk}<small> of {leads ? leads.length : "..."}</small></b></div>
                 </div>
                 {working && <Wait text={working} />}
+                {chartsBlock}
                 <section className="fc-sec"><Engine k="o" name="Optics" sub="Where you are invisible" />{opticsBlock || <Wait text={busy.optics || "Waiting"} />}</section>
                 <section className="fc-sec fc-next">
-                  <div><Engine k="c" name="Content" sub={posts ? `${postCards.length} posts written` : "Posts that fix it"} /><Engine k="r" name="Outreach" sub={leads ? `${leads.length} people asking` : "People asking today"} /></div>
+                  <div><Engine k="c" name="Content" sub={posts ? `${postCards.length} posts written` : "Posts that fix it"} /><Engine k="r" name="Outreach" sub={leads ? `${leads.length} messages written` : "People asking today"} /></div>
                   <p>{pendingCount ? <><b>{pendingCount}</b> {pendingCount === 1 ? "thing is" : "things are"} waiting for your yes.</> : posts || leads ? "Nothing waiting. You are all caught up." : busy.content || busy.outreach || "Posts and people land in Approvals."}</p>
                   <button className="ob-btn is-coral" onClick={() => setView("approvals")}>Open Approvals</button>
                 </section>

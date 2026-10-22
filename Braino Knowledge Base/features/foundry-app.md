@@ -57,3 +57,7 @@ Tell Foundry what you're building. It finds where buyers can't find you, writes 
 ## Projects, Braino and voice (22 Oct 2026)
 
 Opens on a projects home. Each project has Chat, Overview and Approvals tabs. A new chat waits for you to say hi, then Braino (with his mascot) asks three quick questions. A mic button opens voice mode: browser speech recognition in, Braino's Fish voice out (Chrome or Safari). A run stops if the page reloads.
+
+## Approvals, Autopilot and charts (22 Oct 2026)
+
+Posts and messages live only in Approvals; the chat shows one "Your approvals are ready" card. Run steps sit in the top bar. Overview has Autopilot (run every week, saved per project; runs when you open the app on or after the due date, no server scheduler yet), a loop diagram, and charts: AI answers naming you per run, approvals per run, share of mentions, written to approved to opened. "Run again now" replaces the current posts and messages.
