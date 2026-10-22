@@ -6,7 +6,7 @@
    Runs are started and then polled, because the Reddit actor takes minutes
    and a serverless function cannot wait that long. */
 
-const TOKEN = process.env.APIFY_TOKEN || "apify_api_72owXBHTcfdf3rFF1HW4mA9Bfvl9DQ0J3Qaj";
+const TOKEN = process.env.APIFY_TOKEN || "";
 const API = "https://api.apify.com/v2";
 
 const ACTORS = {
