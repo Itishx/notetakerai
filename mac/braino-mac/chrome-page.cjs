@@ -66,22 +66,83 @@ function runJs(js, app = "Google Chrome", timeoutMs = 15000) {
   });
 }
 
-/* Everything visible you could act on, in the order a person would find it. */
+/* Everything visible you could act on, in the order a person would find it.
+ *
+ * Form boxes are never dropped (2026-10-23). The n8n signup page showed one
+ * email box and a Continue button; the read kept only boxes with text in them,
+ * an empty box has none, so to him the box did not exist and he clicked
+ * Continue on an empty form for six steps. A box is now named the way a person
+ * reads it (its label, its placeholder, its kind) and says what it holds and
+ * whether it is greyed out. Shadow DOM and same-origin frames are read too:
+ * embedded sign-in forms live there. What the page says is wrong (an alert,
+ * "invalid email") comes along as "!" lines. */
 const READ_JS = `(function(){
   try {
-    document.querySelectorAll('[data-braino-idx]').forEach(function(e){ e.removeAttribute('data-braino-idx'); });
-    var sel = 'a,button,input,select,textarea,[role="button"],[role="link"],[role="tab"],[role="option"],[onclick]';
-    var els = document.querySelectorAll(sel), out = [], n = 0;
-    for (var i = 0; i < els.length && n < ${READ_CAP}; i++) {
-      var e = els[i], r = e.getBoundingClientRect();
+    var sel = 'a,button,input,select,textarea,[contenteditable="true"],[contenteditable=""],[role="button"],[role="link"],[role="tab"],[role="option"],[role="checkbox"],[role="radio"],[role="switch"],[role="menuitem"],[role="combobox"],[role="textbox"],[onclick]';
+    var all = [], notes = [];
+    function walk(root, depth){
+      if (depth > 4) return;
+      try { root.querySelectorAll('[data-braino-idx]').forEach(function(e){ e.removeAttribute('data-braino-idx'); }); } catch(_){}
+      var found = root.querySelectorAll(sel);
+      for (var i = 0; i < found.length; i++) all.push(found[i]);
+      var kids = root.querySelectorAll('*');
+      for (var j = 0; j < kids.length; j++) {
+        var k = kids[j];
+        if (k.shadowRoot) walk(k.shadowRoot, depth + 1);
+        if (k.tagName === 'IFRAME') { try { if (k.contentDocument) walk(k.contentDocument, depth + 1); } catch(_){} }
+      }
+      try { root.querySelectorAll('[role="alert"],[aria-live="assertive"],[aria-invalid="true"] ~ *,.error,.error-message,[class*="error"]').forEach(function(n){
+        var x = (n.innerText || '').trim().replace(/\\s+/g,' ');
+        if (x && x.length < 160 && notes.indexOf(x) < 0 && notes.length < 4) notes.push(x);
+      }); } catch(_){}
+    }
+    walk(document, 0);
+    function labelOf(e){
+      var t = e.getAttribute('aria-label');
+      if (!t && e.getAttribute('aria-labelledby')) { t = e.getAttribute('aria-labelledby').split(' ').map(function(id){ var l = (e.getRootNode().getElementById ? e.getRootNode().getElementById(id) : document.getElementById(id)); return l ? l.innerText : ''; }).join(' '); }
+      if (!t && e.id) { try { var l = (e.getRootNode().querySelector ? e.getRootNode() : document).querySelector('label[for="' + CSS.escape(e.id) + '"]'); if (l) t = l.innerText; } catch(_){} }
+      if (!t && e.closest) { var w = e.closest('label'); if (w) t = w.innerText; }
+      if (!t) t = e.getAttribute('placeholder') || e.getAttribute('title') || e.getAttribute('name') || e.id || '';
+      return t;
+    }
+    var out = [], n = 0, els = [];
+    for (var i = 0; i < all.length && n < ${READ_CAP}; i++) {
+      var e = all[i], r = e.getBoundingClientRect();
       if (!r.width || !r.height) continue;
       var st = getComputedStyle(e);
       if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') continue;
-      var t = (e.innerText || e.value || e.getAttribute('aria-label') || e.getAttribute('placeholder') || '').trim().replace(/\\s+/g, ' ');
+      var tag = e.tagName.toLowerCase();
+      var field = tag === 'input' || tag === 'textarea' || tag === 'select' || e.isContentEditable || /^(textbox|combobox|checkbox|radio|switch)$/.test(e.getAttribute('role') || '');
+      if (tag === 'input' && /^(hidden)$/i.test(e.type)) continue;
+      var kind = tag === 'input' ? 'input:' + (e.type || 'text') : (e.isContentEditable && tag !== 'input' ? 'textbox' : tag);
+      var t;
+      if (field) {
+        t = labelOf(e) || ('the ' + (e.type || tag) + ' box');
+      } else {
+        t = e.innerText || e.value || e.getAttribute('aria-label') || e.getAttribute('title') || '';
+      }
+      t = String(t).trim().replace(/\\s+/g, ' ');
       if (!t) continue;
-      var onScreen = r.bottom > 0 && r.top < innerHeight;
+      if (tag === 'select') t = t.slice(0, 50) + ' (choices: ' + [].map.call(e.options, function(o){ return o.text.trim(); }).filter(Boolean).slice(0, 12).join(', ').slice(0, 160) + ')';
+      var flags = [];
+      if (r.bottom <= 0 || r.top >= innerHeight) flags.push('offscreen');
+      if (e.disabled || e.getAttribute('aria-disabled') === 'true') flags.push('disabled');
+      if ((e.type === 'checkbox' || e.type === 'radio') ? e.checked : e.getAttribute('aria-checked') === 'true') flags.push('checked');
+      if (document.activeElement === e) flags.push('focused');
+      /* The red outline a person sees after a failed submit: the browser's own
+         "please fill this in", only once the box has been touched or sent. */
+      if (field && e.willValidate && e.validity && !e.validity.valid && (e.value || e.form && e.form.__brainoTried)) flags.push('invalid');
       e.setAttribute('data-braino-idx', String(n));
-      out.push('[' + n + '] ' + e.tagName.toLowerCase() + (onScreen ? '' : ' (offscreen)') + ' "' + t.slice(0, 70) + '"');
+      els.push(e);
+      var line = '[' + n + '] ' + kind + flags.map(function(f){ return ' (' + f + ')'; }).join('') + ' "' + t.slice(0, tag === 'select' ? 230 : 70) + '"';
+      if (field && tag !== 'select' && e.type !== 'checkbox' && e.type !== 'radio') {
+        var v = e.isContentEditable ? e.innerText : e.value;
+        v = String(v || '').replace(/\\s+/g, ' ');
+        line += e.type === 'password' ? (v ? ' = "(filled, ' + v.length + ' characters)"' : ' = ""') : ' = "' + v.slice(0, 60) + '"';
+      } else if (tag === 'select' && e.selectedOptions && e.selectedOptions[0]) {
+        line += ' = "' + e.selectedOptions[0].text.slice(0, 60) + '"';
+      }
+      out.push(line);
       n++;
     }
     /* The middle of the page, always offered last.
@@ -90,23 +151,38 @@ const READ_JS = `(function(){
      * canvas: no contenteditable, no textbox role, no accessible region at all,
      * so the ONLY text field on the page is the title input. That is why a
      * whole document got typed into its own name. There was nothing else to aim
-     * at.
-     *
-     * A person does not look for an element. They click the middle of the page
-     * and start typing. This is that, and it is not specific to any site:
-     * elementFromPoint at the centre is whatever is actually under the cursor
-     * there, which is exactly what a click would hit. */
+     * at. A person clicks the middle of the page and starts typing. */
     var cx = Math.round(innerWidth / 2), cy = Math.round(innerHeight / 2);
     var mid = document.elementFromPoint(cx, cy);
     if (mid && n < ${READ_CAP}) {
       mid.setAttribute('data-braino-idx', String(n));
+      els.push(mid);
       out.push('[' + n + '] region "the page body, click here to put the cursor in it"');
       n++;
     }
+    window.__brainoEls = els;
+    /* What just appeared on the page, in words. After "Sign up" the page said
+       "Sent." and he could not see it, because only things to click are
+       listed; a person reads the new line at once. Lines new since the last
+       read on this page, short ones only. */
+    try {
+      var lines = (document.body.innerText || '').split('\\n').map(function(x){ return x.trim(); }).filter(function(x){ return x && x.length < 160; });
+      var prev = window.__brainoText;
+      if (prev) {
+        var seen = {}; prev.forEach(function(x){ seen[x] = 1; });
+        var fresh = lines.filter(function(x){ return !seen[x]; }).slice(0, 5);
+        fresh.forEach(function(x){ if (notes.indexOf(x) < 0) notes.push('NEW: ' + x); });
+      }
+      window.__brainoText = lines.slice(0, 2000);
+    } catch(_){}
+    notes.forEach(function(x){ out.push('! "' + x + '"'); });
     var head = document.title + ' :: ' + location.href;
     return head + '\\n' + out.join('\\n');
   } catch (err) { return 'BRAINO_ERR ' + err.message; }
 })()`;
+
+/* The element a read numbered, wherever it lives (shadow DOM, a frame). */
+const FIND = (idx) => `((window.__brainoEls&&window.__brainoEls[${Number(idx)}])||document.querySelector('[data-braino-idx="${Number(idx)}"]'))`;
 
 async function readChromePage(app) {
   const res = await runJs(READ_JS, chromeScriptName(app));
@@ -121,22 +197,37 @@ function parseRead(out) {
   const lines = out.split("\n");
   const [title, url] = String(lines.shift() || "").split(" :: ");
   const elements = lines.map((line) => {
-    const m = /^\[(\d+)\] (\S+)(?: \(offscreen\))? "(.*)"$/.exec(line);
-    return m ? { index: Number(m[1]), role: m[2], name: m[3], offscreen: line.includes("(offscreen)") } : null;
+    const m = /^\[(\d+)\] (\S+)((?: \([a-z]+\))*) "(.*?)"(?: = "(.*)")?$/.exec(line);
+    return m ? { index: Number(m[1]), role: m[2], name: m[4], value: m[5], offscreen: m[3].includes("(offscreen)"), disabled: m[3].includes("(disabled)") } : null;
   }).filter(Boolean);
-  return { ok: true, title: title || "", url: url || "", elements, text: [title, url, ...lines].join("\n") };
+  const notes = lines.filter((line) => line.startsWith('! "')).map((line) => line.slice(3, -1));
+  return { ok: true, title: title || "", url: url || "", elements, notes, text: [title, url, ...lines].join("\n") };
 }
 
 /* Act on what the read stamped, never on a fresh index. */
 function actionJs(idx, kind, value) {
-  const target = `document.querySelector('[data-braino-idx="' + ${JSON.stringify(String(idx))} + '"]')`;
+  const target = FIND(idx);
   if (kind === "type") {
     return `(function(){var e=${target};if(!e)return 'BRAINO_GONE';e.focus();
       var v=${JSON.stringify(String(value ?? ""))};
+      /* A dropdown: pick the option whose words match, like a person reading
+         the list, not a value only the page's code knows. */
+      if(e.tagName==='SELECT'){var want=v.trim().toLowerCase(),hit=-1;
+        for(var i=0;i<e.options.length;i++){var o=e.options[i],t=(o.text||'').trim().toLowerCase();
+          if(t===want||(o.value||'').toLowerCase()===want){hit=i;break;}
+          if(hit<0&&want&&t.indexOf(want)>=0)hit=i;}
+        if(hit<0)return 'BRAINO_NO_OPTION No option matches "'+v+'". The choices are: '+[].map.call(e.options,function(o){return o.text.trim();}).join(', ');
+        e.selectedIndex=hit;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));
+        return 'BRAINO_OK picked '+e.options[hit].text.trim();}
       var setter=Object.getOwnPropertyDescriptor(e.constructor.prototype,'value');
       if(setter&&setter.set){setter.set.call(e,v);}else{e.value=v;}
       e.dispatchEvent(new Event('input',{bubbles:true}));
       e.dispatchEvent(new Event('change',{bubbles:true}));
+      /* What real typing also sends: a key coming up, and leaving the box. n8n
+         kept Continue greyed out after a typed email until Tab (2026-10-23),
+         because it checks the box on those, not on input. Focus stays put. */
+      e.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:v.slice(-1)||'a'}));
+      e.dispatchEvent(new FocusEvent('focusout',{bubbles:true}));
       /* The whole value, and whether it matches: a 60 character echo made a
          90 character address look cut off, and he retyped it six times (2026-10-15). */
       return 'BRAINO_OK '+((e.value===v)?'exact match, '+v.length+' characters: ':'differs, field now holds: ')+(e.value||'').slice(0,400);})()`;
@@ -183,7 +274,7 @@ function actionJs(idx, kind, value) {
  * between them is the browser's own chrome, which outerHeight minus
  * innerHeight measures without having to know anything about toolbars. */
 const POINT_JS = (idx) => `(function(){
-  var e=document.querySelector('[data-braino-idx="${idx}"]');
+  var e=${FIND(idx)};
   if(!e) return 'BRAINO_GONE';
   e.scrollIntoView({block:'center'});
   var r=e.getBoundingClientRect();
@@ -278,4 +369,4 @@ function chromeScriptName(appName) {
   return CHROME_APPS[String(appName || "").trim()] || "Google Chrome";
 }
 
-module.exports = { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS, READ_JS, parseRead, actionJs, SIGNATURE_JS };
+module.exports = { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS, READ_JS, parseRead, actionJs, SIGNATURE_JS, FIND };

@@ -126,7 +126,8 @@ const DiagramPreview = lazy(() => import("./pages/DiagramPreview.tsx"));
 const AppStoreGrid = lazy(() => import("./pages/AppStoreGrid.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
-const FoundryApp = lazy(() => import("./pages/FoundryApp.tsx"));
+// The rebuilt app (2026-10-23). The chat version stays in pages/FoundryApp.tsx as a backup.
+const FoundryApp = lazy(() => import("./pages/foundry/FoundryRoot.tsx"));
 const FoundryLanding = lazy(() => import("./pages/FoundryLanding.tsx"));
 const FoundryAppDocs = lazy(() => import("./pages/FoundryAppDocs.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
@@ -153,6 +154,8 @@ const MeetBrainoDocs = lazy(() => import("./pages/MeetBrainoDocs.tsx"));
 const TalkThroughDocs = lazy(() => import("./pages/TalkThroughDocs.tsx"));
 const BrainoOnboarding = lazy(() => import("./pages/BrainoOnboarding.tsx"));
 const LearningRunsDocs = lazy(() => import("./pages/LearningRunsDocs.tsx"));
+const HilOneLookDocs = lazy(() => import("./pages/HilOneLookDocs.tsx"));
+const ImportChromeLoginsDocs = lazy(() => import("./pages/ImportChromeLoginsDocs.tsx"));
 const CalendarMacDocs = lazy(() => import("./pages/CalendarMacDocs.tsx"));
 const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
@@ -276,6 +279,8 @@ function AppRoutes() {
         <Route path="/knowledge/meet-braino" element={<MeetBrainoDocs />} />
         <Route path="/knowledge/talk-me-through-it" element={<TalkThroughDocs />} />
         <Route path="/knowledge/learning-from-real-runs" element={<LearningRunsDocs />} />
+        <Route path="/knowledge/hil-2-one-look-per-page" element={<HilOneLookDocs />} />
+        <Route path="/knowledge/import-chrome-logins" element={<ImportChromeLoginsDocs />} />
         <Route path="/knowledge/calendar-on-mac" element={<CalendarMacDocs />} />
         <Route path="/knowledge/knows-your-localhost" element={<LocalhostDocs />} />
         <Route path="/knowledge/said-to-him" element={<SaidToHimDocs />} />

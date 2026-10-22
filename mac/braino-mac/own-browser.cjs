@@ -10,14 +10,14 @@
  * Clicks and typing are sent as real input events, so sites that ignore
  * synthetic clicks still take them. Its logins are its own and are kept. */
 
-const { READ_JS, parseRead, actionJs, SIGNATURE_JS } = require("./chrome-page.cjs");
+const { READ_JS, parseRead, actionJs, SIGNATURE_JS, FIND } = require("./chrome-page.cjs");
 
 const PARTITION = "persist:braino-browser";
 const LOAD_CAP_MS = 15000;
 
 /* The element's centre in the window, after scrolling it into view. */
 const VIEW_POINT_JS = (idx) => `(function(){
-  var e=document.querySelector('[data-braino-idx="${String(Number(idx))}"]');
+  var e=${FIND(idx)};
   if(!e) return 'BRAINO_GONE';
   e.scrollIntoView({block:'center'});
   var t=e.closest('a,button,[role="button"],[role="link"],[onclick],[jsaction]')||e;
@@ -28,7 +28,7 @@ const VIEW_POINT_JS = (idx) => `(function(){
 })()`;
 
 const FOCUS_JS = (idx) => `(function(){
-  var e=document.querySelector('[data-braino-idx="${String(Number(idx))}"]');
+  var e=${FIND(idx)};
   if(!e) return 'BRAINO_GONE';
   e.scrollIntoView({block:'center'});
   e.focus();

@@ -50,7 +50,7 @@
 // turn looking at Cursor before asking what about; a correction mid-job was
 // treated as a new job; a page read two seconds after opening was called
 // "logged out"; and a docs link was gated as "cannot be undone".
-export const HIL_LOOP_VERSION = "2.18.0";
+export const HIL_LOOP_VERSION = "3.0.0";
 
 export const HIL_LOOP_PROMPT = `# The Human Intelligence Layer, running
 

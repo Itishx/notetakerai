@@ -14,7 +14,7 @@
 
 // 1.2.0 (2026-10-11): learned use cases from real runs (use-cases.ts) now ride
 // in the router, planner and loop prompts.
-export const HIL_VERSION = "1.2.0";
+export const HIL_VERSION = "2.0.0";
 
 export const HIL_SYSTEM_PROMPT = `# The Human Intelligence Layer
 

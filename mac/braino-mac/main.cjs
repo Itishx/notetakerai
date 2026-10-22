@@ -222,12 +222,14 @@ const {
   macBareWebOpen,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
-const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName } = require(path.join(__dirname, "chrome-page.cjs"));
+const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName, actionJs } = require(path.join(__dirname, "chrome-page.cjs"));
 /* Braino's own browser: jobs he does FOR you (book, order, find the cheapest)
    run in a window inside the app, read and pressed from inside the page, so
    they are fast and never take over your Chrome. See own-browser.cjs.
    BRAINO_OWN_BROWSER=0 sends everything back to your Chrome. */
 const ownBrowserModule = require(path.join(__dirname, "own-browser.cjs"));
+/* "Import my Chrome logins": copies Chrome's cookies into his browser (23 Oct). */
+const chromeCookies = require(path.join(__dirname, "chrome-cookies.cjs"));
 /* BrainoHERA records, the cloud transcribes (see hera.cjs). On by default;
    BRAINO_HERA_CLOUD=0 goes back to the on-device transcriber. LIVE lecture
    mode keeps the on-device one: it needs words while you talk. */
@@ -258,7 +260,7 @@ function ownBrowserEnabled() {
 /* The job running in his browser right now, if any. Set when a do-it-for-me job
    starts, kept while its questions are answered, dropped by the next job. */
 let macOwnJob = null;
-const OWN_BROWSER_NOTE = "This job runs in Braino's own browser window, not the user's Chrome: navigate to the site, then read and act there. It is only signed in to sites the user signed in to there before. If a site needs a login, ask the user to say \"show me\" and sign in once; never type a password. Anything that pays, books or sends still asks first.";
+const OWN_BROWSER_NOTE = "This job runs in Braino's own browser window, not the user's Chrome: navigate to the site, then read and act there. It is signed in wherever the user imported their Chrome logins, or signed in there before. If a site needs a login, ask the user to say \"show me\" and sign in once; never type a password. Anything that pays, books or sends still asks first.";
 function macOwnJobActive() { return Boolean(macOwnJob && Date.now() - macOwnJob.at < 15 * 60 * 1000); }
 const {
   macVerifyAssert,
@@ -5259,7 +5261,7 @@ async function handlePendingMacWorkflow(raw) {
     if (pending.data?.fromRouter) {
       const monday = parseMondayModeIntent(answer) || parseMondayModeIntent(`${original} ${answer}`);
       if (monday) return runDelegate(`${monday.action === "enter" ? "enter" : "exit"} monday mode`);
-      const rerouted = await routeHilFirst(`${original}. (Asked: ${question} They answered: ${answer})`);
+      const rerouted = await routeHilFirst(`${original}. (Asked: ${question} They answered: ${answer})`, { isAnswer: true });
       if (rerouted) return rerouted;
     }
     return runMacHilLoop(`${original}\n\n(You asked: ${question}\nThey answered: ${answer})`);
@@ -17278,8 +17280,18 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
 function rememberMacChat(role, content) {
   const text = String(content || "").trim();
   if (!text) return;
-  macChatHistory.push({ role, content: text });
+  macChatHistory.push({ role, content: text, at: Date.now() });
   if (macChatHistory.length > 18) macChatHistory = macChatHistory.slice(-18);
+}
+/* In a conversation with him (2026-10-23). Twice in one night a plain reply was
+   dropped as "not for him": "No, he just says his eyes are sensitive..." right
+   after he asked "Has he had any allergies?", and a budget answer to his own
+   projector question. Laya judges a sentence alone; a reply out of context
+   sounds like room talk. Whatever comes within 45s of him speaking is a reply. */
+const MAC_REPLY_WINDOW_MS = 45000;
+function macInConversation() {
+  const last = [...macChatHistory].reverse().find((m) => m.role === "assistant");
+  return Boolean(last && last.at && Date.now() - last.at <= MAC_REPLY_WINDOW_MS);
 }
 
 function macClientContext() {
@@ -17703,6 +17715,20 @@ function macCachedObservation() {
 }
 
 // The AX helper answers in one line: "observe\t{json}".
+/* One line per thing on the page, the same on both browsers: what it is, what
+   it is called, whether it is greyed out, and what a box already holds. "Is
+   Continue enabled yet?" cost the n8n run three whole turns (2026-10-23); now
+   it is on the line. What the page says is wrong comes last. */
+let macLastPageNotes = [];
+function macElementLines(elements, notes) {
+  const lines = (elements || []).map((e) => {
+    const flags = `${e.offscreen ? " (offscreen)" : ""}${e.disabled ? " (disabled)" : ""}`;
+    const holds = e.value != null ? ` holds "${e.value}"` : "";
+    return `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"${flags}${holds}`;
+  });
+  for (const n of notes || []) lines.push(`PAGE SAYS: "${n}"`);
+  return lines;
+}
 async function macBuildObservation() {
   if (macOwnJobActive()) return macBuildOwnObservation();
   const res = await runAxHelper(["observe", String(MAC_HIL_OBSERVE_CAP)], 20000);
@@ -17735,6 +17761,7 @@ async function macBuildObservation() {
     const page = await readChromePage(data.app);
     if (page.ok && page.elements.length) {
       elements = page.elements;
+      macLastPageNotes = page.notes || [];
       sawPage = true;
       macLastReadWasPage = { app: data.app, at: Date.now() };
       logMac("hil.page_read", { app: data.app, elements: elements.length, url: textForLog(page.url, 90) });
@@ -17756,7 +17783,7 @@ async function macBuildObservation() {
   });
   // Serialized in the browser's format so the prompt's targeting rules read the
   // same way on both surfaces.
-  const lines = elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"`);
+  const lines = macElementLines(elements, sawPage ? macLastPageNotes : null);
   if (data?.hidden > 0) lines.push(`... ${data.hidden} more elements hidden by cap`);
   const header = `APP: ${data?.app || "unknown"}${data?.window ? ` | window: ${data.window}` : ""}`;
   /* The real address. A Mac window has no URL in its accessibility tree, but the
@@ -17807,7 +17834,7 @@ async function macBuildOwnObservation() {
     return { ok: false, error: page.detail || page.reason || "could not read the page", text: "", elements: [] };
   }
   macLastReadWasPage = { app: "Braino browser", own: true, at: Date.now() };
-  const lines = page.elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"${e.offscreen ? " (offscreen)" : ""}`);
+  const lines = macElementLines(page.elements, page.notes);
   const obs = {
     ok: true,
     text: [`APP: Braino's own browser (the job runs here, not in the user's Chrome) | ${page.title}`, `Address: ${page.url}`, ...lines].join("\n"),
@@ -19895,6 +19922,17 @@ const WHATSAPP_WEB = /(?:^|\/\/|\.)web\.whatsapp\.com|wa\.me\//i;
 
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
+  /* A dropdown, picked the way a person picks it (2026-10-23). The engine has
+     always offered selectOption and the Mac never had the hand: "Unknown move",
+     then four turns fighting a "You are a" menu on a signup form. */
+  if (type === "selectOption" && macLastReadWasPage) {
+    const js = actionJs(action.index, "type", String(action.value ?? action.text ?? ""));
+    const out = macLastReadWasPage.own ? await ownBrowser().run(js) : await runJs(js, chromeScriptName(macLastReadWasPage.app));
+    if (!out.ok) return { ok: false, error: `${out.reason || "failed"}: ${out.detail || ""}` };
+    if (out.out === "BRAINO_GONE") return { ok: false, error: "That dropdown is no longer on the page." };
+    if (/^BRAINO_NO_OPTION/.test(String(out.out))) return { ok: false, error: String(out.out).slice(18) };
+    return { ok: true, picked: String(out.out).slice(10, 200) };
+  }
   const aimsAtWhatsAppWeb = WHATSAPP_WEB.test(String(action?.url || ""))
     || (type === "tool" && WHATSAPP_WEB.test(JSON.stringify(action?.args || {})) && /open_url|chrome/i.test(String(action?.tool || "")))
     || (type === "exec_js" && WHATSAPP_WEB.test(String(action?.code || "")));
@@ -19995,8 +20033,14 @@ async function macExecuteHilAction(action, elements) {
       logMac("hil.page_click", { index: action.index, x: point.x, y: point.y,
         label: textForLog(point.label, 60), status: hit.status });
       if (hit.status !== "clicked") return { ok: false, error: `${hit.status}: ${hit.detail}` };
-      await macHilWait(900);
-      const after = await pageSignature(macLastReadWasPage.app);
+      /* Watch for up to 2.5s, the way a person waits a beat. n8n's Continue
+         worked but moved the page after a second, and a single look at 0.9s
+         called it a dead click and cost a whole turn (2026-10-23). */
+      let after = before;
+      for (let waited = 0; waited < 2500 && before && after === before; waited += 300) {
+        await macHilWait(300);
+        after = await pageSignature(macLastReadWasPage.app);
+      }
       /* Saying "nothing happened" is the point. Reporting a dead click as a
          good one is what made him press the same tile four times. */
       if (before && after && before === after) {
@@ -20320,9 +20364,12 @@ function honestEnding(message, { runId, step, actionsDone, lastCheckFailed, comm
      found  what earlier steps found, pinned so reminders can't evict it
      chain  moves that don't need a fresh look run back to back, no turn
      circle a move that just failed is never repeated as-is */
+const webRunner = require("./web-runner.cjs");
 function macHilFastEnabled() {
   const fromFile = typeof ENV === "object" && ENV ? ENV.BRAINO_HIL_FAST : "";
-  return String(fromFile || process.env.BRAINO_HIL_FAST || "").trim() === "1";
+  /* On by default since HIL 2.0 (2026-10-23): one look per page, the moves
+     run back to back. BRAINO_HIL_FAST=0 turns it off. */
+  return String(fromFile || process.env.BRAINO_HIL_FAST || "").trim() !== "0";
 }
 function macHilCard(command, state) {
   const done = (state.steps || []).filter((st) => st.ok !== false && st.intent).map((st) => st.intent);
@@ -20352,23 +20399,30 @@ async function macRunChain(steps, command, state, generation, turnObs = null) {
   // No read handed over means the step before the chain already moved it.
   let obs = turnObs && Array.isArray(turnObs.elements) ? turnObs : null;
   let pageMoved = !obs;
-  const list = steps.slice(0, 4);
+  const list = steps.slice(0, webRunner.CHAIN_MAX);
   for (let i = 0; i < list.length; i++) {
     const st = list[i];
     if (macHilGeneration !== generation) break;
     const a = st && st.action;
-    if (!a || st.reversible === false || macStepCanBeIrreversible(st) || macUnaskedMessageSend(st, command)) break;
+    /* Same gate as a single step (HIL 2.0, 2026-10-23): stop where the model
+       says a move cannot be undone. "Could ever be" stopped every chain at its
+       first click, so a form was never filled and submitted in one turn. */
+    if (!a || st.reversible === false || (a.type === "tool" && macStepCanBeIrreversible(st)) || macUnaskedMessageSend(st, command)) break;
     if (a.index != null) {
       const typing = a.type === "type" && !a.submit;
       const lastClick = a.type === "click" && i === list.length - 1;
-      if (pageMoved || !(typing || lastClick)) break;
+      // Ticking a box ("I agree") does not move the page, so the form goes on.
+      const role = String((obs?.elements || []).find((e) => e.index === a.index)?.role || "");
+      const tick = a.type === "click" && /checkbox|radio|switch/.test(role);
+      const pick = a.type === "selectOption";
+      if (pageMoved || !(typing || lastClick || tick || pick)) break;
     }
     macTrail({ kind: "step", label: macPlainStep(st) });
     // Box-number steps reuse the model's read (re-reading would renumber the
     // page); everything else looks fresh, as before.
     if (a.index == null || !obs) obs = await macBuildObservation();
     if (a.type === "navigate" || a.type === "click" || a.type === "pressKey" || a.submit || a.type === "tool") pageMoved = true;
-    const result = await macExecuteHilAction(a, obs.elements);
+    const result = webRunner.scriptGuard(a, state.steps) || await macExecuteHilAction(a, obs.elements);
     if (result?.asks) return { asked: result.say };
     let verified = { ok: true };
     if (result?.ok && st.assert) verified = macVerifyAssert(st.assert, await macBuildObservation());
@@ -20479,6 +20533,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
      (the Pinterest run took 226s and did nothing). He stops, says where he
      got to, and offers to keep going. */
   const runStartedAt = Date.now();
+  const watchdog = webRunner.createWatchdog(3);
+  let prevScreen = "";
   let failedInARow = 0;
   const recentActions = [];
   /* Talk me through it: "Got it" plus the goal, then a plain line per step. */
@@ -20596,6 +20652,15 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     const cached = macCachedObservation();
     if (cached) logMac("hil.observe.reused", { step });
     const obs = cached || await macBuildObservation();
+    /* Six moves on n8n left the page as it was and nothing made him stop. */
+    const stuckNote = watchdog.note(prevScreen, obs.text, lastStep?.action);
+    prevScreen = obs.text;
+    if (stuckNote) {
+      macTrace("🐕 WATCHDOG", "three moves changed nothing, looking again and changing approach");
+      logMac("hil.loop.watchdog", { runId, step });
+      state.facts.push(stuckNote);
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+    }
     /* Read once, on the first turn, and only when the command could be about
        what is playing. Capped, so a slow AppleScript never holds up the turn. */
     if (nowPlayingLine === null) {
@@ -21016,7 +21081,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
 
     macTrail({ kind: "step", label: macPlainStep(stepObj) });
     const actStarted = Date.now();
-    const result = await macExecuteHilAction(stepObj.action, obs.elements);
+    const result = webRunner.scriptGuard(stepObj.action, state.steps) || await macExecuteHilAction(stepObj.action, obs.elements);
+    if (result?.ok === false && !state.facts.includes(webRunner.RETRY_LADDER)) state.facts.push(webRunner.RETRY_LADDER);
     /* One line per action the hands ran, for /trace and for reading a run
        afterwards: what was decided, what ran, how long the hands took, and
        whether it worked. The turn line already has the thinking time. */
@@ -22139,7 +22205,7 @@ let hilFirstAsked = false;
 /* Whether the words as heard named him (set by runDelegate, read by the
    not-for-him gate below, which only sees the sentence after cleanPrompt). */
 let macHeardAddressed = false;
-async function routeHilFirst(raw) {
+async function routeHilFirst(raw, opts = {}) {
   const stageAsk = String(raw || "").trim().match(/^(?:set\s+)?(?:the\s+)?decider\s+stage\s+(?:to\s+)?(zero|one|two|three|four|off|0|1|2|3|4)\.?$/i);
   if (stageAsk) {
     const word = stageAsk[1].toLowerCase();
@@ -22179,6 +22245,18 @@ async function routeHilFirst(raw) {
     ownBrowser().hide();
     if (macOwnJob) macOwnJob.hidden = true; // stays hidden for the rest of this job
     return { ok: true, say: "Hidden.", source: "own_browser:hide" };
+  }
+  /* "Import my Chrome logins" / "sync my logins": your Chrome cookies into his
+     browser. macOS asks for your password once. "Forget my logins" clears them. */
+  if (/^(?:(?:can|could) you\s+)?(?:please\s+)?(?:import|sync|copy|bring over|re-?sync)\s+(?:all\s+)?(?:my\s+)?(?:chrome\s+)?(?:logins|cookies|sessions|sign[- ]?ins)(?:\s+from\s+chrome)?(?:\s+please)?$/i.test(showAsk)) {
+    const res = await chromeCookies.importChromeCookies(electronSession.fromPartition(ownBrowserModule.PARTITION), { log: (e, d) => logMac(e, d) });
+    if (res.ok) return { ok: true, say: `Done. I'm signed in to ${res.sites} sites, same as your Chrome.`, source: "own_browser:import_logins" };
+    const why = { no_chrome: "I couldn't find Chrome on this Mac.", keychain_denied: "macOS didn't let me unlock Chrome's logins. Say it again and choose Allow." }[res.reason] || "I couldn't read Chrome's logins this time.";
+    return { ok: true, say: why, source: "own_browser:import_logins" };
+  }
+  if (/^(?:forget|clear|remove|delete)\s+(?:all\s+)?(?:my\s+)?(?:imported\s+)?(?:chrome\s+)?(?:logins|cookies|sessions)$/i.test(showAsk)) {
+    await chromeCookies.clearOwnCookies(electronSession.fromPartition(ownBrowserModule.PARTITION));
+    return { ok: true, say: "Done. My browser is signed out of everything.", source: "own_browser:forget_logins" };
   }
   /* "Repeat what you said" means say it again, word for word. HIL answered "I
      repeated my last response." without repeating anything (4 Oct). */
@@ -22241,7 +22319,8 @@ async function routeHilFirst(raw) {
      sentence AFTER cleanPrompt had removed "Braino". The name is now judged on
      the words as heard (macHeardAddressed), so being named always gets through. */
   if (layaFirst && layaFirst.kind === "ignore" && layaFirst.confidence >= LAYA_TALK_SURE
-    && !macHeardAddressed && !/\bbrain(?:o|elle|a)\b/i.test(String(raw || "")) && !pendingHilRun) {
+    && !macHeardAddressed && !/\bbrain(?:o|elle|a)\b/i.test(String(raw || "")) && !pendingHilRun
+    && !opts.isAnswer && !macInConversation()) {
     logMac("laya.not_for_him_dropped", { raw: textForLog(raw), confidence: layaFirst.confidence });
     macTrace("🔇 NOT FOR HIM", `"${String(raw).slice(0, 80)}" → ignore ${layaFirst.confidence.toFixed(2)}, dropped`);
     return { ok: true, superseded: true, say: "", source: "laya:not_for_him" };
