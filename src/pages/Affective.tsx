@@ -728,9 +728,9 @@ export default function Affective() {
               <nav className="aff-foot-col aff-tree" aria-label="Braino">
                 <h4><Link to="/braino">Braino</Link></h4>
                 <ul>
-                  <li><Link to="/braino">For everyone</Link></li>
+                  <li><Link to="/braino">Braino Companion</Link></li>
                   <li><Link to="/braino#early-access">Join the waitlist</Link></li>
-                  <li><Link to="/foundry">Braino Foundry</Link></li>
+                  <li><Link to="/foundry">Braino Co-founder</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">

@@ -59,3 +59,16 @@
 .fl-ui-row em { width: 34px; height: 20px; border-radius: 999px; background: var(--r); position: relative; }
 .fl-ui-row em::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
 @media (max-width: 900px) { .fl-cards, .fl-places { grid-template-columns: 1fr; } }
+
+/* Where it runs: web and Mac as two tabs, never mixed. */
+.fl-where-box { margin-top: 24px; border: 1px solid var(--a-line); border-radius: 24px; background: var(--a-box); padding: 10px; }
+.fl-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--a-surface); border: 1px solid var(--a-line); }
+.fl-tabs button { border: 0; background: none; padding: 9px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--a-ink-soft); cursor: pointer; }
+.fl-tabs button.on { background: var(--a-box); color: var(--a-ink); box-shadow: 0 1px 3px rgba(22,21,15,.12); }
+.fl-where-in { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; padding: 34px 30px 30px; align-items: center; animation: flIn .4s ease both; }
+.fl-where-in h3 { font-family: var(--a-display); font-weight: 500; font-size: clamp(26px, 3vw, 36px); margin: 0 0 10px; }
+.fl-where-in p { color: var(--a-ink-soft); font-size: 16px; line-height: 1.6; margin: 0 0 22px; max-width: 480px; }
+.fl-where-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.fl-where-steps li { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--a-line); border-radius: 14px; font-size: 15px; }
+.fl-where-steps span { width: 26px; height: 26px; border-radius: 50%; background: var(--a-ink); color: var(--a-bg); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+@media (max-width: 800px) { .fl-where-in { grid-template-columns: 1fr; gap: 22px; padding: 24px 14px 16px; } }
