@@ -612,3 +612,19 @@
   .fc-strip li { padding: 3px 2px; font-size: 11.5px; }
   .fc-strip li span { max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* Approvals as a filterable grid (2026-10-22). */
+.fc-col.fc-wide { --fc-col: 1180px; }
+.fc-filters { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 0; margin: 4px 0 6px; background: var(--a-bg); }
+.fc-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--a-line); border-radius: 12px; background: var(--a-box); }
+.fc-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 7px 12px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--a-ink-soft); cursor: pointer; white-space: nowrap; }
+.fc-seg button.on { background: var(--a-ink); color: var(--a-bg) !important; }
+.fc-seg em { font-style: normal; font-size: 11.5px; opacity: .65; font-variant-numeric: tabular-nums; }
+.fc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-chips button { border: 1px solid var(--a-line); background: none; border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--a-ink-soft); cursor: pointer; }
+.fc-chips button.on { border-color: var(--a-ink); color: var(--a-ink); }
+.fc-agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+.fc-acell { min-width: 0; animation: fc-rise .45s cubic-bezier(.16,1,.3,1) both; }
+.fc-acell > * { margin: 0 !important; height: 100%; }
+.fc-empty-f { padding: 40px 0; text-align: center; }
+@media (max-width: 700px) { .fc-agrid { grid-template-columns: 1fr; } .fc-seg { overflow-x: auto; max-width: 100%; } }

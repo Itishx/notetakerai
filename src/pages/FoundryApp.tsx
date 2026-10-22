@@ -284,6 +284,10 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
 
   const working = Object.values(busy)[0] || "";
   const [view, setView] = useState<"chat" | "overview" | "approvals">("chat");
+  // Approvals filters: what kind, which status, which site.
+  const [fKind, setFKind] = useState<"all" | "posts" | "messages">("all");
+  const [fStatus, setFStatus] = useState<"waiting" | "approved" | "skipped" | "all">("waiting");
+  const [fSite, setFSite] = useState("all");
   const pendingCount = postCards.filter((c) => !done[`post-${c.id}`]).length + (leads || []).filter((l) => !done[`lead-${l.url}`]).length;
   const postsOk = postCards.filter((c) => done[`post-${c.id}`] === "approved").length;
   const leadsOk = (leads || []).filter((l) => done[`lead-${l.url}`] === "approved").length;
@@ -749,7 +753,7 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
         </div>
         </>) : (
         <div className="fc-scroll">
-          <div className="fc-col fc-ov">
+          <div className={`fc-col fc-ov${view === "approvals" ? " fc-wide" : ""}`}>
             {view === "approvals" && confirmed && brief ? (
               <>
                 <div className="fc-ov-h"><p className="ob-eyebrow">Approvals</p><h1>{pendingCount ? `${pendingCount} waiting for your yes.` : "All caught up."}</h1><p className="fc-note">Approve copies the text and opens the site so you can post it. Braino Foundry never posts on its own.</p></div>
@@ -760,12 +764,36 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
                     <small>Marks them approved. Then open each one to post it.</small>
                   </div>
                 )}
-                <section className="fc-sec"><Engine k="c" name="Posts to publish" sub={posts ? `${postCards.length} written for you` : "Content"} />
-                  {posts ? <div className="fc-list">{[...postCards].sort((a, z) => Number(!!done[`post-${a.id}`]) - Number(!!done[`post-${z.id}`])).map((c) => <div key={c.id}>{PostCard({ c })}</div>)}</div> : <Wait text={busy.content || "Posts land here after Optics"} />}
-                </section>
-                <section className="fc-sec"><Engine k="r" name="Messages to send" sub="One person each" />
-                  {leads ? (leads.length ? <div className="fc-list">{[...leads].sort((a, z) => Number(!!done[`lead-${a.url}`]) - Number(!!done[`lead-${z.url}`])).map((l) => <div key={l.url}>{LeadCard({ l })}</div>)}</div> : <p className="fc-note">Nobody found asking about this today.</p>) : <Wait text={busy.outreach || "Waiting"} />}
-                </section>
+                {(() => {
+                  const st = (k: string) => done[k] || "waiting";
+                  const ok = (k: string) => fStatus === "all" || st(k) === fStatus;
+                  const items = [
+                    ...(fKind !== "messages" ? postCards.filter((c) => (fSite === "all" || fSite === c.id) && ok(`post-${c.id}`)).map((c) => ({ key: `post-${c.id}`, el: PostCard({ c }) })) : []),
+                    ...(fKind !== "posts" && (fSite === "all" || fSite === "reddit-msg") ? (leads || []).filter((l) => ok(`lead-${l.url}`)).map((l) => ({ key: `lead-${l.url}`, el: LeadCard({ l }) })) : []),
+                  ];
+                  const all = [...postCards.map((c) => `post-${c.id}`), ...(leads || []).map((l) => `lead-${l.url}`)];
+                  const count = (v: string) => all.filter((k) => v === "all" || st(k) === v).length;
+                  return (
+                    <>
+                      <div className="fc-filters">
+                        <div className="fc-seg" role="tablist" aria-label="Kind">
+                          {([["all", "Everything"], ["posts", `Posts ${postCards.length}`], ["messages", `Messages ${(leads || []).length}`]] as const).map(([k, l]) => <button key={k} className={fKind === k ? "on" : ""} onClick={() => { setFKind(k); setFSite("all"); }}>{l}</button>)}
+                        </div>
+                        <div className="fc-seg" role="tablist" aria-label="Status">
+                          {([["waiting", "Waiting"], ["approved", "Approved"], ["skipped", "Skipped"], ["all", "All"]] as const).map(([k, l]) => <button key={k} className={fStatus === k ? "on" : ""} onClick={() => setFStatus(k)}>{l}<em>{count(k)}</em></button>)}
+                        </div>
+                        {fKind === "posts" && (
+                          <div className="fc-chips">
+                            {[["all", "All sites"], ...postCards.map((c) => [c.id, c.label])].map(([k, l]) => <button key={k} className={fSite === k ? "on" : ""} onClick={() => setFSite(k)}>{l}</button>)}
+                          </div>
+                        )}
+                      </div>
+                      {!posts && !leads ? <Wait text={busy.content || busy.outreach || "Posts and messages land here after Optics"} /> : items.length ? (
+                        <div className="fc-agrid">{items.map((i) => <div key={i.key} className="fc-acell">{i.el}</div>)}</div>
+                      ) : <p className="fc-note fc-empty-f">Nothing here. Try another filter.</p>}
+                    </>
+                  );
+                })()}
               </>
             ) : !confirmed || !brief ? (
               <div className="fc-empty">
