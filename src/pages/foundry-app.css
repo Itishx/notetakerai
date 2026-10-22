@@ -398,3 +398,8 @@
 .fc-menu .del.solid:hover { background: #a83a31; }
 .fc-pedit { flex: 1; min-width: 0; margin: 2px 4px; padding: 7px 10px; border: 1px solid var(--a-ink-faint); border-radius: 8px; background: var(--a-box); color: var(--a-ink); font: inherit; font-size: 14px; outline: none; }
 .fc-pedit:focus { border-color: var(--a-ink); box-shadow: 0 0 0 3px rgba(var(--a-shade), .08); }
+
+/* Text boxes grow with the message (JS sets the height); only very long ones scroll. */
+.fc textarea { overflow-y: auto; }
+.fc-composer textarea { max-height: 45vh; }
+.fc-edit { max-height: none; overflow: hidden; }

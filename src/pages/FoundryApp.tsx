@@ -693,6 +693,14 @@ export default function FoundryApp() {
 
   useEffect(() => { try { localStorage.setItem(LIST, JSON.stringify(list)); } catch (_) { /* private window */ } }, [list]);
   useEffect(() => { if (!active) document.title = "Braino Foundry"; }, [active]);
+  // Every text box grows with what you write, so long messages wrap instead of scrolling.
+  useEffect(() => {
+    const grow = (el: Element | null) => { if (!(el instanceof HTMLTextAreaElement) || !el.closest(".fc")) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; };
+    const onInput = (e: Event) => grow(e.target as Element);
+    document.addEventListener("input", onInput);
+    const t = window.setInterval(() => document.querySelectorAll(".fc textarea").forEach((el) => { if ((el as HTMLTextAreaElement).value === "") (el as HTMLTextAreaElement).style.height = ""; }), 400);
+    return () => { document.removeEventListener("input", onInput); window.clearInterval(t); };
+  }, []);
   useEffect(() => { const close = () => setMenu(""); window.addEventListener("click", close); return () => window.removeEventListener("click", close); }, []);
 
   function open(id: string) { setActive(id); setOpened((o) => o.includes(id) ? o : [...o, id]); }
