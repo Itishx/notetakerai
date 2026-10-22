@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAffTheme } from "@/components/AffTheme";
 import { Link } from "react-router-dom";
 import "./affective.css";
+import "./onboarding-flow.css";
 import "./foundry-app.css";
-import "./foundry-dash.css";
 
-/* Foundry (Forge AI Hackathon, 2026-10-22). One journey, Workflow 1, Get found:
+/* Braino Foundry (Forge AI Hackathon, 2026-10-22). One journey, Workflow 1, Get found:
    your brief -> where you are invisible (Optics) -> posts that fix it (Content)
    -> people asking today, a message each (Outreach) -> you approve.
    Language: GPT-5.6 through the chat-about-notes edge function (the model and
@@ -71,6 +71,28 @@ async function copy(text: string) {
 }
 const enc = encodeURIComponent;
 
+/* Pure pieces of the chat, kept outside the component so they never remount. */
+const Dots = () => <span className="ob-loop-dots" aria-hidden><i /><i /><i /></span>;
+const Bot = ({ children, wide }: { children: React.ReactNode; wide?: boolean }) => (
+  <div className={`fc-msg bot${wide ? " wide" : ""}`}><span className="fc-av" aria-hidden><i /></span><div className="fc-body">{children}</div></div>
+);
+const Me = ({ children }: { children: React.ReactNode }) => <div className="fc-msg me"><div className="fc-bubble">{children}</div></div>;
+const Wait = ({ text }: { text: string }) => <div className="fc-wait"><Dots /><span>{text}</span></div>;
+const Engine = ({ k, name, sub }: { k: "o" | "c" | "r"; name: string; sub: string }) => <div className={`fc-eng ${k}`}><i />{name}<span>{sub}</span></div>;
+
+const Ring = ({ n, of }: { n: number; of: number }) => {
+  const r = 46, c = 2 * Math.PI * r, p = of ? n / of : 0;
+  return (
+    <svg className="fc-ring" viewBox="0 0 120 120" role="img" aria-label={`Named in ${n} of ${of}`}>
+      <circle cx="60" cy="60" r={r} className="track" />
+      <circle cx="60" cy="60" r={r} className="val" strokeDasharray={`${c * p} ${c}`} transform="rotate(-90 60 60)" />
+      <text x="60" y="58" className="big">{n}</text>
+      <text x="60" y="78" className="small">of {of}</text>
+    </svg>
+  );
+};
+
+
 export default function FoundryApp() {
   const { theme, toggle } = useAffTheme();
   const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (_) { return null; } }, []);
@@ -84,17 +106,15 @@ export default function FoundryApp() {
   const [google, setGoogle] = useState<Google[] | null>(saved?.google || null);
   const [fixes, setFixes] = useState<Fix[] | null>(saved?.fixes || null);
   const [posts, setPosts] = useState<Posts | null>(saved?.posts || null);
-  const [topic, setTopic] = useState("");
   const [leads, setLeads] = useState<Lead[] | null>(saved?.leads || null);
   const [done, setDone] = useState<Record<string, "approved" | "skipped">>(saved?.done || {});
   const [busy, setBusy] = useState<Record<string, string>>({});
   const [err, setErr] = useState<string>("");
-  const [tab, setTab] = useState<"overview" | "brief" | "optics" | "content" | "outreach" | "inbox">(saved?.brief ? "overview" : "brief");
 
   useEffect(() => {
     try { localStorage.setItem(STORE, JSON.stringify({ desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done })); } catch (_) { /* private window */ }
   }, [desc, link, about, brief, confirmed, answers, google, fixes, posts, leads, done]);
-  useEffect(() => { document.title = "Foundry · Get found"; }, []);
+  useEffect(() => { document.title = "Braino Foundry · Get found"; }, []);
 
   const setB = (k: string, v: string) => setBusy((b) => { const n = { ...b }; if (v) n[k] = v; else delete n[k]; return n; });
   const fail = (e: unknown) => setErr(String((e as Error)?.message || e));
@@ -205,170 +225,330 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
     { id: "threads", label: "Threads", text: posts.threads, url: `https://www.threads.net/intent/post?text=${enc(posts.threads)}` },
   ] : [];
 
-  const working = Object.values(busy)[0] || "";
-  const NAV: [typeof tab, string, string][] = [
-    ["overview", "Overview", "M3 12l9-8 9 8v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"],
-    ["brief", "Brief", "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7"],
-    ["optics", "Optics", "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
-    ["content", "Content", "M4 20h4L19 9l-4-4L4 16zM14 6l4 4"],
-    ["outreach", "Outreach", "M4 4h16v12H8l-4 4zM8 9h8M8 12h5"],
-    ["inbox", "Approvals", "M4 13h4l2 3h4l2-3h4M4 13l3-8h10l3 8v6H4z"],
-  ];
-  const pendingCount = postCards.filter((c) => !done[`post-${c.id}`]).length + (leads || []).filter((l) => !done[`lead-${l.url}`]).length;
 
-  const PostCard = ({ c }: { c: typeof postCards[number] }) => (
-    <article className={`fx-item ${done[`post-${c.id}`] || ""}`}>
-      <header><span className="fx-tag c">{c.label}</span>{done[`post-${c.id}`] && <span className="fx-state">{done[`post-${c.id}`]}</span>}</header>
-      <p>{c.text}</p>
-      <footer><button className="fx-btn pri" onClick={() => act(`post-${c.id}`, "approved", c.text, c.url)}>Approve & open</button><button className="fx-btn" onClick={() => act(`post-${c.id}`, "skipped")}>Skip</button></footer>
-    </article>
+  /* ── The chat ──────────────────────────────────────────────────────────
+     The conversation is derived from the session state, so a reload rebuilds
+     the same thread. Questions come one at a time, in the onboarding style. */
+  const QUESTIONS = [
+    { key: "desc", eyebrow: "Question 1 of 3", ask: "What are you building?", note: "In your own words. Jargon is fine, I will play it back plainly.", ph: "An app that reminds PG tenants to pay and collects rent on UPI", hints: ["A tool that turns lecture audio into notes", "A marketplace for home bakers in Pune"], optional: false },
+    { key: "link", eyebrow: "Question 2 of 3", ask: "Got a link I can look at?", note: "Website, GitHub or a doc. Skip if there is nothing yet.", ph: "yourproduct.com", hints: [] as string[], optional: true },
+    { key: "about", eyebrow: "Question 3 of 3", ask: "And a line about you?", note: "So the posts sound like you, not like a brand.", ph: "Solo founder, 5 hours a week", hints: ["Solo founder, building nights and weekends", "Two of us, first 20 users"], optional: true },
+  ];
+  const values: Record<string, string> = { desc, link, about };
+  const setters: Record<string, (v: string) => void> = { desc: setDesc, link: setLink, about: setAbout };
+  const [step, setStep] = useState<number>(saved?.brief ? 3 : 0);
+  const [draft, setDraft] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string>("");
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const working = Object.values(busy)[0] || "";
+  const asking = !brief && step < 3;
+  const q = asking ? QUESTIONS[step] : null;
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [step, brief, confirmed, answers, fixes, posts, leads, err]);
+  useEffect(() => { const t = inputRef.current; if (t) { t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, 180)}px`; } }, [draft]);
+  useEffect(() => { if (!brief && step === 3 && desc.trim() && !busy.brief) void makeBrief(); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function answer(v: string) {
+    if (!q) return;
+    if (!v.trim() && !q.optional) return;
+    setters[q.key](v.trim());
+    setDraft("");
+    setStep((s) => s + 1);
+  }
+  function send() {
+    if (asking) return answer(draft);
+    if (confirmed && brief && draft.trim() && !busy.content) { void runContent(brief, fixes, draft.trim()); setDraft(""); }
+  }
+  function editBrief() { setBrief(null); setStep(0); setDraft(desc); }
+  function newSession() { reset(); setStep(0); setDraft(""); setEdits({}); setEditing(""); }
+
+  /* ── Small pieces ── */
+  // The run as a timeline: what is done, what is live, what is next.
+  const stages: { name: string; state: "done" | "live" | "wait"; note: string }[] = [
+    { name: "Brief", state: "done", note: "Confirmed" },
+    { name: "Optics", state: answers && fixes ? "done" : busy.optics ? "live" : "wait", note: busy.optics || (fixes ? `${fixes.length} fixes` : "Next") },
+    { name: "Content", state: posts && !busy.content ? "done" : busy.content ? "live" : "wait", note: busy.content || (posts ? "5 posts" : "After Optics") },
+    { name: "Outreach", state: leads && !busy.outreach ? "done" : busy.outreach ? "live" : "wait", note: busy.outreach || (leads ? `${leads.length} people` : "Next") },
+    { name: "You approve", state: posts && leads ? (approved ? "done" : "live") : "wait", note: approved ? `${approved} approved` : "Waiting" },
+  ];
+  const Timeline = () => (
+    <ol className="fc-time">
+      {stages.map((s) => <li key={s.name} className={s.state}><i>{s.state === "done" ? <svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5" /></svg> : null}</i><b>{s.name}</b><span>{s.note}</span></li>)}
+    </ol>
   );
-  const LeadCard = ({ l }: { l: Lead }) => (
-    <article className={`fx-item ${done[`lead-${l.url}`] || ""}`}>
-      <header><span className="fx-score" style={{ ["--p" as string]: `${l.intent}%` }}><b>{l.intent}</b></span><div className="fx-lead-h"><a href={l.url} target="_blank" rel="noopener noreferrer">{l.title}</a><small>{l.community} · {l.why}</small></div>{done[`lead-${l.url}`] && <span className="fx-state">{done[`lead-${l.url}`]}</span>}</header>
-      <p className="fx-msg">{l.message}</p>
-      <footer><button className="fx-btn pri" onClick={() => act(`lead-${l.url}`, "approved", l.message, l.url)}>Approve & open thread</button><button className="fx-btn" onClick={() => act(`lead-${l.url}`, "skipped")}>Skip</button></footer>
-    </article>
+
+  const host = (u: string, fallback: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return fallback; } };
+  const handle = brief ? brief.product.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 15) || "you" : "you";
+  const initial = brief ? brief.product.trim().charAt(0).toUpperCase() || "B" : "B";
+
+  const Preview = ({ id, text }: { id: string; text: string }) => {
+    if (id === "x" || id === "threads") return (
+      <div className={`pv pv-x ${id}`}>
+        <span className="pv-av">{initial}</span>
+        <div className="pv-main">
+          <div className="pv-who"><b>{brief?.product}</b><span>@{handle} · now</span></div>
+          {text.split(/\n\s*\n/).map((t, i) => <p key={i} className={i ? "pv-thread" : ""}>{t}</p>)}
+          <div className="pv-acts"><span>Reply</span><span>Repost</span><span>Like</span><span>Share</span></div>
+        </div>
+      </div>
+    );
+    if (id === "linkedin") return (
+      <div className="pv pv-li">
+        <div className="pv-head"><span className="pv-av sq">{initial}</span><div><b>{brief?.product}</b><span>Founder · now</span></div></div>
+        <p>{text}</p>
+        <div className="pv-acts"><span>Like</span><span>Comment</span><span>Repost</span><span>Send</span></div>
+      </div>
+    );
+    if (id === "reddit") {
+      const [title, ...rest] = text.split(/\n\s*\n/);
+      return (
+        <div className="pv pv-rd">
+          <div className="pv-vote"><span>▲</span><b>1</b><span>▼</span></div>
+          <div className="pv-main"><small>Posted by u/{handle}</small><h4>{title}</h4><p>{rest.join("\n\n")}</p><div className="pv-acts"><span>Comment</span><span>Share</span><span>Save</span></div></div>
+        </div>
+      );
+    }
+    const [cap, vis] = text.split(/\n\s*\n\[Visual: /);
+    return (
+      <div className="pv pv-ig">
+        <div className="pv-head"><span className="pv-av ring">{initial}</span><b>{handle}</b></div>
+        <div className="pv-img"><span>Image idea</span><p>{(vis || posts?.instagram.visual || "").replace(/\]$/, "")}</p></div>
+        <p><b>{handle}</b> {cap}</p>
+      </div>
+    );
+  };
+
+  const Actions = ({ id, text, url, label }: { id: string; text: string; url: string; label: string }) => (
+    <footer className="fc-acts">
+      <button className="ob-btn is-coral fc-sm" onClick={() => { setEditing(""); act(id, "approved", text, url); }}>{label}</button>
+      <button className="ob-btn is-outline fc-sm" onClick={() => setEditing(editing === id ? "" : id)}>{editing === id ? "Done editing" : "Edit"}</button>
+      <button className="ob-skip" onClick={() => act(id, "skipped")}>Skip</button>
+      {done[id] && <span className="fc-state">{done[id] === "approved" ? "Copied and opened" : "Skipped"}</span>}
+    </footer>
   );
-  const Empty = ({ text }: { text: string }) => <div className="fx-empty">{working ? <><span className="fx-dot" />{working}…</> : text}</div>;
+
+  const PostCard = ({ c }: { c: typeof postCards[number] }) => {
+    const id = `post-${c.id}`; const text = edits[id] ?? c.text;
+    return (
+      <article className={`fc-item ${done[id] || ""}`}>
+        <div className="fc-item-h"><span className="fc-plat">{c.label}</span><span className="fc-len">{text.length} characters</span></div>
+        {editing === id ? <textarea className="fc-edit" value={text} rows={7} onChange={(e) => setEdits((m) => ({ ...m, [id]: e.target.value }))} /> : Preview({ id: c.id, text })}
+        {Actions({ id, text, url: c.url, label: `Approve, open ${c.label}` })}
+      </article>
+    );
+  };
+  const LeadCard = ({ l }: { l: Lead }) => {
+    const id = `lead-${l.url}`; const text = edits[id] ?? l.message;
+    return (
+      <article className={`fc-item ${done[id] || ""}`}>
+        <div className="fc-thread">
+          <div className="fc-op">
+            <small>{l.community.startsWith("r/") ? l.community : `r/${l.community}`}{l.upVotes != null ? ` · ${l.upVotes} upvotes` : ""}{l.comments != null ? ` · ${l.comments} comments` : ""}</small>
+            <a href={l.url} target="_blank" rel="noopener noreferrer">{l.title}</a>
+            {l.body && <p>{l.body.slice(0, 220)}{l.body.length > 220 ? "..." : ""}</p>}
+          </div>
+          <div className="fc-meter"><span>How ready they are</span><i><em style={{ width: `${l.intent}%` }} /></i><b>{l.intent}</b></div>
+          <p className="fc-why">{l.why}</p>
+          <div className="fc-reply">
+            <span className="pv-av sm">{initial}</span>
+            {editing === id ? <textarea className="fc-edit" value={text} rows={5} onChange={(e) => setEdits((m) => ({ ...m, [id]: e.target.value }))} /> : <p>{text}</p>}
+          </div>
+        </div>
+        {Actions({ id, text, url: l.url, label: "Approve, open thread" })}
+      </article>
+    );
+  };
+
+  const placeholder = q ? q.ph : !brief ? "Reading what you wrote" : !confirmed ? "Check the brief above first" : "Ask for a post about something you shipped today";
+  const maxRival = Math.max(namedCount, ...rivals.map((r) => r[1]), 1);
 
   return (
-    <div className="aff fx" data-theme={theme}>
-      <aside className="fx-side">
-        <Link to="/foundry" className="fx-brand"><span className="fx-logo">F</span>Foundry</Link>
-        <nav>
-          {NAV.map(([id, label, d]) => (
-            <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)} disabled={id !== "brief" && !confirmed}>
-              <svg viewBox="0 0 24 24"><path d={d} /></svg><span>{label}</span>
-              {id === "inbox" && pendingCount > 0 && <em>{pendingCount}</em>}
-            </button>
-          ))}
-        </nav>
-        <div className="fx-side-foot">
-          <div className="fx-engines"><i className="o" /><i className="c" /><i className="r" /></div>
-          <span>Nothing goes out without your approval.</span>
+    <div className="aff fc" data-theme={theme}>
+      <aside className="fc-rail">
+        <Link to="/foundry" className="fc-brand"><img src="/affective-logo.png" alt="Affective" /></Link>
+        <div className="fc-prod">Braino Foundry</div>
+        <button className="fc-new" onClick={newSession}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>New session</button>
+        <div className="fc-rail-label">Sessions</div>
+        <div className="fc-past on">{brief ? brief.product : "New session"}</div>
+        <div className="fc-rail-foot">
+          <div className="fc-legend"><span><i className="o" />Optics</span><span><i className="c" />Content</span><span><i className="r" />Outreach</span></div>
+          <p>Nothing goes out without your approval.</p>
+          <button className="fc-theme" onClick={toggle}>{theme === "dark" ? "Light mode" : "Dark mode"}</button>
         </div>
       </aside>
 
-      <div className="fx-main">
-        <header className="fx-top">
-          <div>
-            <div className="fx-crumb">{brief ? brief.product : "New brief"}</div>
-            <h1>{NAV.find((n) => n[0] === tab)?.[1]}</h1>
-          </div>
-          <div className="fx-top-r">
-            {working && <span className="fx-live"><span className="fx-dot" />{working}</span>}
-            <button className="fx-icon" onClick={toggle} aria-label="Theme">{theme === "dark" ? "☀" : "☾"}</button>
-            {brief && <button className="fx-btn" onClick={() => { reset(); setTab("brief"); }}>New brief</button>}
+      <main className="fc-main">
+        <header className="fc-top">
+          <Link to="/foundry" className="fc-brand fc-only-m"><img src="/affective-logo.png" alt="Affective" /></Link>
+          <span className="fc-title">{brief ? brief.product : "Braino Foundry"}</span>
+          <div className="fc-top-r">
+            {working && <span className="fc-live"><i />{working}</span>}
+            <button className="fc-icon" onClick={toggle} aria-label="Switch theme">{theme === "dark" ? "☀" : "☾"}</button>
+            <button className="fc-icon fc-only-m" onClick={newSession} aria-label="New session">+</button>
           </div>
         </header>
 
-        {err && <div className="fx-err">{err}<button onClick={() => setErr("")}>Dismiss</button></div>}
+        <div className="fc-scroll">
+          <div className="fc-col">
+            <Bot>
+              <p className="fc-hello">Hi, I am Braino Foundry. I help people find what you are building.</p>
+              <p>Three quick questions. Then I check where you are invisible, write posts that fix it, and find people asking for it today. You approve every single thing before it goes anywhere.</p>
+            </Bot>
 
-        {tab === "overview" && confirmed && brief && (
-          <div className="fx-grid">
-            <div className="fx-kpis">
-              <div className="fx-kpi o"><span>AI answers naming you</span><b>{answers ? `${namedCount}/${answers.length}` : "…"}</b><small>{rivals[0] ? `${rivals[0][0]} named ${rivals[0][1]}×` : "checking"}</small></div>
-              <div className="fx-kpi o"><span>Google page one</span><b>{google ? `${googleHits}/${google.length}` : "…"}</b><small>buyer searches</small></div>
-              <div className="fx-kpi c"><span>Posts ready</span><b>{posts ? 5 : "…"}</b><small>5 platforms</small></div>
-              <div className="fx-kpi r"><span>People asking</span><b>{leads ? leads.length : "…"}</b><small>Reddit, with a reply each</small></div>
-            </div>
-            {(answers || leads) && (
-              <section className="fx-moment">
-                <div className="fx-label">This week</div>
-                <p>We asked AI the {answers?.length || 0} questions your buyers ask. You were named in <b>{namedCount}</b>.{rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}{google ? <> On Google you're on page one for <b>{googleHits}</b> of {google.length}.</> : null}{posts ? <> Here are <b>5 posts</b> that answer them</> : null}{leads ? <>{posts ? "," : " Here are"} and <b>{leads.length} people</b> asking for it on Reddit.</> : posts ? "." : null}</p>
-              </section>
-            )}
-            <section className="fx-panel">
-              <div className="fx-panel-h"><h2>Competitors in AI answers</h2><button className="fx-link" onClick={() => setTab("optics")}>Optics →</button></div>
-              {rivals.length ? rivals.map(([n, c]) => <div className="fx-bar" key={n}><span>{n}</span><i style={{ width: `${(c / Math.max(1, answers?.length || 1)) * 100}%` }} /><b>{c}</b></div>) : <Empty text="No answers yet." />}
-            </section>
-            <section className="fx-panel">
-              <div className="fx-panel-h"><h2>Waiting for you</h2><button className="fx-link" onClick={() => setTab("inbox")}>Approvals →</button></div>
-              <div className="fx-mini">{postCards.slice(0, 2).map((c) => <div key={c.id}><span className="fx-tag c">{c.label}</span><p>{c.text.slice(0, 110)}…</p></div>)}{(leads || []).slice(0, 2).map((l) => <div key={l.url}><span className="fx-tag r">Reddit</span><p>{l.title}</p></div>)}{!posts && !leads && <Empty text="Nothing yet." />}</div>
-            </section>
-          </div>
-        )}
+            {QUESTIONS.map((qq, i) => (i < step || brief) ? (
+              <div key={qq.key} className="fc-pair">
+                <Bot><p className="fc-q">{qq.ask}</p></Bot>
+                <Me>{values[qq.key] || <em>Skipped</em>}</Me>
+              </div>
+            ) : null)}
 
-        {tab === "brief" && (
-          <div className="fx-narrow">
-            {!brief ? (
-              <section className="fx-panel">
-                <div className="fx-panel-h"><h2>Tell Foundry what you're building</h2></div>
-                <p className="fx-sub">In your own words. Jargon is fine; Foundry plays it back plainly.</p>
-                <label className="fx-field">What are you building?<textarea rows={5} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="An app that reminds PG tenants to pay and collects rent on UPI…" /></label>
-                <div className="fx-two">
-                  <label className="fx-field">Any link<input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Website, GitHub or a doc" /></label>
-                  <label className="fx-field">A line about you<input value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Solo founder, 5 hours a week" /></label>
+            {q && (
+              <Bot>
+                <div className="ob-step fc-ask" key={q.key}>
+                  <p className="ob-eyebrow">{q.eyebrow}</p>
+                  <div className="ob-progress fc-prog"><span style={{ width: `${((step + 1) / 3) * 100}%` }} /></div>
+                  <p className="fc-q big">{q.ask}</p>
+                  <p className="fc-note">{q.note}</p>
+                  {(q.hints.length > 0 || q.optional) && (
+                    <div className="ob-suggests">
+                      {q.hints.map((h) => <button key={h} className="ob-suggest" onClick={() => setDraft(h)}>{h}</button>)}
+                      {q.optional && <button className="ob-suggest fc-skipq" onClick={() => answer("")}>Skip this</button>}
+                    </div>
+                  )}
                 </div>
-                <button className="fx-btn pri lg" disabled={!desc.trim() || !!busy.brief} onClick={makeBrief}>{busy.brief ? `${busy.brief}…` : "Make my brief"}</button>
-              </section>
-            ) : (
-              <section className="fx-panel">
-                <div className="fx-label">{brief.product}</div>
-                <p className="fx-big">{brief.oneLine}</p>
-                <div className="fx-facts"><div><span>Buyer</span><p>{brief.buyer}</p></div><div><span>Their problem</span><p>{brief.problem}</p></div><div><span>Your voice</span><p>{brief.voice}</p></div></div>
-                {!confirmed ? (
-                  <div className="fx-confirm"><span>Does this match what you have in mind?</span><button className="fx-btn" onClick={() => setBrief(null)}>Edit</button><button className="fx-btn pri" onClick={() => { setTab("overview"); void confirmBrief(); }}>Yes, run Foundry</button></div>
-                ) : <div className="fx-confirm ok"><span>Confirmed. Foundry is running.</span><button className="fx-btn" onClick={() => setTab("overview")}>See overview</button></div>}
-              </section>
+              </Bot>
             )}
-          </div>
-        )}
 
-        {tab === "optics" && brief && (
-          <div className="fx-stack">
-            <section className="fx-panel">
-              <div className="fx-panel-h"><h2>AI answers</h2><span className="fx-pill o">AEO</span></div>
-              {answers ? (
-                <table className="fx-table"><thead><tr><th>Buyer question</th><th>Who the AI names</th><th>You</th></tr></thead><tbody>
-                  {answers.map((a) => { const yes = a.names.some((n) => mentions(n, brief)); return (
-                    <tr key={a.question}><td>{a.question}</td><td><div className="fx-names">{a.names.map((n) => <i key={n} className={mentions(n, brief) ? "me" : ""}>{n}</i>)}</div></td><td><span className={yes ? "fx-ok" : "fx-miss"}>{yes ? "Named" : "Missing"}</span></td></tr>
-                  ); })}
-                </tbody></table>
-              ) : <Empty text="Waiting for your brief." />}
-            </section>
-            <section className="fx-panel">
-              <div className="fx-panel-h"><h2>Google, page one</h2><span className="fx-pill o">SEO</span></div>
-              {google && google.length ? (
-                <table className="fx-table"><thead><tr><th>Search</th><th>Top results</th><th>You</th></tr></thead><tbody>
-                  {google.map((g) => { const yes = g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)); return (
-                    <tr key={g.query}><td>{g.query}</td><td className="fx-hosts">{g.results.slice(0, 3).map((r) => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return r.title; } }).join(" · ")}</td><td><span className={yes ? "fx-ok" : "fx-miss"}>{yes ? "On page one" : "Not there"}</span></td></tr>
-                  ); })}
-                </tbody></table>
-              ) : <Empty text="Google results appear here." />}
-            </section>
-            <section className="fx-panel">
-              <div className="fx-panel-h"><h2>Fix list</h2><button className="fx-link" onClick={() => setTab("content")}>Sent to Content →</button></div>
-              {fixes ? <div className="fx-fixes">{fixes.map((f) => <div key={f.question}><span className="fx-tag o">{f.where}</span><p>{f.what}</p><small>For: {f.question}</small></div>)}</div> : <Empty text="Fixes appear after the check." />}
-            </section>
-          </div>
-        )}
+            {!brief && busy.brief && <Bot><Wait text={busy.brief} /></Bot>}
 
-        {tab === "content" && brief && (
-          <div className="fx-stack">
-            <div className="fx-ask"><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Write a post about… (something you shipped today)" /><button className="fx-btn pri" disabled={!topic.trim() || !!busy.content} onClick={() => { void runContent(brief, fixes, topic.trim()); setTopic(""); }}>Write it</button></div>
-            {posts ? <div className="fx-cards">{postCards.map((c) => <PostCard key={c.id} c={c} />)}</div> : <Empty text="Posts appear after the Optics check." />}
-          </div>
-        )}
+            {brief && (
+              <Bot wide>
+                <p>Here is what I heard. Does this match what you have in mind?</p>
+                <div className="fc-card fc-brief">
+                  <p className="ob-eyebrow">{brief.product}</p>
+                  <p className="fc-big">{brief.oneLine}</p>
+                  <div className="ob-summary fc-sum">
+                    <div><span>Buyer</span><b>{brief.buyer}</b></div>
+                    <div><span>Their problem</span><b>{brief.problem}</b></div>
+                    <div><span>Your voice</span><b>{brief.voice}</b></div>
+                  </div>
+                  {!confirmed && (
+                    <div className="fc-actions">
+                      <button className="ob-btn is-coral" onClick={() => void confirmBrief()}>Yes, run Braino Foundry</button>
+                      <button className="ob-btn is-outline" onClick={editBrief}>Edit</button>
+                    </div>
+                  )}
+                </div>
+              </Bot>
+            )}
 
-        {tab === "outreach" && brief && (
-          <div className="fx-stack">
-            {leads && leads.length ? <div className="fx-list">{leads.map((l) => <LeadCard key={l.url} l={l} />)}</div> : <Empty text={leads ? "Nobody found asking about this. Try a broader brief." : "People appear here."} />}
-          </div>
-        )}
+            {confirmed && brief && (
+              <>
+                <Me>Yes, that is it. Run it.</Me>
 
-        {tab === "inbox" && (
-          <div className="fx-stack">
-            <p className="fx-sub">Every post and message waits here. Approve copies the text and opens the platform. Foundry never posts on its own.</p>
-            <div className="fx-list">
-              {postCards.map((c) => <PostCard key={c.id} c={c} />)}
-              {(leads || []).map((l) => <LeadCard key={l.url} l={l} />)}
-              {!posts && !leads && <Empty text="Nothing waiting yet." />}
-            </div>
+                <Bot wide>
+                  <p>On it. Here is where things are.</p>
+                  {Timeline()}
+                </Bot>
+
+                {(answers || busy.optics) && (
+                  <Bot wide>
+                    <Engine k="o" name="Optics" sub="Where you are invisible" />
+                    {answers ? (
+                      <>
+                        <p>I asked AI the {answers.length} questions your buyers ask. You were named in <b>{namedCount}</b>.{rivals[0] ? <> {rivals[0][0]} was named in <b>{rivals[0][1]}</b>.</> : null}{google ? <> On Google you are on page one for <b>{googleHits}</b> of {google.length}.</> : null}</p>
+                        <div className="fc-card fc-viz">
+                          <div className="fc-viz-l">
+                            <Ring n={namedCount} of={answers.length} />
+                            <p className="fc-mini">AI answers naming you</p>
+                            {google && <p className="fc-sub">Google page one: <b>{googleHits} of {google.length}</b></p>}
+                          </div>
+                          <div className="fc-viz-r">
+                            <p className="fc-mini">Mentions across {answers.length} answers</p>
+                            <div className="fc-bars">
+                              <div className="fc-bar me"><span>You</span><i><em style={{ width: `${(namedCount / maxRival) * 100}%` }} /></i><b>{namedCount}</b></div>
+                              {rivals.map(([n, c]) => <div className="fc-bar" key={n}><span title={n}>{n}</span><i><em style={{ width: `${(c / maxRival) * 100}%` }} /></i><b>{c}</b></div>)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="fc-card fc-heat">
+                          <div className="fc-heat-h"><p className="fc-mini">Question by question</p><div className="fc-key"><span><i className="y" />Named</span><span><i className="n" />Missing</span><span><i className="x" />Not checked</span></div></div>
+                          <div className="fc-grid">
+                            <span className="h q">Buyer question</span><span className="h">AI</span><span className="h">Google</span>
+                            {answers.map((a, i) => {
+                              const yes = a.names.some((n) => mentions(n, brief));
+                              const g = google?.find((x) => x.query === a.question) || (i < 3 ? google?.[i] : undefined);
+                              const gy = g ? g.results.some((r) => mentions(`${r.title} ${r.url}`, brief)) : null;
+                              return (
+                                <div className="fc-grid-row" key={a.question}>
+                                  <span className="q" title={`AI named: ${a.names.join(", ")}${g ? `\nGoogle top: ${g.results.slice(0, 3).map((r) => host(r.url, r.title)).join(", ")}` : ""}`}>{a.question}</span>
+                                  <span className={`cell ${yes ? "y" : "n"}`} aria-label={yes ? "Named" : "Missing"} />
+                                  <span className={`cell ${gy == null ? "x" : gy ? "y" : "n"}`} aria-label={gy == null ? "Not checked" : gy ? "Named" : "Missing"} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {fixes && (
+                          <>
+                            <p>Here is what to publish, and where, so they start naming you.</p>
+                            <ol className="fc-fixes">{fixes.map((f) => <li key={f.question}><span className="fc-where">{f.where}</span><p>{f.what}</p><small>For "{f.question}"</small></li>)}</ol>
+                          </>
+                        )}
+                      </>
+                    ) : null}
+                    {busy.optics && <Wait text={busy.optics} />}
+                  </Bot>
+                )}
+
+                {(posts || busy.content) && (
+                  <Bot wide>
+                    <Engine k="c" name="Content" sub="Posts that fix it" />
+                    {posts && <p>Five posts, one per platform, in your voice. This is roughly how each one will look. Approve copies the text and opens the platform.</p>}
+                    {posts && <div className="fc-list">{postCards.map((c) => <div key={c.id}>{PostCard({ c })}</div>)}</div>}
+                    {busy.content && <Wait text={busy.content} />}
+                  </Bot>
+                )}
+
+                {(leads || busy.outreach) && (
+                  <Bot wide>
+                    <Engine k="r" name="Outreach" sub="People asking today" />
+                    {leads && (leads.length ? <p>{leads.length} people on Reddit are asking for this right now, most ready first. I wrote a reply for each.</p> : <p>Nobody found asking about this today. Try a broader brief.</p>)}
+                    {leads && leads.length > 0 && <div className="fc-list">{leads.map((l) => <div key={l.url}>{LeadCard({ l })}</div>)}</div>}
+                    {busy.outreach && <Wait text={busy.outreach} />}
+                  </Bot>
+                )}
+
+                {posts && leads && !working && <Bot><p>That is everything for now. Ask me below for a post about anything, like something you shipped today.</p></Bot>}
+              </>
+            )}
+
+            {err && <div className="fc-err"><span>{err}</span><button onClick={() => setErr("")}>Dismiss</button></div>}
+            <div ref={endRef} className="fc-end" />
           </div>
-        )}
-      </div>
+        </div>
+
+        <div className="fc-dock">
+          <form className="fc-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={draft}
+              disabled={!asking && !confirmed}
+              placeholder={placeholder}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            />
+            <button type="submit" className="fc-send" aria-label="Send" disabled={asking ? !draft.trim() : (!confirmed || !draft.trim() || !!busy.content)}>
+              <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            </button>
+          </form>
+          <p className="fc-fine">Braino Foundry never posts on its own. You approve everything.</p>
+        </div>
+      </main>
     </div>
   );
 }

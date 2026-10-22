@@ -49,3 +49,7 @@ Tell Foundry what you're building. It finds where buyers can't find you, writes 
 - **Limits stated in the article:** approve = copy + open (no auto posting yet); Reddit is found through Google; a search takes about a minute.
 - **Technical shape:** `LabsPost.tsx` renders by slug (`/labs/:slug`), diagrams are inline SVG/HTML, styles in `labs-post.css`, Affective homepage grammar, light and dark.
 - **Status:** built 22 October 2026, route added in `App.tsx` by Itish.
+
+## Chat redesign (22 Oct 2026)
+
+/foundry/app is now a chat, like Claude. Questions come one at a time in the onboarding style. While it runs, a timeline shows each step. Results appear in the chat as charts: an Optics ring, you vs competitors, a grid of which questions name you. Posts are previewed the way each platform shows them, and Reddit leads come with a readiness bar. Nothing goes out until you approve it.
