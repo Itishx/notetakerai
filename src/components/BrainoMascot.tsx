@@ -1,7 +1,8 @@
 /* Braino, optionally dressed for a model (2026-10-02): Foundry wears specs,
    Mesa a cap. The real mascot file drawn underneath, the accessory on top in
    the same coordinates (the file's viewBox, eyes at 38,48 and 62,48). */
-export function BrainoMascot({ variant = "braino", className = "", size = 104 }: { variant?: "braino" | "foundry" | "mesa"; className?: string; size?: number }) {
+/* `talking` opens and closes his mouth while he speaks (Foundry voice, 2026-10-22). */
+export function BrainoMascot({ variant = "braino", className = "", size = 104, talking = false }: { variant?: "braino" | "foundry" | "mesa"; className?: string; size?: number; talking?: boolean }) {
   return (
     <svg className={className} viewBox="-8 -34 116 142" width={size} height={Math.round(size * 142 / 116)} aria-hidden="true" style={{ overflow: "visible" }}>
       <image href="/braino-standing.svg" x="-8" y="-34" width="116" height="142" />
@@ -12,6 +13,14 @@ export function BrainoMascot({ variant = "braino", className = "", size = 104 }:
           <path d="M48 46 Q50 43.6 52 46" />
           <path d="M28 44 L19 41" />
           <path d="M72 44 L81 41" />
+        </g>
+      )}
+      {talking && (
+        <g className="bm-mouth">
+          <ellipse cx="50" cy="61" rx="6.5" ry="4.2" fill="#e7a29b" />
+          <ellipse cx="50" cy="61.5" rx="4.6" ry="3" fill="#5b1d1a">
+            <animate attributeName="ry" values="0.6;3.2;1.4;3.6;0.8;2.6;0.6" dur="0.9s" repeatCount="indefinite" />
+          </ellipse>
         </g>
       )}
       {variant === "mesa" && (

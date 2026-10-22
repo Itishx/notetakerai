@@ -38,11 +38,23 @@ async function ask(message: string): Promise<string> {
   if (error) throw new Error(error.message || "The model did not answer");
   return String((data as { reply?: string })?.reply || "");
 }
-async function askJson<T>(message: string): Promise<T> {
-  const reply = await ask(`${message}\n\nReply with valid JSON only. No markdown, no commentary.`);
+/* The model sometimes sends JSON with a stray comma or quote. Repair what is
+   safe to repair, and if it still will not parse, ask once more. */
+function parseLoose<T>(reply: string): T {
   const start = reply.search(/[[{]/);
   const end = Math.max(reply.lastIndexOf("}"), reply.lastIndexOf("]"));
-  return JSON.parse(reply.slice(start, end + 1)) as T;
+  const raw = reply.slice(start, end + 1);
+  try { return JSON.parse(raw) as T; } catch (_) { /* try a repair */ }
+  const fixed = raw
+    .replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, "$1")
+    .replace(/[\u0000-\u001f]+/g, " ");
+  return JSON.parse(fixed) as T;
+}
+async function askJson<T>(message: string): Promise<T> {
+  const prompt = `${message}\n\nReply with valid JSON only. No markdown, no commentary. Escape any double quotes inside strings.`;
+  try { return parseLoose<T>(await ask(prompt)); }
+  catch (_) { return parseLoose<T>(await ask(prompt)); }
 }
 
 async function apifyStart(kind: "google" | "reddit", list: string[]) {
@@ -495,8 +507,8 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           <div className="fc-col">
             {!started && !brief ? (
               <div className="fc-ready">
-                <h1 className="fc-ready-line"><span className="fc-ready-m"><BrainoMascot variant="foundry" size={44} /></span>{line}</h1>
-                {composer}
+                <h1 className="fc-ready-line"><span className="fc-ready-m"><BrainoMascot variant="foundry" size={44} talking={voice.status === "speaking"} /></span>{line}</h1>
+                {!voice.active && composer}
               </div>
             ) : (
               <>{hello && <Me>{hello}</Me>}</>
@@ -590,8 +602,17 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
           </div>
         </div>
 
-        <div className="fc-dock" hidden={!started && !brief}>
-          {(started || brief) && composer}
+        <div className="fc-dock" hidden={!started && !brief && !voice.active}>
+          {voice.active ? (
+            <div className={`fc-vbar ${voice.status}`} role="status" aria-live="polite">
+              <span className="fc-vbar-m"><BrainoMascot variant="foundry" size={40} talking={voice.status === "speaking"} /></span>
+              <div className="fc-vbar-mid">
+                <span className="fc-vbar-wave" aria-hidden>{Array.from({ length: 5 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 0.12}s` }} />)}</span>
+                <span className="fc-vbar-text">{voice.status === "error" ? (/not-allowed|denied/i.test(voice.error) ? "Allow the microphone to talk to me" : voice.error || "Something went wrong") : voice.status === "speaking" ? (voice.brainoText || "Speaking") : voice.status === "thinking" ? "Thinking" : voice.userText || (voice.status === "connecting" ? "Getting ready" : "Listening")}</span>
+              </div>
+              <button className="fc-vbar-end" onClick={() => voice.stop()}>End</button>
+            </div>
+          ) : (started || brief) && composer}
           <p className="fc-fine">Braino Foundry never posts on its own. You approve everything.</p>
         </div>
         </>) : (
@@ -636,16 +657,6 @@ Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "message": "..."}]`);
             )}
           </div>
         </div>
-        )}
-        {voice.active && (
-          <div className="fc-voice" role="dialog" aria-label="Voice mode">
-            <div className={`fc-mascot big ${voice.status}`}><BrainoMascot variant="foundry" size={170} /></div>
-            <p className="fc-v-status">{voice.status === "listening" ? "Listening" : voice.status === "thinking" ? "Thinking" : voice.status === "speaking" ? "Speaking" : voice.status === "connecting" ? "Getting ready" : voice.status === "error" ? (/not-allowed|denied/i.test(voice.error) ? "Allow the microphone to talk to me" : voice.error || "Something went wrong") : "Here"}</p>
-            {voice.userText && <p className="fc-v-you">{voice.userText}</p>}
-            {voice.brainoText && <p className="fc-v-him">{voice.brainoText}</p>}
-            {voice.error && <p className="fc-v-err">{voice.error}</p>}
-            <button className="ob-btn" onClick={() => voice.stop()}>End voice</button>
-          </div>
         )}
       </main>
     </>

@@ -441,3 +441,37 @@
 .fc-starters button { border: 1px solid var(--a-line); background: none; border-radius: 10px; padding: 8px 14px; font-size: 13.5px; color: var(--a-ink-soft); cursor: pointer; }
 .fc-starters button:hover { border-color: var(--a-line-strong); color: var(--a-ink); background: var(--a-box); }
 @media (max-width: 700px) { .fc-ready-line { font-size: 26px; } .fc-ready { min-height: calc(100vh - 140px); } }
+
+/* ── Voice inside the chat, like Claude (2026-10-22) ───────────────────
+   The composer turns into a voice bar; what you say and what he says land
+   in the same chat. His mouth moves while he speaks. */
+.fc-vbar { width: min(var(--fc-col), 100%); margin: 0 auto; display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 14px; border: 1px solid var(--a-line); border-radius: 20px; background: var(--a-box); box-shadow: 0 10px 30px -18px rgba(var(--a-shade), .3); animation: ob-in .35s cubic-bezier(.16,1,.3,1) both; }
+.fc-vbar-m { flex: none; display: grid; margin: -6px 0; }
+.fc-vbar.speaking .fc-vbar-m svg { animation: fc-bob .9s ease-in-out infinite; }
+.fc-vbar.thinking .fc-vbar-m svg { animation: fc-think 1.1s ease-in-out infinite; }
+@keyframes fc-bob { 50% { transform: translateY(-2px) rotate(-2deg); } }
+.fc-vbar-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.fc-vbar-wave { flex: none; display: flex; align-items: center; gap: 3px; height: 22px; }
+.fc-vbar-wave i { width: 3px; height: 6px; border-radius: 2px; background: var(--a-ink-faint); }
+.fc-vbar.listening .fc-vbar-wave i { background: #d9645b; animation: fc-wave .9s ease-in-out infinite; }
+.fc-vbar.speaking .fc-vbar-wave i { background: var(--a-ink); animation: fc-wave .6s ease-in-out infinite; }
+@keyframes fc-wave { 50% { height: 20px; } }
+.fc-vbar-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; color: var(--a-ink-soft); }
+.fc-vbar.error .fc-vbar-text { color: #c0463c; }
+.fc-vbar-end { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--a-ink); color: var(--a-bg) !important; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* ── Results arrive with motion, then sit still ─────────────────────── */
+@keyframes fc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fc-draw { from { stroke-dasharray: 0 999; } }
+@keyframes fc-grow { from { transform: scaleX(0); } }
+@keyframes fc-pop { from { opacity: 0; transform: scale(.4); } }
+.fc-msg.bot .fc-card, .fc-msg.bot .fc-list > div, .fc-msg.bot .fc-fixes li { animation: fc-rise .6s cubic-bezier(.16,1,.3,1) both; }
+.fc-list > div:nth-child(2) { animation-delay: .08s; } .fc-list > div:nth-child(3) { animation-delay: .16s; }
+.fc-list > div:nth-child(4) { animation-delay: .24s; } .fc-list > div:nth-child(5) { animation-delay: .32s; }
+.fc-list > div:nth-child(n+6) { animation-delay: .4s; }
+.fc-ring .val { animation: fc-draw 1.4s cubic-bezier(.16,1,.3,1) .2s both; }
+.fc-bar em, .fc-meter em { transform-origin: left; animation: fc-grow 1s cubic-bezier(.16,1,.3,1) .3s both; }
+.fc-grid .cell { animation: fc-pop .4s cubic-bezier(.34,1.56,.64,1) both; }
+.fc-grid > :nth-child(3n+2) .cell, .fc-grid > :nth-child(3n+2).cell { animation-delay: .35s; }
+.fc-grid > :nth-child(3n) .cell, .fc-grid > :nth-child(3n).cell { animation-delay: .55s; }
+@media (prefers-reduced-motion: reduce) { .fc *, .fc *::before { animation: none !important; } }
