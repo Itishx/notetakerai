@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "foundry-app",
+    title: "Foundry: Get found",
+    category: "Product",
+    date: "2026-10-22",
+    dateLabel: "October 22, 2026",
+    description:
+      "Tell Foundry what you're building. It finds where buyers can't find you, writes the posts that fix it, and brings you people asking for it on Reddit, with a reply each. You only approve.",
+    status: "MVP",
+    platform: "Web",
+    number: "088",
+  },
+  {
     slug: "teach-braino",
     title: "Teach Braino",
     category: "Feature",

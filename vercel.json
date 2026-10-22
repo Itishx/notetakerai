@@ -64,7 +64,7 @@
       "destination": "/terms/index.html"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/app.html"
     }
   ],
