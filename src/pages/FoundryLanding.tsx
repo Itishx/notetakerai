@@ -373,7 +373,6 @@ export default function FoundryLanding() {
           </div>
         </div>
       </header>
-      <BrainoPeek variant="foundry" />
 
       <section className="ah-os" id="problem">
         <div className="aff-wrap">
@@ -495,6 +494,7 @@ export default function FoundryLanding() {
 
       <section className="hb-end">
         <div className="hb-end-glow" aria-hidden="true" />
+        <BrainoPeek variant="foundry" />
         <div className="aff-wrap hb-end-in aff-reveal">
           <h2 className="aff-h1 hb-end-line">You built it. Now let people <span className="hb-end-braino">find it.</span></h2>
           <p className="hb-end-p">Right now someone is asking for exactly what you made, and someone else is answering. Tell Braino Foundry what you built. The first run is free and takes about two minutes.</p>

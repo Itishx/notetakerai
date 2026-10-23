@@ -8,6 +8,7 @@ import "./affective-home.css";
 import "./affectiveos-page.css";
 import { VoiceToAction, NotchSheet, MacMenuBar, EffortChartCompact } from "./aff-figures";
 import { BrainoMascot } from "@/components/BrainoMascot";
+import { LaunchPill } from "@/components/LaunchPill";
 import { MacTaskFilm } from "@/components/MacTaskFilm";
 import { BrainoShowcase } from "@/components/BrainoShowcase";
 import { AppLogo } from "@/components/AppLogo";
@@ -524,6 +525,7 @@ export default function Affective() {
           the opposite in the first frame. */}
       <header className="aff-hero">
         <div className="aff-wrap">
+          <LaunchPill lead="Braino Foundry is here" text="Read the launch post" href="/labs/introducing-braino-foundry" />
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
               <span className="aff-h1-line">

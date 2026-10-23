@@ -17,7 +17,6 @@ import { MacMenuBar, NotchSheet } from "./aff-figures";
    stay the source for the pages that use them. */
 import "./braino-final.css";
 import { BrainoPeek } from "@/components/BrainoPeek";
-import { LaunchPill } from "@/components/LaunchPill";
 import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
@@ -599,7 +598,6 @@ export default function BrainoFinal() {
       {/* ── Hero: the home page's, with him in it ── */}
       <header className="aff-hero">
         <div className="aff-wrap">
-          <LaunchPill lead="Braino is in private beta" text="Join the waitlist" href="/braino#early-access" />
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
               <span className="aff-h1-line">{model.title}</span>
@@ -661,7 +659,6 @@ export default function BrainoFinal() {
           )}
         </div>
       </header>
-      <BrainoPeek variant="braino" />
 
       <main className="bp-story">
         {/* ── Your companion, first thing after the hero, in the home page's
@@ -780,6 +777,7 @@ export default function BrainoFinal() {
       {/* ── The last word ── */}
       <section className="hb-end" id="early-access">
         <div className="hb-end-glow" aria-hidden="true" />
+        <BrainoPeek variant="braino" />
         <div className="aff-wrap hb-end-in hb-end-split aff-reveal">
           <div className="hb-end-left">
           <BrainoMascot size={110} className="hb-end-him" />
