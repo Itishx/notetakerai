@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
@@ -9,6 +9,14 @@ import "./affective-home.css";
 import "./affectiveos-page.css";
 import "./braino-final.css";
 import "./braino-page.css";
+import "./foundry/foundry.css";
+import "./foundry/first-run.css";
+import "./foundry/components/brandmap.css";
+import { Bars, Funnel, Meter, Ring, WeekStrip } from "./foundry/components/charts";
+import { PLATFORM_LABEL, PostPreview } from "./foundry/components/previews";
+import { faviconOf } from "./foundry/launchPlaces";
+import { PERSON_PLATFORM_LABEL, whereOf } from "./foundry/store";
+import { SAMPLE } from "./foundry-sample";
 import "./foundry-landing.css";
 
 /* Braino Foundry (2026-10-22). Built from the homepage's own pieces (affPage,
@@ -86,103 +94,169 @@ const ENGINES = [
     ], gets: "Real people, a reply each, and a pipeline to your first paying customer" },
 ];
 
-/* Product shots (2026-10-23): drawn in code from what /foundry/app really
-   shows, for a sample product, RentOnTime. */
-function Browser({ path, children }: { path: string; children: ReactNode }) {
+/* Product shots (2026-10-23, rebuilt): the real /foundry/app styles (foundry.css,
+   first-run.css, brandmap.css) and its own charts and post previews, fed a
+   static sample project, RentOnTime. Drawn at app width, then scaled to fit. */
+function Browser({ path, theme, children }: { path: string; theme: string; children: ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ s: 1, w: 960, h: 0 });
+  useLayoutEffect(() => {
+    const o = outer.current, n = inner.current;
+    if (!o || !n) return;
+    const measure = () => {
+      const cw = o.clientWidth;
+      const w = cw >= 760 ? Math.max(960, cw) : 620;
+      const s = Math.min(1, cw / w);
+      setFit({ s, w, h: n.offsetHeight * s });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(o); ro.observe(n);
+    return () => ro.disconnect();
+  }, []);
   return (
     <div className="fl-br">
       <div className="fl-br-bar"><i /><i /><i /><span>affctve.com/foundry/app{path}</span></div>
-      <div className="fl-br-body">{children}</div>
+      <div className="fl-br-body" ref={outer} style={{ height: fit.h || undefined }}>
+        <div ref={inner} className="fx fl-fx" data-theme={theme} style={{ width: fit.w, transform: `scale(${fit.s})` }}>{children}</div>
+      </div>
     </div>
   );
 }
+const Check = () => <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 function ShotFirstRun() {
-  const rows = [
-    ["done", "Get found", "Optics", "Checks if AI and Google name you when buyers ask.", "Asked 8 buyer questions. Named in 0, a bigger rival in 5."],
-    ["done", "Reach people", "Outreach", "Finds real people asking for this today.", "Found 23 people on Reddit, X, LinkedIn and Quora."],
-    ["working", "Be seen", "Content", "Writes posts from what the other two found.", "Writing post 4 of 6"],
+  const rows: [string, string, string, string, string][] = [
+    ["optics", "done", "Get found", "Optics", "Checks if AI and Google name you when buyers ask."],
+    ["outreach", "done", "Reach people", "Outreach", "Finds real people asking for this today."],
+    ["content", "working", "Be seen", "Content", "Writes posts from what the other two found."],
   ];
+  const now: Record<string, string> = { optics: "Named in 1 of 8 AI answers", outreach: "23 people found", content: "Writing post 4 of 6" };
   return (
-    <Browser path="">
-      <div className="fs-run">
-        <p className="fs-k">RentOnTime</p>
-        <h4>Braino Foundry is working on it.</h4>
-        <p className="fs-sub">Three engines, one after another. About two minutes. 74s so far.</p>
-        <ul>{rows.map(([s, f, n, j, now]) => (
-          <li key={f} className={s}><span className="fs-ic">{s === "done" ? "✓" : <i />}</span><div><p className="fs-name"><b>{f}</b><span>{n}</span></p><p className="fs-job">{j}</p><p className="fs-now">{now}</p></div></li>
+    <div className="fr fl-fr">
+      <div className="fr-in">
+        <div className="fr-mascot"><BrainoMascot variant="foundry" size={84} /></div>
+        <p className="fr-kicker">{SAMPLE.memory.product.name}</p>
+        <h1>Braino Foundry is working on it.</h1>
+        <p className="fr-sub">Three engines, one after another. About two minutes. 74s so far.</p>
+        <div className="fr-bar" aria-hidden><span style={{ width: "72%" }} /></div>
+        <ul className="fr-engines">{rows.map(([id, s, f, n, j]) => (
+          <li key={id} className={`fr-eng e-${id} ${s}`}>
+            <span className="fr-icon" aria-hidden>{s === "done" ? <Check /> : <i />}</span>
+            <div className="fr-text"><p className="fr-name"><b>{f}</b><span>{n}</span></p><p className="fr-job">{j}</p><p className="fr-now">{now[id]}</p></div>
+            <span className="fr-state">{s === "done" ? "Done" : "Working"}</span>
+          </li>
         ))}</ul>
+        <ul className="fr-feed">{SAMPLE.memory.activity.map((a) => <li key={a.id}><span className={`fr-dot w-${a.who}`} />{a.text}</li>)}</ul>
       </div>
-    </Browser>
+    </div>
   );
 }
 function ShotDashboard() {
-  const t = [["16", "AI answers checked", "8 buyer questions, asked 2 times each", "o"], ["23", "people found asking", "on 4 platforms", "r"], ["23", "messages written", "one per person, in your voice", "r"], ["8", "posts and articles written", "6 posts, 2 articles", "c"], ["5", "fixes ready to publish", "so AI and Google name you", "o"], ["4", "launch listings written", "for directories that send visitors", "c"]];
+  const tiles = [[16, "AI answers checked", "8 buyer questions, asked 2 times each", "optics"], [23, "people found asking", "on 4 platforms", "outreach"], [23, "messages written", "one per person, in your voice", "outreach"], [8, "posts and articles written", "6 posts, 2 articles", "content"], [5, "fixes ready to publish", "so AI and Google name you", "optics"], [4, "launch listings written", "for directories that send visitors", "content"]] as const;
   return (
-    <Browser path="">
-      <div className="fs-dash">
-        <p className="fs-k">What Braino Foundry has done for you</p>
-        <h4>Here is the work, done. It is waiting for your yes.</h4>
-        <div className="fs-tiles">{t.map(([n, l, sub, e]) => <div key={l} className={"fs-tile " + e}><b>{n}</b><span>{l}</span><small>{sub}</small></div>)}</div>
-        <div className="fs-next"><p className="fs-k">If you act on it</p><p><b>23 real people</b> who asked for this today hear from you. That is where first users come from.</p></div>
-      </div>
-    </Browser>
+    <div className="fx-page fl-page">
+      <section className="fx-done">
+        <header><span className="fx-eyebrow">What Braino Foundry has done for you</span><h2>Here is the work, done. It is waiting for your yes.</h2></header>
+        <div className="fx-done-grid">{tiles.map(([n, l, s, e]) => <div key={l} className={`fx-done-t ${e}`}><b className="fx-num">{n}</b><span>{l}</span><small>{s}</small></div>)}</div>
+      </section>
+      <section className="fx-sec"><header className="fx-sec-h"><h2>Pipeline</h2></header><Funnel counts={{ found: 23, messaged: 9, replied: 4, talking: 2, paid: 1 }} /></section>
+    </div>
   );
 }
-function ShotPerson() {
+function ShotFound() {
+  const o = SAMPLE.optics!;
   return (
-    <Browser path="">
-      <div className="fs-person">
-        <div className="fs-chips">{["All 23", "Reddit 11", "X 5", "LinkedIn 3", "Quora 4"].map((c, i) => <span key={c} className={i === 1 ? "on" : ""}>{c}</span>)}</div>
-        <article>
-          <p className="fs-plat"><span>Reddit</span> r/IndianStartups · 3h</p>
-          <b className="fs-t">"Running 3 PGs and half my weekend goes to chasing rent on WhatsApp. Any app for this?"</b>
-          <p className="fs-why">Owns PGs and asks for a tool by name. Close to buying.</p>
-          <div className="fs-msg"><small>Your reply, in your voice</small><p>Same problem got us building RentOnTime. It sends tenants a polite reminder on the 1st and a nudge on the 5th, so you stop being the bad guy. Happy to set it up for your 3 PGs, free for a month.</p></div>
-          <div className="fs-acts"><b>Approve, open the post</b><span>Edit</span><u>Skip</u></div>
-        </article>
+    <div className="fx-page fl-page">
+      <div className="fx-grid2">
+        <section className="fx-sec"><header className="fx-sec-h"><h2>Your score</h2></header>
+          <div className="fx-vis"><Ring n={1} of={8} label="named" />
+            <div className="fx-vis-t"><div><b className="fx-num">1 of 8</b><span>AI answers name you</span></div><div><b className="fx-num">6%</b><span>of every name AI gave is you</span></div></div>
+          </div>
+        </section>
+        <section className="fx-sec"><header className="fx-sec-h"><h2>Named instead of you</h2></header>
+          <Bars you={{ name: "RentOnTime", value: 1 }} rows={[{ name: "NoBroker", value: 5 }, { name: "RentOk", value: 4 }, { name: "Stanza", value: 2 }]} />
+        </section>
       </div>
-    </Browser>
+      <section className="fx-sec"><header className="fx-sec-h"><h2>Question by question</h2></header>
+        <div className="fx-qgrid" role="table">
+          <div className="fx-qgrid-h" role="row"><span>Buyer question</span><span>AI named you, out of 3 tries</span><span>Google page one</span></div>
+          {o.answers.map((a, i) => (
+            <details key={a.question} className="fx-qrow" role="row"><summary>
+              <span>{a.question}</span>
+              <span className={`fx-yes ${(a.hits || 0) > 1 ? "y" : a.hits ? "m" : "n"}`}>{a.hits ? `${a.hits} of 3 tries` : "Never (0 of 3)"}</span>
+              <span className={`fx-yes ${i === 3 ? "y" : i < 2 ? "n" : "na"}`}>{i === 3 ? "Yes" : i < 2 ? "No" : "Not searched"}</span>
+            </summary></details>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+function ShotPeople() {
+  return (
+    <div className="fx-page fl-page">
+      <div className="fx-tabs" role="tablist">{[["All", 23], ["Reddit", 11], ["X", 5], ["LinkedIn", 3], ["Quora", 4]].map(([k, n], i) => <button key={k} role="tab" aria-selected={i === 0} tabIndex={-1}>{k} <span>{n}</span></button>)}</div>
+      <div className="fx-grid2">{SAMPLE.people.map((x) => (
+        <article key={x.id} className={`fx-person ${x.stage}`}>
+          <header><span className="fx-plat"><span className="fx-pchip">{PERSON_PLATFORM_LABEL[x.platform]}</span> {whereOf(x)}</span><span className="fx-chip waiting">Waiting for you</span></header>
+          <span className="fx-person-t">{x.title}</span>
+          <p className="fx-person-b">{x.body}</p>
+          <Meter value={x.intent} label="How ready" />
+          <p className="fx-faint">{x.why}</p>
+          <div className="fx-msg"><small>Your message</small><p>{x.message}</p></div>
+          <footer className="fx-acts"><span className="fx-btn sm">Approve, open the post</span><span className="fx-ghost">Edit</span><span className="fx-link">Skip</span></footer>
+        </article>
+      ))}</div>
+    </div>
+  );
+}
+function ShotSeen() {
+  return (
+    <div className="fx-page fl-page">
+      <div className="fx-grid2">
+        <section className="fx-sec"><header className="fx-sec-h"><h2>LinkedIn, Tuesday 9:00</h2></header><PostPreview post={SAMPLE.posts[0]} name="Riya Sharma" /></section>
+        <section className="fx-sec"><header className="fx-sec-h"><h2>X, Monday 8:30</h2></header><PostPreview post={SAMPLE.posts[1]} name="RentOnTime" /></section>
+      </div>
+      <section className="fx-sec"><header className="fx-sec-h"><h2>When to post this week</h2></header>
+        <WeekStrip items={SAMPLE.posts.map((x) => ({ day: x.day, time: x.time, label: PLATFORM_LABEL[x.platform], status: x.status }))} />
+      </section>
+    </div>
   );
 }
 function ShotLaunch() {
-  const places = [["Product Hunt", "Free", "Goes up now", 3, "Listing written"], ["Peerlist", "Free", "Goes up now", 2, "Listing written"], ["AlternativeTo", "Free", "Takes days", 3, "Listing written"], ["Indie Hackers", "Free", "Goes up now", 2, "Listing written"], ["BetaList", "Free or paid", "Takes weeks", 2, "Write it"], ["r/SideProject", "Free", "Goes up now", 2, "Write it"]] as const;
+  const places = [["Product Hunt", "producthunt.com", "Free", "Goes up now", 3, "live", "The big launch day. Best on a Tuesday."], ["Peerlist", "peerlist.io", "Free", "Goes up now", 2, "submitted", "Indian makers, a weekly launch board."], ["AlternativeTo", "alternativeto.net", "Free", "Takes days", 3, "todo", "Shows up when people search for NoBroker alternatives."], ["Indie Hackers", "indiehackers.com", "Free", "Goes up now", 2, "todo", "Founders who share how they got users."], ["BetaList", "betalist.com", "Free or paid", "Takes weeks", 2, "todo", "Early adopters looking for new tools."], ["r/SideProject", "reddit.com", "Free", "Goes up now", 2, "todo", "A friendly crowd for a first post."]] as const;
+  const st = { todo: "To do", submitted: "Submitted", live: "Live" };
   return (
-    <Browser path="">
-      <div className="fs-launch">
-        <p className="fs-k">Launch places</p>
-        <div className="fs-grid">{places.map(([n, c, a, s, st]) => (
-          <div key={n} className="fs-place"><b>{n}</b><small>{c} · {a}</small><span className="fs-str">{[1, 2, 3].map((k) => <i key={k} className={k <= s ? "on" : ""} />)}</span><em className={st === "Write it" ? "" : "ok"}>{st}</em></div>
-        ))}</div>
-      </div>
-    </Browser>
+    <div className="fx-page fl-page">
+      <div className="fx-lp-bar"><b>2 of 56 submitted, 1 live</b><span>Picked for: b2c, india</span></div>
+      <ul className="fx-lp">{places.map(([n, host, c, a, s, status, note]) => (
+        <li key={n} className={status}>
+          <div className="fx-lp-n"><img src={faviconOf(`https://${host}`)} alt="" width={16} height={16} loading="lazy" /><b>{n}</b><span className={`fx-lp-st ${status}`}>{st[status]}</span></div>
+          <p>{note}</p>
+          <div className="fx-lp-c"><span className="fx-chip">{c}</span><span className="fx-chip">{a}</span><span className="fx-chip fx-lp-dots">{[1, 2, 3].map((i) => <i key={i} className={i <= s ? "on" : ""} />)}</span></div>
+          <div className="fx-lp-a"><span className="fx-btn sm">{status === "todo" ? "Write my listing" : "Open my listing"}</span></div>
+        </li>
+      ))}</ul>
+    </div>
   );
 }
-function ShotWeek() {
-  const wk: [string, string[]][] = [["Mon", ["X: Chasing rent is the worst job"]], ["Tue", ["LinkedIn: What 40 PG owners told us"]], ["Wed", ["Reddit: How I stopped chasing rent"]], ["Thu", ["Article: Best rent apps for PGs"]], ["Fri", ["X: A tenant thanked us"]], ["Sat", []], ["Sun", []]];
-  return (
-    <Browser path="">
-      <div className="fs-week">
-        <p className="fs-k">When to post this week</p>
-        <div className="fs-cal">{wk.map(([d, items]) => <div key={d}><small>{d}</small>{items.map((x) => <p key={x}>{x}</p>)}</div>)}</div>
-      </div>
-    </Browser>
-  );
-}
-const SHOTS: [string, string, () => JSX.Element][] = [
-  ["First two minutes", "Three engines go to work on what you built.", ShotFirstRun],
-  ["Dashboard", "What Braino Foundry did for you, in plain numbers.", ShotDashboard],
-  ["Reach people", "A real person asking today, with your reply ready.", ShotPerson],
-  ["Launch places", "Where new products get listed, with the listing written.", ShotLaunch],
-  ["Your week", "Posts planned on the days they do best.", ShotWeek],
+const SHOTS: [string, string, string, () => JSX.Element][] = [
+  ["First run", "Three engines go to work on what you built.", "", ShotFirstRun],
+  ["Dashboard", "What Braino Foundry did for you, in plain numbers.", "", ShotDashboard],
+  ["Get found", "Whether AI names you when buyers ask, and who it names instead.", "/optics", ShotFound],
+  ["Reach people", "Real people asking today, with your reply ready.", "/outreach", ShotPeople],
+  ["Be seen", "Your posts, the way they will look, on the days they do best.", "/content", ShotSeen],
+  ["Launch places", "Where new products get listed, with the listing written.", "/content", ShotLaunch],
 ];
-function Shots() {
+function Shots({ theme }: { theme: string }) {
   const [i, setI] = useState(0);
-  const Shot = SHOTS[i][2];
+  const [t, cap, path, Shot] = SHOTS[i];
   return (
     <div className="fl-shots aff-reveal">
-      <div className="fl-tabs fl-shot-tabs" role="tablist">{SHOTS.map(([t], k) => <button key={t} role="tab" aria-selected={k === i} className={k === i ? "on" : ""} onClick={() => setI(k)}>{t}</button>)}</div>
-      <p className="fl-shot-cap">{SHOTS[i][1]}</p>
-      <div className="fl-shot" key={i}><Shot /></div>
+      <div className="fl-tabs fl-shot-tabs" role="tablist">{SHOTS.map(([n], k) => <button key={n} role="tab" aria-selected={k === i} className={k === i ? "on" : ""} onClick={() => setI(k)}>{n}</button>)}</div>
+      <p className="fl-shot-cap">{cap}</p>
+      <div className="fl-shot" key={t}><Browser path={path} theme={theme}><Shot /></Browser></div>
     </div>
   );
 }
@@ -201,6 +275,11 @@ const MAC_DAY = [
   { at: "6:00 pm", p: "“How did this week go?” 14 messages, 4 replies, 1 call booked." },
   { at: "9:30 pm", p: "You close the laptop. Tomorrow’s posts are written and waiting. He never sends anything without you." },
 ];
+/* Where it runs: the web app, open to try, and Braino on the Mac, in private beta. */
+const WHERE = [
+  { k: "On the web", tag: "Open to try", h: "A dashboard and a few clicks.", p: "Works in any browser, on Chrome and Windows too.", does: ["Run all three engines on what you built", "Read every post, reply and listing before it goes", "Approve copies the text and opens the site", "You post it yourself, in your own account"], cta: ["Open Braino Foundry", "/foundry/app"], mac: false },
+  { k: "On your Mac", tag: "Private beta", h: "Your voice and the notch.", p: "Braino, with glasses. You talk, he does the work.", does: ["Ask out loud: \u201cwho asked about us today?\u201d", "He reads you the reply and waits for your yes", "He posts in your own browser, logged in as you", "Good morning updates on what came in overnight"], cta: ["Join the waitlist", "/braino#early-access"], mac: true },
+] as const;
 const COMPARE: [string, string, string][] = [
   ["What it is", "Your companion for everyday life", "Braino as your co-founder"],
   ["What it does", "Notes, messages, music, the small jobs of your day", "Runs distribution for your startup"],
@@ -236,6 +315,7 @@ const FAQS = [
   { q: "How much of my time does it take?", a: "About ten minutes a week. You read what it wrote, change anything that doesn't sound like you, and say yes." },
   { q: "Does it post for me?", a: "Never on its own. On the web, Approve copies the text and opens the site so you post it. On the Mac, Braino posts in your own browser after your yes." },
   { q: "Is this a content generator?", a: "No. It starts from what your buyers are asking right now, then writes the posts that answer it and finds the people asking." },
+  { q: "How is Foundry on the web different from Foundry on the Mac?", a: "On the web, Foundry is the engine we built. It finds, writes and prepares everything, and you approve with a click and post it yourself. On the Mac, inside Braino, it is a different experience, as close to Jarvis as it gets. You talk, and Braino does everything for you, posting in your own browser after your yes. That is what makes him Braino. The Mac app is in private beta." },
   { q: "Do I need a Mac?", a: "No. The web app works on Chrome and Windows. The Mac version is in private beta." },
   { q: "What do I need to start?", a: "A few lines about what you're building. A website or a doc helps, but your own words are enough." },
 ];
@@ -346,7 +426,7 @@ export default function FoundryLanding() {
           <p className="ah-kicker">The product</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="See what you get in the first minute." /></h2>
           <p className="fl-lead aff-reveal">A sample run for RentOnTime, rent reminders for PG owners.</p>
-          <Shots />
+          <Shots theme={theme} />
         </div>
       </section>
 
@@ -367,8 +447,15 @@ export default function FoundryLanding() {
           <p className="ah-kicker">Where it runs</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="On the web, or inside Braino on your Mac." /></h2>
           <div className="fl-two aff-reveal">
-            <div><small>On the web · open to try</small><h3>A dashboard and a few clicks.</h3><p>Works on Chrome and Windows. Approve copies the text and opens the site, so you post it.</p><Link to="/foundry/app" className="aff-cta">Open Braino Foundry</Link></div>
-            <div><small>On your Mac · coming</small><h3>Your voice and the notch.</h3><p>Ask out loud. He posts in your own logged in browser, only after your yes. Braino Mac is in private beta.</p><Link to="/braino#early-access" className="aff-cta aff-cta-ghost">Join the waitlist</Link></div>
+            {WHERE.map((w) => (
+              <div key={w.k} className={w.mac ? "mac" : ""}>
+                <small><span className="fl-two-ic" aria-hidden="true">{w.mac ? <BrainoMascot variant="foundry" size={30} /> : <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="14" rx="2.5" /><path d="M3 9h18" /><circle cx="6" cy="6.8" r=".6" /><circle cx="8.2" cy="6.8" r=".6" /></svg>}</span>{w.k}<em>{w.tag}</em></small>
+                <h3>{w.h}</h3>
+                <p>{w.p}</p>
+                <ul className="fl-does">{w.does.map((d) => <li key={d}>{d}</li>)}</ul>
+                <Link to={w.cta[1]} className={w.mac ? "aff-cta aff-cta-ghost" : "aff-cta"}>{w.cta[0]}</Link>
+              </div>
+            ))}
           </div>
           <p className="bf-ds-hint aff-reveal">A founder's day on the Mac. Scroll <i aria-hidden="true">↓</i></p>
         </div>
