@@ -136,7 +136,7 @@ Return: [{"question": "...", "where": "the place, 1 to 3 words", "what": "one sh
       const fixes: Fix[] = [...fx.slice(0, 5).map((f) => ({ id: uid(), question: clean(f.question), where: clean(f.where), what: clean(f.what), from: "optics" as const })), ...keep];
       const gaps = lost.map((a) => ({ id: uid(), question: a.question, rivals: a.names.slice(0, 3), at: Date.now() }));
       const named = answers.length - lost.length;
-      let n: Project = { ...p, searchNote: googleNote || p.searchNote, optics: { at: Date.now(), answers, google: rows, googleNote, fixes, made: {}, crawl: p.optics?.crawl }, memory: { ...p.memory, gaps } };
+      let n: Project = { ...p, searchNote: googleNote, optics: { at: Date.now(), answers, google: rows, googleNote, fixes, made: {}, crawl: p.optics?.crawl }, memory: { ...p.memory, gaps } };
       n = log(n, "optics", `Checked ${answers.length} buyer questions. Named in ${named} of ${answers.length}`);
       if (rows.length) n = log(n, "optics", `Checked Google page one for ${rows.length} searches, found on ${rows.filter((r) => r.found).length}`);
       if (quote && rows.length) n = log(n, "memory", `A buyer quote from Outreach became an Optics search: "${quote.slice(0, 60)}"`);
@@ -188,6 +188,8 @@ async function searchReddit(ctx: Ctx): Promise<RedditPost[]> {
   try {
     const id = await apifyStart("reddit", phrases);
     const found = await apifyWait<RedditPost[]>("reddit", id, (s) => ctx.busy("outreach", `Looking for people asking today, ${s}s`));
+    // Search worked, so an old "search is not set up" note is no longer true.
+    ctx.update((p) => (p.searchNote ? { ...p, searchNote: "" } : p));
     return [...new Map(found.map((x) => [x.url, x])).values()].slice(0, 24);
   } catch (e) {
     ctx.update((p) => log({ ...p, searchNote: searchNote(e) }, "outreach", "Could not search for people this time"));
