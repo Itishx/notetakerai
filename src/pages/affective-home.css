@@ -871,3 +871,6 @@
 @keyframes apIn { from { opacity: 0; transform: translateY(6px); } }
 /* FAQ answers read as answers, not headlines (2026-10-15), same as the Braino page. */
 .hb2-faq-list details p { font-size: 16px; line-height: 1.6; }
+
+/* Second product card on the homepage: Braino Foundry. */
+.hb6-foundry { margin-top: 24px; }
