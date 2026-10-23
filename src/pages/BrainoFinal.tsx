@@ -473,7 +473,7 @@ function clockText(m: number) {
   const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60);
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
-function DayScroll({ day }: { day: { at: string; p: string }[] }) {
+export function DayScroll({ day, date = "Tue 13 Oct" }: { day: { at: string; p: string }[]; date?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [f, setF] = useState(0);
   const mins = day.map((d) => toMinutes(d.at) as number);
@@ -517,7 +517,7 @@ function DayScroll({ day }: { day: { at: string; p: string }[] }) {
             <div className="bf-ds-stars" style={{ opacity: night }} />
             <i className="bf-ds-sun" style={{ left: `${8 + sun * 84}%`, top: `${70 - Math.sin(sun * Math.PI) * 52}%`, opacity: 1 - night }} />
             <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
-            <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={["Tue 13 Oct", clockText(now)]} />
+            <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={[date, clockText(now)]} />
             <NotchSheet className={"ns-big ns-glow bf-ds-ns " + (open ? "ns-work" : "is-fold")} label={parts[on].said ? "Braino" : "Live notes"} done={false}
               extra={open ? <p className="bf-ds-did" key={on}>{parts[on].did}</p> : undefined}>
               <span key={on}>{parts[on].said ? `\u201c${parts[on].said}\u201d` : "Listening. Writing it down."}</span>
