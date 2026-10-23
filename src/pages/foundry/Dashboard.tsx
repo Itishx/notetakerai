@@ -51,6 +51,57 @@ function Profiles({ p, me, go }: Pick<PageProps, "p" | "me" | "go">) {
   );
 }
 
+/* What Foundry has done so far, and what acting on it gets you (2026-10-23).
+   Itish: "0% of AI's picks" read as failure. Lead with the work done and the
+   next win; the starting score is framed as a starting point. */
+function DoneForYou({ p, go }: { p: PageProps["p"]; go: PageProps["go"] }) {
+  const o = p.optics;
+  const asked = (o?.answers.length || 0) * Math.max(1, o?.answers[0]?.runs || 1);
+  const platforms = new Set(p.people.map((x) => x.platform || "reddit")).size;
+  const wrote = p.people.filter((x) => x.message).length;
+  const posts = p.posts.length;
+  const articles = p.memory.topics.filter((t) => t.article).length;
+  const listings = Object.values(p.launches || {}).filter((l) => l.listing).length;
+  const fixes = o?.fixes.length || 0;
+  const waitMsgs = p.people.filter((x) => x.status === "waiting" && x.message).length;
+  const waitPosts = p.posts.filter((x) => x.status === "waiting").length;
+  const named = namedCount(p);
+  const tiles = [
+    { n: asked, l: "AI answers checked", s: o ? `${o.answers.length} buyer questions, asked ${o.answers[0]?.runs || 1} times each` : "Not yet", page: "optics" as const, e: "optics" },
+    { n: p.people.length, l: "people found asking", s: p.people.length ? `on ${platforms} platform${platforms === 1 ? "" : "s"}` : "Not yet", page: "outreach" as const, e: "outreach" },
+    { n: wrote, l: "messages written", s: "one per person, in your voice", page: "outreach" as const, e: "outreach" },
+    { n: posts + articles, l: "posts and articles written", s: `${posts} posts, ${articles} articles`, page: "content" as const, e: "content" },
+    { n: fixes, l: "fixes ready to publish", s: "so AI and Google name you", page: "optics" as const, e: "optics" },
+    { n: listings, l: "launch listings written", s: "for directories that send visitors", page: "content" as const, e: "content" },
+  ];
+  return (
+    <section className="fx-done">
+      <header>
+        <span className="fx-eyebrow">What Braino Foundry has done for you</span>
+        <h2>{p.lastRun ? "Here is the work, done. It is waiting for your yes." : "Your first run will fill this in."}</h2>
+      </header>
+      <div className="fx-done-grid">
+        {tiles.map((t) => (
+          <button key={t.l} className={`fx-done-t ${t.e}`} onClick={() => go(t.page)}>
+            <b className="fx-num">{t.n}</b><span>{t.l}</span><small>{t.s}</small>
+          </button>
+        ))}
+      </div>
+      {(waitMsgs || waitPosts || o) && (
+        <div className="fx-done-next">
+          <p className="fx-eyebrow">If you act on it</p>
+          <ul>
+            {waitMsgs > 0 && <li><b>{waitMsgs} real {waitMsgs === 1 ? "person" : "people"}</b> who asked for this today hear from you. That is where first users come from.</li>}
+            {waitPosts > 0 && <li><b>{waitPosts} post{waitPosts === 1 ? "" : "s"}</b> put you in front of your buyers this week.</li>}
+            {o && <li>{named === 0 ? <>AI does not name you yet. That is normal for a new product, and it is your <b>starting point</b>. Each fix you publish gives AI a reason to; the next run shows the change.</> : <>AI already names you in <b>{named} of {o.answers.length}</b> answers. Each fix you publish adds more.</>}</li>}
+          </ul>
+          <button className="fx-btn sm" onClick={() => go("approvals")}>Open Approvals</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
   const counts = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>;
   p.people.forEach((x) => { STAGES.slice(0, STAGES.indexOf(x.stage) + 1).forEach((s) => counts[s]++); });
@@ -66,17 +117,21 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
 
   return (
     <div className="fx-page">
-      <Profiles p={p} me={me} go={go} />
-      <header className="fx-hero">
+      <header className="fx-hero fx-hero-top">
         <span className="fx-eyebrow">{p.memory.product.name || "Your product"} · Dashboard</span>
         <h1><span className="fx-num">{paid}</span> paying customer{paid === 1 ? "" : "s"}.</h1>
         <p>{mv[0] ? <>Next move: <button className="fx-inline" onClick={() => (mv[0].id === "run" ? run.all() : go(mv[0].page))}>{mv[0].text}</button></> : "Next move: run the engines again to find more people."}</p>
         {running && <div className="fx-hero-run"><Busy text={running} /></div>}
+        <div className="fx-autobar">
+          <label className="fx-switch"><input type="checkbox" checked={p.autopilot} onChange={(e) => up((q) => ({ ...q, autopilot: e.target.checked }))} /><i /><span>Autopilot</span></label>
+          <span className="fx-small">{p.autopilot && next ? `Next run ${fmtDay(next)}` : "Off. Runs every week when on."}{p.lastRun ? ` · Last run ${fmtDay(p.lastRun)}` : ""}</span>
+          <button className="fx-btn sm" disabled={!!running} onClick={run.all}>{running ? "Running" : "Run now"}</button>
+        </div>
       </header>
 
       {p.searchNote && <Note>{p.searchNote} Optics still checks AI answers, and Content still writes posts. Outreach needs search to find people.</Note>}
 
-      <BrandMap p={p} busy={busy} />
+      <DoneForYou p={p} go={go} />
 
       <div className="fx-grid2">
         <Section title="Pipeline" hint="Everyone Outreach found, and how far each one has come. Move people along on Reach people." explain={counts}>
@@ -96,18 +151,11 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
         </Section>
       </div>
 
-      <div className="fx-kpis">
-        <KPI label="Named by AI" value={`${named}/${of || 8}`} sub="per run" spark={spark("named")} engine="optics" />
-        <KPI label="Posts waiting" value={p.posts.filter((x) => x.status === "waiting").length} sub={`${p.posts.filter((x) => x.status === "approved").length} approved so far`} spark={spark("posts")} engine="content" />
-        <KPI label="People found" value={p.people.length} sub={`${counts.messaged} messaged`} spark={spark("people")} engine="outreach" />
-        <KPI label="You approved" value={p.posts.filter((x) => x.status === "approved").length + p.people.filter((x) => x.status === "approved").length} sub={`${waitingCount(p)} waiting`} spark={spark("approved")} />
-      </div>
-
       <div className="fx-auto-row">
         <Section title="This week's moves" hint="Ranked by how close each move is to a paying customer. Tap one to go there." explain={mv.slice(0, 5).map((m) => m.text)}>
           {mv.length ? (
             <ol className="fx-moves">
-              {mv.slice(0, 6).map((m, i) => (
+              {mv.slice(0, 10).map((m, i) => (
                 <li key={m.id}>
                   <button onClick={() => (m.id === "run" ? run.all() : go(m.page))}>
                     <span className="fx-moves-n">{i + 1}</span>
@@ -121,20 +169,16 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
         </Section>
       </div>
 
-      <div className="fx-auto-row">
-        <Section title="Autopilot" hint="Runs all three engines once a week, so new people and new questions are waiting for you on Monday.">
-          <div className="fx-auto">
-            <label className="fx-switch"><input type="checkbox" checked={p.autopilot} onChange={(e) => up((q) => ({ ...q, autopilot: e.target.checked }))} /><i /><span>Run every week</span></label>
-            <dl>
-              <div><dt>Last run</dt><dd>{p.lastRun ? fmtDay(p.lastRun) : "Never"}</dd></div>
-              <div><dt>Next run</dt><dd>{p.autopilot && next ? fmtDay(next) : "Off"}</dd></div>
-              <div><dt>Runs so far</dt><dd>{p.runs.length}</dd></div>
-            </dl>
-            <button className="fx-btn" disabled={!!running} onClick={run.all}>{running ? "Running" : "Run now"}</button>
-            <p className="fx-small">Autopilot runs when this app is open on or after the due date. A server schedule (n8n) comes later.<Hint>There is no server running Braino for you yet. If the app is closed on the due date, it runs the next time you open it.</Hint></p>
-          </div>
-        </Section>
+      <div className="fx-kpis">
+        <KPI label="Named by AI" value={`${named}/${of || 8}`} sub="per run" spark={spark("named")} engine="optics" />
+        <KPI label="Posts waiting" value={p.posts.filter((x) => x.status === "waiting").length} sub={`${p.posts.filter((x) => x.status === "approved").length} approved so far`} spark={spark("posts")} engine="content" />
+        <KPI label="People found" value={p.people.length} sub={`${counts.messaged} messaged`} spark={spark("people")} engine="outreach" />
+        <KPI label="You approved" value={p.posts.filter((x) => x.status === "approved").length + p.people.filter((x) => x.status === "approved").length} sub={`${waitingCount(p)} waiting`} spark={spark("approved")} />
       </div>
+
+
+      <BrandMap p={p} busy={busy} />
+      <Profiles p={p} me={me} go={go} />
     </div>
   );
 }

@@ -54,7 +54,15 @@ export function moves(p: Project): Move[] {
   const posts = p.posts.filter((x) => x.status === "waiting");
   if (posts.length) out.push({ id: "posts", engine: "content", page: "content", weight: 50, text: `Approve ${posts.length} post${posts.length === 1 ? "" : "s"} for this week`, why: "Public posts that answer what buyers are asking." });
   const fixes = (p.optics?.fixes || []).filter((f) => !f.done);
-  fixes.slice(0, 2).forEach((f, i) => out.push({ id: `f-${f.id}`, engine: "optics", page: "optics", weight: 40 - i, text: `${f.what} (${f.where})`, why: `So AI and Google name you for "${f.question}".` }));
+  fixes.forEach((f, i) => out.push({ id: `f-${f.id}`, engine: "optics", page: "optics", weight: 40 - i, text: `${f.what} (${f.where})`, why: `So AI and Google name you for "${f.question}".` }));
+  // The readiest people, one by one, so the closest buyers are never buried in a count.
+  [...msgs].sort((a, z) => z.intent - a.intent).slice(0, 3).forEach((x, i) => out.push({ id: `m-${x.id}`, engine: "outreach", page: "outreach", weight: 65 - i, text: `Reply to the person on ${whereOf(x)}: "${x.title.slice(0, 60)}${x.title.length > 60 ? "..." : ""}"`, why: `${x.intent}% ready to buy, by how they wrote it.` }));
+  const articles = p.memory.topics.filter((t) => t.article && (t.articleStatus || "waiting") === "waiting");
+  if (articles.length) out.push({ id: "art", engine: "content", page: "approvals", weight: 45, text: `Publish ${articles.length} article${articles.length === 1 ? "" : "s"} on your blog or Medium`, why: "Long answers are what AI and Google quote." });
+  const launched = Object.keys(p.launches || {}).length;
+  if (p.lastRun && launched < 5) out.push({ id: "launch", engine: "content", page: "content", weight: 42, text: `List your product on ${5 - launched} more launch place${5 - launched === 1 ? "" : "s"}`, why: "Each listing brings visitors and helps AI find you. Braino writes them." });
+  if (p.optics?.crawl && !p.optics.crawl.ok) out.push({ id: "crawl", engine: "optics", page: "optics", weight: 60, text: "Make your website readable to AI", why: p.optics.crawl.note });
+  if (p.lastRun && !p.autopilot) out.push({ id: "auto", engine: "optics", page: "dashboard", weight: 20, text: "Switch on Autopilot so this runs every week", why: "New people and new questions every Monday, without you starting it." });
   if (!p.lastRun) out.push({ id: "run", engine: "optics", page: "dashboard", weight: 200, text: "Run all three engines for the first time", why: "Nothing to rank until Braino has looked." });
   return out.sort((a, z) => z.weight - a.weight);
 }
