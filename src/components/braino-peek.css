@@ -63,3 +63,7 @@
   font-size: 13px;
 }
 @media (max-width: 400px) { .lpill { font-size: 13px; gap: 8px; } }
+
+/* Full width, edge to edge, like Grok's (2026-10-24). */
+.bpk { width: 100%; max-width: none; left: 0; transform: none; }
+.bpk-head, .bpk-fold, .bpk-arm, .bpk-line, .bpk-eye { stroke-width: 1.1; }

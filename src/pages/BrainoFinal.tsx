@@ -61,7 +61,7 @@ type Model = {
   wall?: string[];
   /* One ordinary day, after. */
   dayTitle: string;
-  day: { at: string; p: string }[];
+  day: DayMoment[];
   /* The jobs he takes off you, from the site's own engine data. Mesa has none
      of its own yet and the section simply does not appear. */
   handles?: {
@@ -145,17 +145,19 @@ const MODELS: Model[] = [
       "Remember what you told him", "Moonwalk to Billie Jean",
     ],
     dayTitle: "An ordinary Tuesday with him,|morning to night",
+    // You speak first, then Braino answers in the notch, live, in first person (2026-10-24).
     day: [
-      { at: "8:30 am", p: "\u201cGood morning, Braino.\u201d Class at 9:30, the deck is due at 5, and John is waiting on a reply. Your whole day in one breath." },
-      { at: "9:30 am", p: "\u201cTake notes for this class.\u201d You actually listen. The notes are ready the moment class ends." },
-      { at: "11:30 am", p: "\u201cWrite up this meeting.\u201d What was decided, and who said they would do what. Nobody has to be the note taker." },
-      { at: "1:15 pm", p: "\u201cReply to Priya, Friday works.\u201d Written in your voice. It waits for your yes before it sends." },
-      { at: "3:00 pm", p: "\u201cWhat does this even mean?\u201d A confusing form on your screen, explained in plain words. Nothing to copy or paste." },
-      { at: "4:45 pm", p: "\u201cSend John the deck.\u201d Found in Downloads, sent on WhatsApp. The right John, too." },
-      { at: "6:30 pm", p: "\u201cCheapest flight to Mumbai on Friday?\u201d He reads the page and tells you the one. No forty tabs." },
-      { at: "8:20 pm", p: "\u201cPlay something calm.\u201d Spotify starts, the volume comes down, and you breathe out." },
-      { at: "10:30 pm", p: "\u201cWhat did I get done today?\u201d The class, the meeting, the deck, and the one thing still open." },
-      { at: "11:45 pm", p: "\u201cGood night, Braino.\u201d He keeps the day, so tomorrow's good morning picks up right here." },
+      { at: "8:30 am", lead: "you", you: "Good morning, Braino.", say: "Morning. Class at 9:30, the deck is due at 5, and John is waiting on a reply." },
+      { at: "9:30 am", lead: "you", you: "Take notes for this class.", say: "On it. Just listen, I\u2019ll write it down." },
+      { at: "10:45 am", lead: "you", you: "Done?", say: "Your notes are ready. 3 key points and one thing to revise." },
+      { at: "11:30 am", lead: "you", you: "Write up this meeting.", say: "Done. Riya sends the budget by Friday. You own the deck." },
+      { at: "1:15 pm", lead: "you", you: "Reply to Priya, Friday works.", say: "\u201cFriday works for me!\u201d Send it?" },
+      { at: "3:00 pm", lead: "you", you: "What does this even mean?", say: "This form wants your bank details for the refund. Box 4 is your IFSC." },
+      { at: "4:45 pm", lead: "you", you: "Send John the deck.", say: "Found it in Downloads. Sent to John on WhatsApp." },
+      { at: "6:30 pm", lead: "you", you: "Cheapest flight to Mumbai on Friday?", say: "IndiGo, 7:10 am, \u20b94,180. Want me to open it?" },
+      { at: "8:20 pm", lead: "you", you: "Play something calm.", say: "Playing Lofi Beats on Spotify. Volume down a little." },
+      { at: "10:30 pm", lead: "you", you: "What did I get done today?", say: "Class, the meeting, the deck. Just the reply to Aman is still open." },
+      { at: "11:45 pm", lead: "you", you: "Good night, Braino.", say: "Good night. I\u2019ll pick up from here tomorrow." },
     ],
     honest:
       "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so.",
@@ -411,7 +413,7 @@ function toMinutes(at: string) {
   if (pm) h += 12;
   return h * 60 + Number(m[2]);
 }
-function DayClock({ day }: { day: { at: string; p: string }[] }) {
+function DayClock({ day }: { day: DayMoment[] }) {
   const [i, setI] = useState(0);
   const [held, setHeld] = useState(false);
   useEffect(() => {
@@ -428,7 +430,7 @@ function DayClock({ day }: { day: { at: string; p: string }[] }) {
     <div className="bf-clock bf-reveal" onMouseLeave={() => setHeld(false)}>
       <div className="bf-clock-say" key={i}>
         <span className="bf-clock-at">{d.at}</span>
-        <p>{d.p}</p>
+        <p>{d.p || (d.you ? `\u201c${d.you}\u201d ${d.say || ""}` : d.say)}</p>
       </div>
       {mins != null ? (
         <svg className={"bf-clock-face" + (night ? " is-night" : "")} viewBox="0 0 200 200" aria-hidden="true">
@@ -476,7 +478,7 @@ function clockText(m: number) {
 }
 /* `say`/`you` (2026-10-23, Foundry): Braino speaks in the notch in first
    person, and your answer shows under it. Without them, the /braino day as before. */
-type DayMoment = { at: string; p?: string; say?: string; you?: string };
+type DayMoment = { at: string; p?: string; say?: string; you?: string; lead?: "you" };
 export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [f, setF] = useState(0);
@@ -509,9 +511,9 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date
   const moon = Math.min(1, Math.max(0, (now - 19 * 60) / (5 * 60)));
   const night = Math.min(1, Math.max(0, (now - 18 * 60) / 120));
   const parts = day.map((d) => {
-    if (d.say) return { said: "", did: "", say: d.say, you: d.you || "" };
+    if (d.say) return { said: "", did: "", say: d.say, you: d.you || "", lead: d.lead || "" };
     const m = (d.p || "").match(/^\u201c([^\u201d]+)\u201d\s*(.*)$/);
-    return m ? { said: m[1], did: m[2], say: "", you: "" } : { said: "", did: d.p || "", say: "", you: "" };
+    return m ? { said: m[1], did: m[2], say: "", you: "", lead: "" } : { said: "", did: d.p || "", say: "", you: "", lead: "" };
   });
   return (
     <div className="bf-ds" ref={ref} style={{ height: `${day.length * 55 + 60}vh` }}>
@@ -524,8 +526,8 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date
             <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
             <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={[date, clockText(now)]} />
             {parts[on].say ? (
-              <NotchSheet className={"ns-big ns-glow bf-ds-ns ns-work"} label="Braino" done={false}
-                extra={parts[on].you ? <p className="bf-ds-did" key={`y${on}`}>You: “{parts[on].you}”</p> : undefined}>
+              <NotchSheet className={"ns-big ns-glow bf-ds-ns ns-work"} label={parts[on].lead === "you" ? `You: \u201c${parts[on].you}\u201d` : "Braino"} done={false}
+                extra={parts[on].you && parts[on].lead !== "you" ? <p className="bf-ds-did" key={`y${on}`}>You: “{parts[on].you}”</p> : undefined}>
                 <span key={on}>{parts[on].say}</span>
               </NotchSheet>
             ) : (
