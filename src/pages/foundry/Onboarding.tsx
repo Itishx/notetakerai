@@ -245,7 +245,7 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
               ) : <Note>Braino could not find real searches for this yet, so these are good guesses. They get replaced with real ones on the next run.</Note>;
             })()}
             <ListField label="8 questions they ask" items={m.buyer.questions} onChange={(v) => setBuyer("questions", v.slice(0, 8))} placeholder="Add a question" hint="Written the way a buyer types into ChatGPT or Google, without your name in it." />
-            <ListField label="What they say on Reddit" items={m.buyer.redditPhrases} onChange={(v) => setBuyer("redditPhrases", v.slice(0, 3))} placeholder="Add a phrase" hint="2 to 4 words people use when they complain about this problem. Up to 3." />
+            <ListField label="What they say online" items={m.buyer.redditPhrases} onChange={(v) => setBuyer("redditPhrases", v.slice(0, 3))} placeholder="Add a phrase" hint="2 to 4 words people use when they complain about this problem. Up to 3." />
             <footer className="fo-acts">
               <button className="fx-ghost" onClick={() => setStep("founderCard")}>Back</button>
               <button className="fx-btn lg" disabled={!m.buyer.questions.filter(Boolean).length} onClick={() => {

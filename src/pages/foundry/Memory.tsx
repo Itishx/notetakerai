@@ -51,7 +51,7 @@ export default function Memory({ p, up }: PageProps) {
             <div className="fx-form">
               <Field label="Who they are" value={m.buyer.buyer} onChange={(v) => setBuyer("buyer", v)} />
               <ListField label="Their questions" items={m.buyer.questions} onChange={(v) => setBuyer("questions", v.slice(0, 8))} placeholder="Add a question" hint="Optics checks up to 8." />
-              <ListField label="Reddit phrases" items={m.buyer.redditPhrases} onChange={(v) => setBuyer("redditPhrases", v.slice(0, 3))} placeholder="Add a phrase" hint="Outreach searches up to 3." />
+              <ListField label="Phrases buyers use online" items={m.buyer.redditPhrases} onChange={(v) => setBuyer("redditPhrases", v.slice(0, 3))} placeholder="Add a phrase" hint="Outreach searches up to 3." />
             </div>
           </Section>
         </div>
