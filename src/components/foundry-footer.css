@@ -1,0 +1,91 @@
+/* foundry-footer.css: the Foundry footer and Flappy Founder (2026-10-23).
+   Sibling of braino-footer.css. The text rows reuse the .bft layout from
+   braino-page.css; this file only gives it Foundry's paper and ink, then the
+   game window under it. */
+
+.ff-footer {
+  --bf-ink: var(--a-ink);
+  --bf-ink-2: var(--a-ink-soft);
+  --bf-ink-3: var(--a-ink-faint);
+  --bf-line: color-mix(in srgb, var(--a-ink) 12%, transparent);
+  background: var(--a-bg);
+  color: var(--a-ink);
+  border-top: 1px solid var(--bf-line);
+}
+.bp .ff-footer .bft-brand { display: flex; flex-direction: column; align-items: flex-start; }
+.bp .ff-footer .ff-him { margin: 0 0 10px -6px; }
+.bp .ff-footer .bft-cta { background: #6b52c4; color: #fff; }
+.bp .ff-footer .bft-privacy { background: color-mix(in srgb, var(--a-ink) 4%, transparent); border-color: var(--bf-line); }
+.bp .ff-footer .bft-lock { background: color-mix(in srgb, #6b52c4 14%, transparent); color: #6b52c4; }
+.bp .ff-footer .bft-base { border-top-color: var(--bf-line); }
+
+.ff-game-window { border-top: 1px solid var(--bf-line); }
+
+.ff-game {
+  position: relative;
+  height: 330px;
+  overflow: hidden;
+  isolation: isolate;
+  outline: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+/* Only a live run takes the touch away from the page, so a phone can still
+   scroll past the footer when nobody is playing. */
+.ff-game.is-flying { touch-action: none; }
+.ff-game:focus-visible { box-shadow: inset 0 0 0 3px #6b52c4; }
+.ff-canvas { display: block; }
+
+.ff-hud {
+  position: absolute; z-index: 5; top: 12px; left: 16px; right: 16px;
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font: 600 13px/1.2 -apple-system, "SF Pro Text", sans-serif;
+  color: var(--a-ink-soft);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.ff-hud b { color: var(--a-ink); font-weight: 750; }
+.ff-hud span:nth-child(2) b { color: #3a8f5f; }
+.ff-hud-best { margin-left: auto; }
+
+.ff-launch, .ff-over {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 0 20px; text-align: center;
+  background: color-mix(in srgb, var(--a-bg) 72%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  cursor: default;
+}
+.ff-launch p { margin: 0; font: 700 26px/1.1 "SF Pro Display", -apple-system, sans-serif; letter-spacing: -.03em; color: var(--a-ink); }
+.ff-launch span { max-width: 40ch; font-size: 14.5px; line-height: 1.5; color: var(--a-ink-soft); }
+.ff-launch small { font-size: 12px; color: var(--a-ink-faint); }
+.ff-over p { max-width: 38ch; margin: 0; font: 650 19px/1.4 "SF Pro Display", -apple-system, sans-serif; letter-spacing: -.015em; color: var(--a-ink); }
+.ff-over-go { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+
+.ff-btn {
+  font: 650 14px/1 -apple-system, "SF Pro Text", sans-serif;
+  display: inline-flex; align-items: center; min-height: 44px;
+  padding: 0 20px; border-radius: 999px; cursor: pointer;
+  background: #6b52c4; color: #fff; border: 1.5px solid #6b52c4;
+  text-decoration: none;
+  transition: transform .15s ease;
+}
+.ff-btn:hover { transform: translateY(-1px); }
+.ff-btn:focus-visible { outline: 3px solid #d9645b; outline-offset: 2px; }
+.ff-btn-ghost { background: transparent; color: var(--a-ink); border-color: color-mix(in srgb, var(--a-ink) 30%, transparent); }
+
+@media (max-width: 560px) {
+  .ff-game { height: 330px; }
+  .ff-hud { gap: 12px; font-size: 12px; }
+  .ff-launch p { font-size: 22px; }
+  .ff-over p { font-size: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-btn { transition: none; }
+  .ff-btn:hover { transform: none; }
+}

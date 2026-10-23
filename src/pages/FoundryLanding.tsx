@@ -1,8 +1,10 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
-import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
+import { AffNav, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
 import { BrainoMascot } from "@/components/BrainoMascot";
+import FoundryFooterGame from "@/components/FoundryFooterGame";
+import "@/components/foundry-footer.css";
 import { DayScroll } from "./BrainoFinal";
 import "./affective.css";
 import "./affective-home.css";
@@ -499,7 +501,36 @@ export default function FoundryLanding() {
         </div>
       </section>
 
-      <AffFooter />
+      {/* Foundry's footer: the words, then Flappy Founder last (2026-10-23). */}
+      <footer className="ff-footer">
+        <div className="bft">
+          <div className="bft-top">
+            <div className="bft-brand">
+              <BrainoMascot variant="foundry" size={64} className="ff-him" />
+              <p className="bft-name">Braino Foundry</p>
+              <p className="bft-line">Braino for founders. He finds the people who need what you built, writes the posts and the messages, and tells you what is working.</p>
+              <Link to="/foundry/app" className="bft-cta">Start free</Link>
+            </div>
+            <nav className="bft-cols" aria-label="Footer">
+              <div><h4>Foundry</h4><a href="#engines">How it works</a><a href="#pricing">Pricing</a><Link to="/foundry/app">Open Foundry</Link><Link to="/braino">Meet Braino</Link></div>
+              <div><h4>Company</h4><Link to="/">Affective</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/trust">Trust &amp; privacy</Link><Link to="/contact">Contact</Link></div>
+              <div><h4>Connect</h4><a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a><a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a></div>
+            </nav>
+          </div>
+          <div className="bft-privacy">
+            <span className="bft-lock" aria-hidden="true"><svg viewBox="0 0 16 18"><rect x="2" y="8" width="12" height="9" rx="2.5" fill="currentColor" /><path d="M4.5 8V5.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg></span>
+            <p><b>Your privacy.</b> Nothing is posted or sent without your yes. You approve every post and every message first.</p>
+            <Link to="/trust" className="bft-more">How we handle your data →</Link>
+          </div>
+          <div className="bft-base">
+            <span>© 2026 Affective · Made in Bengaluru · Braino Foundry</span>
+            <span className="bft-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
+          </div>
+        </div>
+        <div className="ff-game-window">
+          <FoundryFooterGame />
+        </div>
+      </footer>
     </div>
   );
 }
