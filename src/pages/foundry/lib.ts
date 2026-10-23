@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type SearchKind = "google" | "reddit" | "site";
 export type GoogleResult = { title: string; url: string; description: string };
-export type GoogleQuery = { query: string; results: GoogleResult[] };
+export type GoogleQuery = { query: string; results: GoogleResult[]; paa?: string[]; related?: string[] };
 export type RedditPost = { title: string; body: string; url: string; community: string; upVotes: number | null; comments: number | null; createdAt: string };
 export type SitePage = { url: string; title: string; text: string };
 

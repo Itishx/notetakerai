@@ -55,6 +55,43 @@ Return: {"name": "product name (make a short one if none)", "oneLiner": "one pla
   return { product, buyer: { buyer: product.buyer, questions: (r.questions || []).map(clean).slice(0, 8), redditPhrases: (r.redditPhrases || []).map(clean).slice(0, 3) } };
 }
 
+/* Real buyer questions (2026-10-23). The founder should never have to know
+   what people search: Foundry finds it. Three real sources, in parallel:
+   Google autocomplete (what people type), Google's "People also ask" and
+   related searches, and Reddit thread titles. The model only CHOOSES the 8
+   best from that pool, word for word, and every pick is checked to really be
+   in the pool. If the web gives too little, the guesses stay, marked as such. */
+export async function findRealQuestions(product: ProductCard, buyer: BuyerCard, onStage?: (s: string) => void): Promise<BuyerCard> {
+  const seeds = [...buyer.redditPhrases].filter(Boolean).slice(0, 3);
+  if (!seeds.length) return buyer;
+  const pool: { q: string; from: string }[] = [];
+  const add = (q: string, from: string) => { const t = clean(q); if (t.length > 8 && !pool.some((x) => x.q.toLowerCase() === t.toLowerCase())) pool.push({ q: t, from }); };
+  const timeout = <T,>(p: Promise<T>, ms: number, fallback: T) => Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
+  onStage?.("Finding what buyers really search");
+  const sug = fetch("/api/foundry-apify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "suggest", seeds }) })
+    .then(readJson).then((j) => ((j.items as { q: string }[]) || []).forEach((x) => add(x.q, "Google autocomplete"))).catch(() => undefined);
+  const paa = apifyStart("google", seeds.slice(0, 2)).then((id) => timeout(apifyWait<GoogleQuery[]>("google", id, undefined, 100000), 100000, [] as GoogleQuery[]))
+    .then((g) => g.forEach((x) => { (x.paa || []).forEach((q) => add(q, "Google: People also ask")); (x.related || []).forEach((q) => add(q, "Google: related searches")); })).catch(() => undefined);
+  const red = apifyStart("reddit", seeds).then((id) => timeout(apifyWait<RedditPost[]>("reddit", id, undefined, 100000), 100000, [] as RedditPost[]))
+    .then((posts) => posts.forEach((x) => { if (/\?|how|best|any|which|what|recommend/i.test(x.title)) add(x.title, `Reddit, ${x.community}`); })).catch(() => undefined);
+  await Promise.all([sug, paa, red]);
+  if (pool.length < 4) return buyer;
+  onStage?.("Picking the questions your buyers ask most");
+  const list = pool.slice(0, 120);
+  const r = await askJson<{ picks: number[] }>(`Product: ${product.name}. ${product.oneLiner}. Buyer: ${product.buyer}. Problem: ${product.problem}.
+Below are REAL searches and questions people typed, numbered. Pick up to 8 that a buyer of a product like this would ask when looking for a solution (they want help or a tool, not news, jobs or unrelated topics). Prefer questions over bare keywords. Do not rewrite them.
+${list.map((x, i) => `${i}. ${x.q}`).join("\n")}
+Return: {"picks": [numbers, best first]}`).catch(() => ({ picks: [] as number[] }));
+  const picked = (r.picks || []).filter((i) => Number.isInteger(i) && list[i]).slice(0, 8).map((i) => list[i]);
+  if (picked.length < 4) return buyer;
+  const sources: Record<string, string> = {};
+  picked.forEach((x) => { sources[x.q] = x.from; });
+  // Fill to 8 with the best guesses only if the web gave fewer than 8.
+  const fill = buyer.questions.filter((q) => !picked.some((x) => x.q.toLowerCase() === q.toLowerCase())).slice(0, 8 - picked.length);
+  fill.forEach((q) => { sources[q] = "Guessed by Braino"; });
+  return { ...buyer, questions: [...picked.map((x) => x.q), ...fill], sources };
+}
+
 export async function readFounder(linkedin: string, whyText: string, product: ProductCard, onStage: (s: number) => void): Promise<{ founder: FounderCard; note: ReadNote }> {
   let snippet = "";
   let name = "";
@@ -84,7 +121,14 @@ Only use what is given. Return: {"who": "one line on who they are", "whyTrust": 
 /* ── Optics: they find you ───────────────────────────────────────────── */
 
 export async function runOptics(ctx: Ctx) {
-  const p0 = ctx.get();
+  let p0 = ctx.get();
+  // Projects made before real-question finding: find real searches once, first.
+  if (!p0.memory.buyer.sources && p0.memory.buyer.redditPhrases.length) {
+    ctx.busy("optics", "Finding what buyers really search");
+    const b = await findRealQuestions(p0.memory.product, p0.memory.buyer).catch(() => p0.memory.buyer);
+    ctx.update((q) => log({ ...q, memory: { ...q.memory, buyer: { ...b, sources: b.sources || {} } } }, "optics", b.sources ? "Swapped guessed questions for real buyer searches" : "Kept the guessed questions; no real searches found"));
+    p0 = ctx.get();
+  }
   const { product, buyer } = p0.memory;
   const qs = buyer.questions.slice(0, 8);
   if (!qs.length) return;

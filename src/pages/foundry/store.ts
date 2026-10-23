@@ -11,7 +11,7 @@ export type ActorKind = Engine | "memory" | "you";
 
 export type ProductCard = { name: string; oneLiner: string; buyer: string; problem: string; pricing: string; proof: string; tone: string; missing: string[]; site: string };
 export type FounderCard = { name?: string; photo?: string; who: string; whyTrust: string; voice: string; linkedin: string; why: string };
-export type BuyerCard = { buyer: string; questions: string[]; redditPhrases: string[] };
+export type BuyerCard = { buyer: string; questions: string[]; redditPhrases: string[]; sources?: Record<string, string> };
 
 export type Quote = { id: string; text: string; url: string; community: string; at: number };
 export type Gap = { id: string; question: string; rivals: string[]; at: number };

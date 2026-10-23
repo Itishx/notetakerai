@@ -55,6 +55,9 @@ function slim(kind, items) {
     return items.map((q) => ({
       query: q?.searchQuery?.term || "",
       results: (q?.organicResults || []).slice(0, 10).map((r) => ({ title: r.title || "", url: r.url || "", description: (r.description || "").slice(0, 220) })),
+      // Real questions Google shows for this search: "People also ask" and related searches.
+      paa: (q?.peopleAlsoAsk || []).map((x) => String(x?.question || "").slice(0, 160)).filter(Boolean).slice(0, 8),
+      related: (q?.relatedQueries || []).map((x) => String(x?.title || "").slice(0, 120)).filter(Boolean).slice(0, 8),
     }));
   }
   if (kind === "site") {
@@ -134,12 +137,30 @@ async function crawlCheck(body) {
   return { status: 200, json: { ok, note, robots, bots, homeStatus, homeWords } };
 }
 
+/* What people really type: Google's own autocomplete for each seed phrase,
+   plain and as "how to" / "best" (2026-10-23). Free, fast, no Apify. */
+async function suggest(body) {
+  const seeds = clean(body.seeds, 5);
+  const variants = seeds.flatMap((s) => [s, `how to ${s}`, `best ${s}`, `${s} app`]);
+  const out = [];
+  await Promise.all(variants.map(async (v) => {
+    try {
+      const r = await fetch(`https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=in&q=${encodeURIComponent(v)}`);
+      const j = await r.json();
+      (Array.isArray(j?.[1]) ? j[1] : []).forEach((q) => out.push({ q: String(q), seed: v }));
+    } catch (_) { /* one seed failing is fine */ }
+  }));
+  const seen = new Set();
+  return { items: out.filter((x) => { const k = x.q.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 80) };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   try {
     if (req.method === "POST") {
       const b = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
       if (b.kind === "crawl") { const out = await crawlCheck(b); return res.status(out.status).json(out.json); }
+      if (b.kind === "suggest") return res.status(200).json(await suggest(b));
     }
     if (req.method === "GET") {
       const runId = String(req.query?.run || "").replace(/[^A-Za-z0-9]/g, "");

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { findRealQuestions } from "./engines";
 import { Group } from "./components/group";
 import { copy, hostOf, mentions } from "./lib";
 import { checkCrawl, makeFix } from "./engines";
@@ -48,6 +49,14 @@ export default function Optics({ p, up, busy, run }: PageProps) {
     if (!qs.length) return;
     up((q) => log({ ...q, memory: { ...q.memory, buyer: { ...q.memory.buyer, questions: qs } } }, "you", `Gave ${qs.length} real buyer questions${csv ? " from Search Console" : ""}`));
     setPaste("");
+  }
+  const [finding, setFinding] = useState(false);
+  async function refind() {
+    setFinding(true);
+    try {
+      const b = await findRealQuestions(p.memory.product, p.memory.buyer);
+      up((q) => log({ ...q, memory: { ...q.memory, buyer: b } }, "optics", `Found ${Object.values(b.sources || {}).filter((x) => x !== "Guessed by Braino").length} real buyer searches on Google and Reddit`));
+    } finally { setFinding(false); }
   }
   const crawlBlock = (
     <Section title="Can AI read your site?" explain={o?.crawl ? { note: o.crawl.note, blocked: o.crawl.bots.filter((b) => !b.allowed).map((b) => b.who) } : undefined}
@@ -129,7 +138,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
                 return (
                   <details key={i} className="fx-qrow" role="row">
                     <summary>
-                      <span>{a.question}</span>
+                      <span>{a.question}{p.memory.buyer.sources?.[a.question] && <span className={`fx-src qsrc${p.memory.buyer.sources[a.question] === "Guessed by Braino" ? " g" : ""}`}>{p.memory.buyer.sources[a.question]}</span>}</span>
                       <span className={`fx-yes ${ai ? "y" : (a.hits || 0) > 0 ? "m" : "n"}`}>{a.runs ? ((a.hits || 0) === 0 ? `Never (0 of ${a.runs})` : `${a.hits} of ${a.runs} tries`) : ai ? "Named" : "Not named"}</span>
                       <span className={`fx-yes ${g ? (g.found ? "y" : "n") : "na"}`}>{g ? (g.found ? "Yes" : "No") : "Not searched"}</span>
                     </summary>
@@ -177,9 +186,9 @@ export default function Optics({ p, up, busy, run }: PageProps) {
               </ol>
             ) : <Empty title="No fixes">You are named everywhere Optics looked. Add more buyer questions on Product and founder.</Empty>}
           </Section>
-          <Section title="Check real searches instead of guesses (optional)" explain={{ questions: p.memory.buyer.questions }}>
-            <p className="fx-small"><b>Why this is here:</b> the 8 questions above were guessed by Braino from your description. Guesses are fine to start. If you know what people actually type, the check gets more accurate.</p>
-            <p className="fx-small"><b>What to do:</b> paste real searches below, one per line, then tap Use these and Run Optics. Where to find them: words customers used when they emailed or called you, or, if your site is on Google Search Console, its Queries export (upload the file). Nothing to add? Skip this.</p>
+          <Section title="Add a question a customer asked you (optional)" explain={{ questions: p.memory.buyer.questions }}>
+            <p className="fx-small">Braino already finds what buyers really search, from Google and Reddit; each question above says where it came from. Only use this if a customer asked you something directly and you want it checked too.</p>
+            <div className="fx-acts"><button className="fx-ghost" disabled={finding} onClick={() => void refind()}>{finding ? "Finding real searches" : "Find real searches again"}</button></div>
             <textarea className="fx-paste" rows={4} value={paste} placeholder={"best app for pg rent reminders\nhow to collect rent on upi automatically"} onChange={(e) => setPaste(e.target.value)} />
             <div className="fx-acts">
               <button className="fx-btn sm" disabled={!paste.trim()} onClick={() => applyQuestions(paste)}>Use these</button>

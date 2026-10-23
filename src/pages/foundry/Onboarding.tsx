@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { BrainoMascot } from "@/components/BrainoMascot";
-import { buildProduct, readFounder, readSite } from "./engines";
+import { buildProduct, findRealQuestions, readFounder, readSite } from "./engines";
 import { hostOf } from "./lib";
 import type { BuyerCard, FounderCard, ProductCard, Project } from "./store";
 import { log } from "./store";
@@ -104,7 +104,11 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
     setPages(r.pages.map((p) => p.title || hostOf(p.url) || "Page"));
     at(3);
     try {
-      const { product, buyer } = await buildProduct(d.desc, d.url, r.pages);
+      const built = await buildProduct(d.desc, d.url, r.pages);
+      const product = built.product;
+      // Swap the guessed questions for what buyers really search, where the web has it.
+      at(4);
+      const buyer = await findRealQuestions(product, built.buyer).catch(() => built.buyer);
       update((p) => log({ ...p, name: product.name || p.name, siteRead: r.note, memory: { ...p.memory, product, buyer: p.memory.buyer.questions.length ? p.memory.buyer : buyer } }, "memory", r.note.ok ? `Read ${r.note.pages} pages of your website and wrote your product card` : "Wrote your product card from your words"));
       setStep("productCard");
     } catch (e) { setErr(String((e as Error).message || e)); setStep("product"); }
@@ -149,7 +153,7 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
           <section className="fo-card center">
             <span className="fo-eyebrow">{d.url ? `Reading ${hostOf(d.url, d.url)}` : "Reading what you wrote"}</span>
             <h1>Getting to know your product</h1>
-            <Reading stages={["Opening your website", "Reading up to 5 pages", "Understanding what you sell", "Writing your product card"]} at={stage} elapsed={elapsed} pages={pages} />
+            <Reading stages={["Opening your website", "Reading up to 5 pages", "Understanding what you sell", "Writing your product card", "Finding what your buyers really search"]} at={stage} elapsed={elapsed} pages={pages} />
           </section>
         )}
 
@@ -230,6 +234,16 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
             <h1>Your buyer</h1>
             <p className="fo-sub">Optics checks these questions on Google and AI. Outreach looks for these phrases on Reddit.</p>
             <Field label="Who they are" value={m.buyer.buyer} onChange={(v) => setBuyer("buyer", v)} />
+            {(() => {
+              const src = m.buyer.sources || {};
+              const real = m.buyer.questions.filter((q) => src[q] && src[q] !== "Guessed by Braino");
+              return real.length ? (
+                <div className="fo-real">
+                  <p><b>{real.length} of {m.buyer.questions.length} are real searches,</b> found on Google and Reddit. Nothing for you to look up.</p>
+                  <ul>{m.buyer.questions.map((q) => <li key={q}><span>{q}</span><small className={src[q] === "Guessed by Braino" || !src[q] ? "g" : ""}>{src[q] || "Guessed by Braino"}</small></li>)}</ul>
+                </div>
+              ) : <Note>Braino could not find real searches for this yet, so these are good guesses. They get replaced with real ones on the next run.</Note>;
+            })()}
             <ListField label="8 questions they ask" items={m.buyer.questions} onChange={(v) => setBuyer("questions", v.slice(0, 8))} placeholder="Add a question" hint="Written the way a buyer types into ChatGPT or Google, without your name in it." />
             <ListField label="What they say on Reddit" items={m.buyer.redditPhrases} onChange={(v) => setBuyer("redditPhrases", v.slice(0, 3))} placeholder="Add a phrase" hint="2 to 4 words people use when they complain about this problem. Up to 3." />
             <footer className="fo-acts">

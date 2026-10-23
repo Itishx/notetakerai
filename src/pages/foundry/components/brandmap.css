@@ -70,3 +70,12 @@
 .fx-group.content .fx-group-k span { background: var(--fx-c); } .fx-group.outreach .fx-group-k span { background: var(--fx-r); }
 .fx-group h2 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: clamp(24px, 2.6vw, 30px); line-height: 1.15; letter-spacing: -.01em; }
 .fx-group-l { margin: 0; max-width: 640px; font-size: 15px; line-height: 1.55; color: var(--a-ink-soft); }
+
+/* Real buyer questions, with where each came from. */
+.fo-real { padding: 14px 16px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); display: grid; gap: 10px; }
+.fo-real p { margin: 0; font-size: 14px; color: var(--a-ink-soft); } .fo-real b { color: var(--a-ink); }
+.fo-real ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fo-real li { display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid var(--a-line); font-size: 14px; }
+.fo-real small { flex: none; font-size: 11.5px; font-weight: 600; color: var(--fx-r, #3a8f5f); white-space: nowrap; }
+.fo-real small.g { color: var(--a-ink-faint); }
+.fx-src.qsrc { margin-left: 8px; color: var(--fx-r); } .fx-src.qsrc.g { color: var(--a-ink-faint); }
