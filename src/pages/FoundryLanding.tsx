@@ -167,8 +167,15 @@ function Shots() {
 const MAC_DAY = [
   { at: "8:30 am", p: "“Foundry found 6 people asking about PG rent apps overnight.” His good morning, before your coffee." },
   { at: "8:40 am", p: "“Send it.” A PG owner on Reddit, your reply under it in the notch. Sent, from your own browser." },
+  { at: "9:00 am", p: "Your LinkedIn post goes out at the hour your buyers scroll. You said yes to it last night." },
+  { at: "10:15 am", p: "“Riya replied. She asks if it works with UPI.” An answer is ready. You say “send it”, and UPI becomes next week’s post." },
   { at: "11:00 am", p: "“List us on Product Hunt.” He fills it in and stops at payment. Pay $39? Your call." },
+  { at: "12:30 pm", p: "“Can ChatGPT find us yet?” He checks your buyers’ questions. Named in 2 of 8, up from 0 last week." },
+  { at: "2:00 pm", p: "“Write the FAQ page.” Done, in your voice, with where it goes and how to add it." },
+  { at: "3:30 pm", p: "Three people messaged on Monday never answered. Gentle follow-ups are ready for your yes." },
+  { at: "5:00 pm", p: "A Quora question about late rent. He drafts a full answer that mentions you once, honestly." },
   { at: "6:00 pm", p: "“How did this week go?” 14 messages, 4 replies, 1 call booked." },
+  { at: "9:30 pm", p: "You close the laptop. Tomorrow’s posts are written and waiting. He never sends anything without you." },
 ];
 const COMPARE: [string, string, string][] = [
   ["What it is", "Your companion for everyday life", "Braino as your co-founder"],
