@@ -61,3 +61,12 @@
 .fx-focus b { color: var(--a-ink); }
 .fx-focused { border-radius: 14px; box-shadow: 0 0 0 2px var(--fx-c); animation: fxFocusPulse 1.2s ease 2; }
 @keyframes fxFocusPulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--fx-c) 30%, transparent); } }
+
+/* Step headings inside an engine page. */
+.fx-group { margin: 36px 0 4px; padding-top: 28px; border-top: 1px solid var(--a-line); display: grid; gap: 6px; }
+.fx-group:first-of-type { margin-top: 12px; }
+.fx-group-k { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fx-group-k span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 11px; letter-spacing: 0; background: var(--fx-o); }
+.fx-group.content .fx-group-k span { background: var(--fx-c); } .fx-group.outreach .fx-group-k span { background: var(--fx-r); }
+.fx-group h2 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: clamp(24px, 2.6vw, 30px); line-height: 1.15; letter-spacing: -.01em; }
+.fx-group-l { margin: 0; max-width: 640px; font-size: 15px; line-height: 1.55; color: var(--a-ink-soft); }

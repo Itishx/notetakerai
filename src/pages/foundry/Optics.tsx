@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Group } from "./components/group";
 import { copy, hostOf, mentions } from "./lib";
 import { checkCrawl, makeFix } from "./engines";
 import { log, type Fix } from "./store";
@@ -80,6 +81,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
   return (
     <div className="fx-page">
       <PageHead engine="optics" title="Get found" status={o?.answers.length ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
+      <Group engine="optics" step={1} title="Can AI see you at all?" line="Before anything else: can AI assistants and Google actually read your website? If they cannot, nothing else here matters." />
       {crawlBlock}
       {!o || !o.answers.length ? (
         <Empty title="Optics has not looked yet" action={<button className="fx-btn" disabled={!!busy.optics} onClick={run.optics}>{busy.optics ? <Busy text={busy.optics} /> : "Check how buyers find me"}</button>}>
@@ -87,6 +89,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
         </Empty>
       ) : (
         <>
+          <Group engine="optics" step={2} title="Where you stand today" line="How often AI recommends you when buyers ask, and who it recommends instead." />
           <div className="fx-grid2">
             <Section title="Your score" explain={{ named, low: range.low, high: range.high, of: o.answers.length, runs: range.runs, shareOfVoice: `${sov.pct}%` }}>
               <div className="fx-vis">
@@ -115,6 +118,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
             </Section>
           </div>
 
+          <Group engine="optics" step={3} title="Question by question" line="Each question a buyer might ask, whether AI and Google named you, and exactly what they said. Tap a question for detail." />
           <Section title="Question by question" hint="Each row is a question your buyer might ask. AI column: we ask GPT-5.6 the question 3 times, as a stranger would ask ChatGPT, and count how many of the 3 answers name you. It stands in for ChatGPT; it is not ChatGPT itself. Google column: is your site on page one. Only 3 questions are searched on Google per run, the rest say Not searched." explain={o.answers.map((a) => ({ q: a.question, named: a.names.some((n) => mentions(n, name, site)) }))}>
             {o.googleNote && <Note>{o.googleNote} The AI column still works.</Note>}
             <div className="fx-qgrid" role="table">
@@ -153,6 +157,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
             </div>
           </Section>
 
+          <Group engine="optics" step={4} title="What to do about it" line="The pages and posts to publish so AI and Google start naming you. Braino can write each one for you." />
           <Section title="Fixes" hint="What to publish, and where, so AI and Google start naming you. Do it for me writes the finished piece and tells you exactly where it goes." explain={o.fixes.map((f) => `${f.what} on ${f.where}`)}>
             {o.fixes.length ? (
               <ol className="fx-fixes">

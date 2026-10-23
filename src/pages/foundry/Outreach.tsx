@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Group } from "./components/group";
 import "./components/brandmap.css";
 import { copy, DAY } from "./lib";
 import { followUp, learnObjection, replyTo } from "./engines";
@@ -126,6 +127,7 @@ export default function Outreach({ p, up, busy, run, go }: PageProps) {
       <PageHead engine="outreach" title="Reach people" status={p.people.length ? `${p.people.length} people, ${count("paid")} paid` : "Nobody found yet"} last={last} onRun={run.outreach} running={busy.outreach} explainData={STAGES.map((s) => `${STAGE_LABEL[s]}: ${count(s)}`)} />
       {p.searchNote && <Note>{p.searchNote} Outreach needs search to find people, so this page stays empty until it is set up.</Note>}
 
+      <Group engine="outreach" step={1} title="People asking for this today" line="Real people on Reddit describing the problem you solve. Each has a message ready, one person at a time, until they pay." />
       <div className="fx-tabs" role="tablist">
         <button role="tab" aria-selected={view === "all"} onClick={() => setView("all")}>Board</button>
         {STAGES.map((s) => <button key={s} role="tab" aria-selected={view === s} onClick={() => setView(s)}>{STAGE_LABEL[s]} <span>{count(s)}</span></button>)}
