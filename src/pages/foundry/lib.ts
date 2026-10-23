@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
    stay on the server). Search and site reading: Apify through
    /api/foundry-apify, so the token never reaches the browser. */
 
-export type SearchKind = "google" | "reddit" | "site";
+export type SearchKind = "google" | "reddit" | "people" | "site";
 export type GoogleResult = { title: string; url: string; description: string };
 export type GoogleQuery = { query: string; results: GoogleResult[]; paa?: string[]; related?: string[] };
 export type RedditPost = { title: string; body: string; url: string; community: string; upVotes: number | null; comments: number | null; createdAt: string };
+export type FoundPost = RedditPost & { platform: "reddit" | "x" | "linkedin" | "quora" | "forum" };
 export type SitePage = { url: string; title: string; text: string };
 
 /* Every Foundry call replaces Braino's own system prompt (2026-10-23). Without
@@ -58,7 +59,7 @@ export async function readJson(r: Response): Promise<Record<string, any>> {
 }
 export const NO_TOKEN = "Search is not set up yet: the Apify token is missing on the server.";
 export async function apifyStart(kind: SearchKind, payload: string[] | string) {
-  const body = kind === "google" ? { kind, queries: payload } : kind === "reddit" ? { kind, searches: payload } : { kind, url: payload };
+  const body = kind === "google" ? { kind, queries: payload } : kind === "reddit" || kind === "people" ? { kind, searches: payload } : { kind, url: payload };
   const r = await fetch("/api/foundry-apify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await readJson(r);
   if (!r.ok || !j.runId) throw new Error(/token|authenticat/i.test(String(j.error)) ? NO_TOKEN : (j.error || "Search did not start"));

@@ -1,6 +1,6 @@
-import { apifyStart, apifyWait, ask, askJson, COLD_AI, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type RedditPost, type SitePage } from "./lib";
+import { apifyStart, apifyWait, ask, askJson, COLD_AI, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type FoundPost, type RedditPost, type SitePage } from "./lib";
 import { namedCount } from "./types";
-import { log, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim } from "./store";
+import { log, PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, whereOf, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim } from "./store";
 
 /* The three engines and the memory between them (2026-10-23).
    Optics: they find you. Content: they see you. Outreach: you reach them.
@@ -226,23 +226,39 @@ JSON: {"title": string, "content": string, "where": string, "link": "the best UR
 
 /* ── Outreach: you reach them ────────────────────────────────────────── */
 
-async function searchReddit(ctx: Ctx): Promise<RedditPost[]> {
+/* People asking, on Reddit, X, LinkedIn, Quora and forums (2026-10-23): one
+   Google run, each phrase on each platform. */
+async function searchPeople(ctx: Ctx): Promise<FoundPost[]> {
   const phrases = ctx.get().memory.buyer.redditPhrases.slice(0, 3);
   if (!phrases.length) return [];
   ctx.busy("outreach", "Looking for people asking today");
   try {
-    const id = await apifyStart("reddit", phrases);
-    const found = await apifyWait<RedditPost[]>("reddit", id, (s) => ctx.busy("outreach", `Looking for people asking today, ${s}s`));
+    const id = await apifyStart("people", phrases);
+    const found = await apifyWait<FoundPost[]>("people", id, (s) => ctx.busy("outreach", `Looking for people asking today, ${s}s`));
     // Search worked, so an old "search is not set up" note is no longer true.
     ctx.update((p) => (p.searchNote ? { ...p, searchNote: "" } : p));
-    return [...new Map(found.map((x) => [x.url, x])).values()].slice(0, 24);
+    return [...new Map(found.map((x) => [x.url, x])).values()].slice(0, 30);
   } catch (e) {
     ctx.update((p) => log({ ...p, searchNote: searchNote(e) }, "outreach", "Could not search for people this time"));
     return [];
   }
 }
 
-async function judgePeople(ctx: Ctx, found: RedditPost[]): Promise<Person[]> {
+/* "Found 6 people asking today on Reddit, X and Quora" */
+function foundLine(people: Person[]) {
+  const names = PERSON_PLATFORMS.filter((k) => people.some((x) => x.platform === k)).map((k) => PERSON_PLATFORM_LABEL[k]);
+  if (!names.length) return "";
+  return ` on ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
+}
+
+const REPLY_STYLE = `How to write for each platform:
+reddit: a helpful comment, like a person in the thread.
+x: a reply under 260 characters, no hashtags.
+linkedin: a thoughtful comment of 2 to 4 sentences.
+quora: a full helpful answer to the question, mentioning the product once, honestly.
+forum: a forum reply, helpful first.`;
+
+async function judgePeople(ctx: Ctx, found: FoundPost[]): Promise<Person[]> {
   if (!found.length) return [];
   ctx.busy("outreach", "Reading each post");
   const p = ctx.get();
@@ -250,11 +266,11 @@ async function judgePeople(ctx: Ctx, found: RedditPost[]): Promise<Person[]> {
   const fresh = found.filter((x) => !known.has(x.url));
   if (!fresh.length) return [];
   const j = await askJson<{ i: number; fit: boolean; intent: number; why: string; quote: string }[]>(`${about(p)}
-Below are Reddit posts. Keep only real people who have this problem and are asking for help now (drop celebrations, promotions, other founders, off-topic). For each kept post: intent 0 to 100 (how ready they are to try something), why in one short line, and quote: the buyer's own words for the problem, under 12 words, taken from their post.
-${fresh.map((x, i) => `[${i}] r/${x.community.replace(/^r\//, "")} · ${x.title}\n${x.body.slice(0, 400)}`).join("\n\n")}
+Below are posts from Reddit, X, LinkedIn, Quora and forums. Keep only real people who have this problem and are asking for help now (drop celebrations, promotions, other founders, off-topic). For each kept post: intent 0 to 100 (how ready they are to try something), why in one short line, and quote: the buyer's own words for the problem, under 12 words, taken from their post.
+${fresh.map((x, i) => `[${i}] ${x.platform} · ${whereOf(x)} · ${x.title}\n${x.body.slice(0, 400)}`).join("\n\n")}
 Return: [{"i": 0, "fit": true, "intent": 80, "why": "...", "quote": "..."}]`);
   return j.filter((x) => x.fit && fresh[x.i]).sort((a, z) => z.intent - a.intent).map((x) => ({
-    id: uid(), url: fresh[x.i].url, community: fresh[x.i].community.replace(/^r\//, ""), title: fresh[x.i].title, body: fresh[x.i].body,
+    id: uid(), url: fresh[x.i].url, platform: fresh[x.i].platform || "reddit", community: fresh[x.i].community.replace(/^r\//, ""), title: fresh[x.i].title, body: fresh[x.i].body,
     quote: clean(x.quote || fresh[x.i].title), intent: Math.max(0, Math.min(100, Math.round(x.intent))), why: clean(x.why), message: "", opener: "",
     stage: "found" as Stage, stageAt: Date.now(), status: "waiting" as const, thread: [], followUp: "",
   }));
@@ -265,19 +281,22 @@ async function writeMessages(ctx: Ctx) {
   const todo = p.people.filter((x) => !x.message && x.stage === "found");
   if (!todo.length) return 0;
   ctx.busy("outreach", "Writing a message for each person");
-  const posts = p.posts.filter((x) => x.status !== "skipped").map((x) => p.memory.topics.find((t) => t.id === x.topicId)?.title).filter(Boolean);
+  // Only posts that are really out. A draft is not "something I wrote".
+  const posts = p.posts.filter((x) => x.status === "approved").map((x) => p.memory.topics.find((t) => t.id === x.topicId)?.title).filter(Boolean);
   const topics = [...new Set(posts)].slice(0, 4);
   const obj = p.memory.objections.slice(0, 4);
   const r = await askJson<{ id: string; message: string; opener: string }[]>(`${about(p)}
-Write one private reply for each person below, in the founder's voice. Help first, answer what they actually asked, mention the product once and only if it fits. Short, human, no pitch deck words.
-${topics.length ? `The founder has written public posts about: ${topics.map((t) => `"${t}"`).join(", ")}. If one fits this person, open with it naturally (like "I wrote about this last week") and put that topic in "opener"; otherwise opener is "".` : `opener is always "".`}
+Write one reply for each person below, in the founder's voice, written for the platform they are on. Help first, answer what they actually asked, mention the product once and only if it fits. Human, no pitch deck words.
+${REPLY_STYLE}
+${topics.length ? `The founder has published public posts about: ${topics.map((t) => `"${t}"`).join(", ")}. If one fits this person, you may mention it naturally and put that exact topic in "opener"; otherwise opener is "".` : `opener is always "".`}
+Never claim the founder wrote, posted or published anything unless "opener" names one of the topics above. With an empty opener, no "I wrote", no "I posted", no "my post".
 ${obj.length ? `Questions buyers have raised before, with the answers: ${obj.map((o) => `${o.text} => ${o.answer}`).join("; ")}. Answer them up front if they apply.` : ""}
-${todo.map((x) => `[${x.id}] r/${x.community} · ${x.title}\n${x.body.slice(0, 300)}`).join("\n\n")}
+${todo.map((x) => `[${x.id}] ${x.platform || "reddit"} · ${whereOf(x)} · ${x.title}\n${x.body.slice(0, 300)}`).join("\n\n")}
 Return: [{"id": "...", "message": "...", "opener": "..."}]`);
   const by = new Map(r.map((x) => [x.id, x]));
   let used = 0;
   ctx.update((q) => {
-    const people = q.people.map((x) => { const m = by.get(x.id); if (!m) return x; if (m.opener) used++; return { ...x, message: clean(m.message), opener: clean(m.opener || "") }; });
+    const people = q.people.map((x) => { const m = by.get(x.id); if (!m) return x; const opener = topics.some((t) => t && clean(m.opener || "").toLowerCase() === t.toLowerCase()) ? clean(m.opener) : ""; if (opener) used++; return { ...x, message: clean(m.message), opener }; });
     let n = log({ ...q, people }, "outreach", `Wrote ${by.size} messages, one per person`);
     if (used) n = log(n, "memory", `${used} message${used === 1 ? "" : "s"} open with a Content post you wrote`);
     return n;
@@ -287,12 +306,12 @@ Return: [{"id": "...", "message": "...", "opener": "..."}]`);
 
 export async function runOutreach(ctx: Ctx, opts: { skipMessages?: boolean } = {}) {
   try {
-    const found = await searchReddit(ctx);
+    const found = await searchPeople(ctx);
     const people = await judgePeople(ctx, found);
     ctx.update((p) => {
-      const quotes = people.slice(0, 6).map((x) => ({ id: uid(), text: x.quote, url: x.url, community: x.community, at: Date.now() }));
+      const quotes = people.slice(0, 6).map((x) => ({ id: uid(), text: x.quote, url: x.url, platform: x.platform, community: x.community, at: Date.now() }));
       let n: Project = { ...p, people: [...people, ...p.people], memory: { ...p.memory, quotes: [...quotes, ...p.memory.quotes].slice(0, 30) } };
-      if (found.length) n = log(n, "outreach", `Found ${people.length} people asking today, from ${found.length} posts`);
+      if (found.length) n = log(n, "outreach", `Found ${people.length} people asking today${foundLine(people)}, from ${found.length} posts`);
       if (quotes.length) n = log(n, "memory", `${quotes.length} buyer quotes saved for Content and Optics`);
       return n;
     });
@@ -304,10 +323,10 @@ export async function runOutreach(ctx: Ctx, opts: { skipMessages?: boolean } = {
 export async function replyTo(p: Project, person: Person, reply: string) {
   const r = await askJson<{ answer: string; objection: string; objectionAnswer: string; stage: "replied" | "talking" | "paid"; nudge: string }>(`${about(p)}
 You are helping the founder answer one person privately. The conversation so far:
-Their post: ${person.title}. ${person.body.slice(0, 300)}
+Their post (on ${person.platform || "reddit"}, ${whereOf(person)}): ${person.title}. ${person.body.slice(0, 300)}
 ${[...(person.message ? [{ from: "us", text: person.message }] : []), ...person.thread].map((m) => `${m.from === "us" ? "Founder" : "Them"}: ${m.text}`).join("\n")}
 Them (new reply): ${reply}
-Write the founder's answer: honest, short, warm, and nudge one step closer to a 15 minute call or to paying (only if it fits). If their reply contains a doubt or blocker (price, trust, a missing feature like a payment method), name it in a few words as "objection" and give a one-line honest answer in "objectionAnswer"; else both "".
+Write the founder's answer for that platform: honest, short, warm, and nudge one step closer to a 15 minute call or to paying (only if it fits). If their reply contains a doubt or blocker (price, trust, a missing feature like a payment method), name it in a few words as "objection" and give a one-line honest answer in "objectionAnswer"; else both "".
 stage: "replied" if they are just responding, "talking" if they agreed to a call or are clearly evaluating, "paid" only if they said they paid or will pay now.
 Return: {"answer": "...", "objection": "...", "objectionAnswer": "...", "stage": "replied", "nudge": "what the answer moves toward, 3 to 6 words"}`);
   return { ...r, answer: clean(r.answer), objection: clean(r.objection || ""), objectionAnswer: clean(r.objectionAnswer || ""), nudge: clean(r.nudge || "") };
@@ -326,7 +345,7 @@ Write a short, friendly follow-up (2 to 3 sentences) that adds one useful thing 
    Optics fix (an FAQ answer) and a line every future message answers up front. */
 export function learnObjection(p: Project, person: Person, text: string, answer: string): Project {
   if (!text) return p;
-  const o = { id: uid(), text, person: person.community ? `r/${person.community}` : "a buyer", answer, at: Date.now() };
+  const o = { id: uid(), text, person: person.community ? whereOf(person) : "a buyer", answer, at: Date.now() };
   const topic: Topic = { id: uid(), title: `Answering: ${text}`, source: "objection", sourceText: `A buyer asked: "${text}"`, at: Date.now() };
   const fix: Fix = { id: uid(), question: text, where: "FAQ page", what: `Answer "${text}" plainly on your FAQ page`, from: "objection" };
   let n: Project = {
@@ -404,11 +423,11 @@ export async function runAll(ctx: Ctx) {
   ctx.update((p) => log({ ...p, lastRun: Date.now(), searchNote: "" }, "you", "Started a run of all three engines"));
   const flows = { quotesToContent: 0, quotesToOptics: before.memory.quotes.length ? 1 : 0, gapsToContent: 0, postsToOutreach: 0, objections: before.memory.objections.length };
   // Outreach's search is slow, so it starts first and runs beside Optics.
-  const reddit = searchReddit(ctx).then((f) => judgePeople(ctx, f)).then((people) => {
+  const reddit = searchPeople(ctx).then((f) => judgePeople(ctx, f)).then((people) => {
     ctx.update((p) => {
-      const quotes = people.slice(0, 6).map((x) => ({ id: uid(), text: x.quote, url: x.url, community: x.community, at: Date.now() }));
+      const quotes = people.slice(0, 6).map((x) => ({ id: uid(), text: x.quote, url: x.url, platform: x.platform, community: x.community, at: Date.now() }));
       let n: Project = { ...p, people: [...people, ...p.people], memory: { ...p.memory, quotes: [...quotes, ...p.memory.quotes].slice(0, 30) } };
-      n = log(n, "outreach", people.length ? `Found ${people.length} people asking today` : "Found no new people this time");
+      n = log(n, "outreach", people.length ? `Found ${people.length} people asking today${foundLine(people)}` : "Found no new people this time");
       if (quotes.length) n = log(n, "memory", `${quotes.length} buyer quotes saved for Content and Optics`);
       return n;
     });

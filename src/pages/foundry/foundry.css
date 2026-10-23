@@ -149,6 +149,7 @@
 .fx-src.optics { background: var(--fx-o-soft); color: var(--fx-o); }
 .fx-src.objection, .fx-src.content { background: var(--fx-c-soft); color: var(--fx-c); }
 .fx-plat { font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.fx-pchip { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 1px 7px; margin-right: 4px; border-radius: 999px; border: 1px solid currentColor; opacity: .7; }
 
 /* ── Charts ── */
 .fx-ring circle { fill: none; stroke-width: 9; }

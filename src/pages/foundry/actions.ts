@@ -1,6 +1,6 @@
 import { copy } from "./lib";
 import { refreshRun } from "./engines";
-import { log, type Person, type Post, type Project, type Stage, type Topic, STAGE_LABEL } from "./store";
+import { log, whereOf, type Person, type Post, type Project, type Stage, type Topic, STAGE_LABEL } from "./store";
 import { composeUrl, fullText, PLATFORM_LABEL } from "./components/previews";
 
 type Up = (fn: (p: Project) => Project) => void;
@@ -18,13 +18,13 @@ export function setPost(up: Up, id: string, patch: Partial<Post>) {
 export function approvePerson(up: Up, person: Person) {
   void copy(person.message);
   window.open(person.url, "_blank", "noopener");
-  up((p) => refreshRun(log({ ...p, people: p.people.map((x) => (x.id === person.id ? { ...x, status: "approved", stage: x.stage === "found" ? "messaged" : x.stage, stageAt: Date.now() } : x)) }, "outreach", `Messaged a person on r/${person.community}. Now in Messaged`)));
+  up((p) => refreshRun(log({ ...p, people: p.people.map((x) => (x.id === person.id ? { ...x, status: "approved", stage: x.stage === "found" ? "messaged" : x.stage, stageAt: Date.now() } : x)) }, "outreach", `Messaged a person on ${whereOf(person)}. Now in Messaged`)));
 }
 export function setPerson(up: Up, id: string, patch: Partial<Person>) {
   up((p) => refreshRun({ ...p, people: p.people.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
 }
 export function moveStage(up: Up, person: Person, stage: Stage) {
-  up((p) => log({ ...p, people: p.people.map((x) => (x.id === person.id ? { ...x, stage, stageAt: Date.now() } : x)) }, stage === "paid" ? "you" : "outreach", stage === "paid" ? `A person from r/${person.community} paid` : `Moved r/${person.community} to ${STAGE_LABEL[stage]}`));
+  up((p) => log({ ...p, people: p.people.map((x) => (x.id === person.id ? { ...x, stage, stageAt: Date.now() } : x)) }, stage === "paid" ? "you" : "outreach", stage === "paid" ? `A person from ${whereOf(person)} paid` : `Moved ${whereOf(person)} to ${STAGE_LABEL[stage]}`));
 }
 /* An article is approved by copying it; where it goes (blog, Medium,
    LinkedIn) is the founder's choice, so nothing opens. */

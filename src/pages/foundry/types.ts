@@ -1,4 +1,5 @@
 import type { AiAnswer, Engine, Project, Settings } from "./store";
+import { whereOf } from "./store";
 import { DAY, mentions } from "./lib";
 
 export type PageId = "dashboard" | "optics" | "content" | "outreach" | "approvals" | "memory" | "architecture";
@@ -45,7 +46,7 @@ export type Move = { id: string; engine: Engine | "approvals"; text: string; why
 export function moves(p: Project): Move[] {
   const out: Move[] = [];
   const replied = p.people.filter((x) => x.stage === "replied" || x.stage === "talking");
-  replied.forEach((x) => out.push({ id: `r-${x.id}`, engine: "outreach", page: "outreach", weight: x.stage === "talking" ? 100 : 90, text: x.stage === "talking" ? `Ask r/${x.community} to pay or book a call` : `Answer the reply from r/${x.community}`, why: "They are talking to you. This is the closest thing to a paying customer." }));
+  replied.forEach((x) => out.push({ id: `r-${x.id}`, engine: "outreach", page: "outreach", weight: x.stage === "talking" ? 100 : 90, text: x.stage === "talking" ? `Ask ${whereOf(x)} to pay or book a call` : `Answer the reply from ${whereOf(x)}`, why: "They are talking to you. This is the closest thing to a paying customer." }));
   const due = followUpDue(p);
   if (due.length) out.push({ id: "fu", engine: "outreach", page: "outreach", weight: 80, text: `Send ${due.length} follow-up${due.length === 1 ? "" : "s"}`, why: "Messaged 3 or more days ago with no reply." });
   const msgs = p.people.filter((x) => x.status === "waiting" && x.message && x.stage === "found");

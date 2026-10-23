@@ -13,7 +13,7 @@ export type ProductCard = { name: string; oneLiner: string; buyer: string; probl
 export type FounderCard = { name?: string; photo?: string; who: string; whyTrust: string; voice: string; linkedin: string; why: string };
 export type BuyerCard = { buyer: string; questions: string[]; redditPhrases: string[]; sources?: Record<string, string> };
 
-export type Quote = { id: string; text: string; url: string; community: string; at: number };
+export type Quote = { id: string; text: string; url: string; platform?: PersonPlatform; community: string; at: number };
 export type Gap = { id: string; question: string; rivals: string[]; at: number };
 export type TopicSource = "reddit" | "optics" | "objection" | "founder";
 export type Topic = { id: string; title: string; source: TopicSource; sourceText: string; at: number; article?: string; articleStatus?: Status; claims?: Claim[] };
@@ -51,8 +51,15 @@ export type Stage = "found" | "messaged" | "replied" | "talking" | "paid";
 export const STAGES: Stage[] = ["found", "messaged", "replied", "talking", "paid"];
 export const STAGE_LABEL: Record<Stage, string> = { found: "Found", messaged: "Messaged", replied: "Replied", talking: "Talking", paid: "Paid" };
 export type ThreadMsg = { at: number; from: "them" | "us"; text: string; note?: string };
+/* Where a person was found (2026-10-23). Old people, from before, are Reddit. */
+export type PersonPlatform = "reddit" | "x" | "linkedin" | "quora" | "forum";
+export const PERSON_PLATFORMS: PersonPlatform[] = ["reddit", "x", "linkedin", "quora", "forum"];
+export const PERSON_PLATFORM_LABEL: Record<PersonPlatform, string> = { reddit: "Reddit", x: "X", linkedin: "LinkedIn", quora: "Quora", forum: "Forums" };
+/* The place to name for a person: r/startups, @handle, Quora, Hacker News. */
+export const whereOf = (x: { platform?: PersonPlatform; community: string }) => ((x.platform || "reddit") === "reddit" ? `r/${x.community.replace(/^r\//, "")}` : x.community || PERSON_PLATFORM_LABEL[x.platform || "reddit"]);
+export const fixPeople = (p: Project): Project => (p.people?.some((x) => !x.platform) ? { ...p, people: p.people.map((x) => (x.platform ? x : { ...x, platform: "reddit" as PersonPlatform })) } : p);
 export type Person = {
-  id: string; url: string; community: string; title: string; body: string; quote: string;
+  id: string; url: string; platform: PersonPlatform; community: string; title: string; body: string; quote: string;
   intent: number; why: string; message: string; opener: string;
   stage: Stage; stageAt: number; status: Status; thread: ThreadMsg[]; followUp: string;
 };
@@ -141,7 +148,7 @@ function migrate(): Project[] {
       ];
     }
     p.people = (s.leads || []).map((l: any) => ({
-      id: uid(), url: l.url, community: l.community, title: l.title, body: l.body, quote: l.title, intent: l.intent, why: l.why, message: l.message, opener: "",
+      id: uid(), url: l.url, platform: "reddit", community: l.community, title: l.title, body: l.body, quote: l.title, intent: l.intent, why: l.why, message: l.message, opener: "",
       stage: done[`lead-${l.url}`] === "approved" ? "messaged" : "found", stageAt: at, status: done[`lead-${l.url}`] || "waiting", thread: [], followUp: "",
     }));
     p.lastRun = s.lastRun || null;
@@ -154,7 +161,7 @@ function migrate(): Project[] {
 function load(): Project[] {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) { const v = JSON.parse(raw); if (Array.isArray(v)) return v; }
+    if (raw) { const v = JSON.parse(raw); if (Array.isArray(v)) return v.map(fixPeople); }
   } catch (_) { /* private window */ }
   const old = migrate();
   return old;
@@ -227,7 +234,7 @@ export function useFoundryStore(userId?: string) {
         const r = remote.get(id);
         if (r) onServer.current.add(id);
         if (r?.deleted) { if (l) saved.current[id] = -1; return; }
-        if (r && (!l || (r.data.updated || 0) >= (l.updated || 0))) { merged.push(r.data); saved.current[id] = r.data.updated; }
+        if (r && (!l || (r.data.updated || 0) >= (l.updated || 0))) { merged.push(fixPeople(r.data)); saved.current[id] = r.data.updated; }
         else if (l) merged.push(l);
       });
       merged.sort((a, z) => z.updated - a.updated);

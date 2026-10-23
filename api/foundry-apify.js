@@ -2,6 +2,7 @@
    never reaches the browser. Two calls:
      POST { kind: "google", queries: [...] }        -> { runId }
      POST { kind: "reddit", searches: [...] }        -> { runId }
+     POST { kind: "people", searches: [...] }        -> { runId }  (Reddit, X, LinkedIn, Quora, forums)
      POST { kind: "site", url: "https://..." }       -> { runId }  (about 5 pages, slim text)
      GET  ?run=<runId>                               -> { status, items? }
      POST { kind: "crawl", url }                     -> can AI crawlers read the site (no Apify)
@@ -17,6 +18,9 @@ const ACTORS = {
   // scraper took over 7 minutes and matched single words across all of Reddit
   // (tested 2026-10-22). Google finds the threads where the problem is asked.
   reddit: "apify~google-search-scraper",
+  // People asking, on every platform Google indexes (2026-10-23): one run,
+  // each phrase x each platform's site: filter.
+  people: "apify~google-search-scraper",
   // The founder's own website, read for the product card (2026-10-23).
   site: "apify~website-content-crawler",
 };
@@ -26,6 +30,29 @@ function clean(list, max) {
     .map((q) => String(q || "").replace(/\s+/g, " ").trim().slice(0, 120))
     .filter(Boolean)
     .slice(0, max);
+}
+
+const PEOPLE_SITES = [
+  "site:reddit.com",
+  "(site:x.com OR site:twitter.com)",
+  "site:linkedin.com/posts",
+  "site:quora.com",
+  "(site:indiehackers.com OR site:news.ycombinator.com OR site:producthunt.com/discussions)",
+];
+
+/* Which platform a result is on, and the place to show for it. Only real
+   threads and posts: a profile page or a search page is nobody asking. */
+function personFrom(url) {
+  const u = String(url || "");
+  let m;
+  if ((m = u.match(/reddit\.com\/(r\/[^/]+)\/comments\//))) return { platform: "reddit", community: m[1].slice(2) };
+  if ((m = u.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/\d+/))) return { platform: "x", community: `@${m[1]}` };
+  if (/linkedin\.com\/posts\//.test(u)) return { platform: "linkedin", community: "LinkedIn" };
+  if (/quora\.com\/(?!profile\/|topic\/|search)[^/?#]+\/?$/.test(u) || /quora\.com\/[^/]+\/answer\//.test(u)) return { platform: "quora", community: "Quora" };
+  if (/indiehackers\.com\/(post|forum)\//.test(u)) return { platform: "forum", community: "Indie Hackers" };
+  if (/news\.ycombinator\.com\/item\?id=/.test(u)) return { platform: "forum", community: "Hacker News" };
+  if (/producthunt\.com\/discussions?\//.test(u)) return { platform: "forum", community: "Product Hunt" };
+  return null;
 }
 
 function inputFor(kind, body) {
@@ -38,6 +65,13 @@ function inputFor(kind, body) {
     const searches = clean(body.searches, 3);
     if (!searches.length) return null;
     return { queries: searches.map((q) => `site:reddit.com ${q}`).join("\n"), maxPagesPerQuery: 1, resultsPerPage: 10, quickDateRange: "y1" };
+  }
+  if (kind === "people") {
+    const searches = clean(body.searches, 3);
+    if (!searches.length) return null;
+    const queries = [];
+    for (const q of searches) for (const site of PEOPLE_SITES) queries.push(`${site} ${q}`);
+    return { queries: queries.slice(0, 12).join("\n"), maxPagesPerQuery: 1, resultsPerPage: 10, quickDateRange: "y1" };
   }
   if (kind === "site") {
     let url = String(body.url || "").trim();
@@ -66,6 +100,22 @@ function slim(kind, items) {
       title: String(p?.metadata?.title || "").slice(0, 160),
       text: String(p?.text || "").replace(/\s+/g, " ").slice(0, 2500),
     }));
+  }
+  if (kind === "people") {
+    return items
+      .flatMap((q) => q?.organicResults || [])
+      .map((r) => ({ r, at: personFrom(r?.url) }))
+      .filter((x) => x.at)
+      .map(({ r, at }) => ({
+        title: String(r.title || "").replace(/\s*[:|-]\s*r\/\w+\s*$/i, "").replace(/\s*[-|]\s*(Reddit|Quora|LinkedIn|X|Hacker News|Indie Hackers|Product Hunt)\s*$/i, "").slice(0, 200),
+        body: String(r.description || "").slice(0, 500),
+        url: r.url,
+        platform: at.platform,
+        community: at.community,
+        upVotes: null,
+        comments: null,
+        createdAt: r.date || "",
+      }));
   }
   return items
     .flatMap((q) => q?.organicResults || [])
@@ -164,7 +214,7 @@ export default async function handler(req, res) {
     }
     if (req.method === "GET") {
       const runId = String(req.query?.run || "").replace(/[^A-Za-z0-9]/g, "");
-      const kind = req.query?.kind === "reddit" ? "reddit" : req.query?.kind === "site" ? "site" : "google";
+      const kind = req.query?.kind === "reddit" ? "reddit" : req.query?.kind === "people" ? "people" : req.query?.kind === "site" ? "site" : "google";
       if (!runId) return res.status(400).json({ error: "run is required" });
       const run = await fetch(`${API}/actor-runs/${runId}?token=${TOKEN}`).then((r) => r.json());
       const status = run?.data?.status || "UNKNOWN";
@@ -174,7 +224,7 @@ export default async function handler(req, res) {
     }
     if (req.method !== "POST") return res.status(405).json({ error: "POST or GET" });
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const kind = ["reddit", "google", "site"].includes(body.kind) ? body.kind : "";
+    const kind = ["reddit", "people", "google", "site"].includes(body.kind) ? body.kind : "";
     const input = kind ? inputFor(kind, body) : null;
     if (!input) return res.status(400).json({ error: "kind and queries, searches or url are required" });
     const started = await fetch(`${API}/acts/${ACTORS[kind]}/runs?token=${TOKEN}`, {

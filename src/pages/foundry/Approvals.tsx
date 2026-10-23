@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { Status } from "./store";
+import { PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, whereOf, type PersonPlatform, type Status } from "./store";
 import type { PageProps } from "./types";
 import { approveArticle, approvePerson, approvePost, setPerson, setPost, setTopic } from "./actions";
 import { PLATFORM_LABEL } from "./components/previews";
@@ -13,6 +13,8 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
    and a Type column you can read at a glance. */
 export default function Approvals({ p, up, go }: PageProps) {
   const [status, setStatus] = useState<Status | "all">("waiting");
+  // Messages can be filtered by where the person is. Posts keep their own platform.
+  const [plat, setPlat] = useState<PersonPlatform | "all">("all");
 
   const rows: TableRow[] = [
     ...p.posts.map((x): TableRow => ({
@@ -21,8 +23,8 @@ export default function Approvals({ p, up, go }: PageProps) {
       approve: () => approvePost(up, x), skip: () => setPost(up, x.id, { status: "skipped" }), undo: () => setPost(up, x.id, { status: "waiting" }),
       edit: (text) => setPost(up, x.id, { text }),
     })),
-    ...p.people.filter((x) => x.message).map((x): TableRow => ({
-      id: x.id, kind: "Message", site: `r/${x.community}`, title: x.title, link: x.url, text: x.message,
+    ...p.people.filter((x) => x.message && (plat === "all" || (x.platform || "reddit") === plat)).map((x): TableRow => ({
+      id: x.id, kind: "Message", site: whereOf(x), title: x.title, link: x.url, text: x.message,
       status: x.status,
       approve: () => approvePerson(up, x), skip: () => setPerson(up, x.id, { status: "skipped" }), undo: () => setPerson(up, x.id, { status: "waiting" }),
       edit: (message) => setPerson(up, x.id, { message }),
@@ -54,6 +56,11 @@ export default function Approvals({ p, up, go }: PageProps) {
       </header>
       <Note>Approve copies the text and opens the right page with it, so you post it yourself. Articles are only copied, so you can paste them wherever you publish.</Note>
       <StatusTabs value={status} onChange={setStatus} counts={counts} />
+      <div className="fx-tabs" role="tablist" aria-label="Where messages go">
+        {(["all", ...PERSON_PLATFORMS] as (PersonPlatform | "all")[]).map((k) => (
+          <button key={k} role="tab" aria-selected={plat === k} className={plat === k ? "on" : ""} onClick={() => setPlat(k)}>{k === "all" ? "All messages" : PERSON_PLATFORM_LABEL[k]}<em>{p.people.filter((x) => x.message && (k === "all" || (x.platform || "reddit") === k)).length}</em></button>
+        ))}
+      </div>
       <ItemTable
         rows={shown}
         empty={rows.length

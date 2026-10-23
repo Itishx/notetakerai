@@ -42,9 +42,9 @@ const BOX: Record<Box, { name: string; tag: string; plain: string; why: string; 
   },
   apify: {
     name: "Apify", tag: "the web reader",
-    plain: "Reads the internet for us: up to 5 pages of your website, Google results, your public LinkedIn headline, and Reddit threads found through Google.",
+    plain: "Reads the internet for us: up to 5 pages of your website, Google results, your public LinkedIn headline, and people asking on Reddit, X, LinkedIn, Quora and forums, found through Google.",
     why: "The AI cannot browse on its own. Apify fetches real pages.",
-    say: "Apify reads the real web, so nothing is made up: real sites, real Google, real people on Reddit.",
+    say: "Apify reads the real web, so nothing is made up: real sites, real Google, real people on Reddit, X, LinkedIn, Quora and forums.",
   },
   gpt: {
     name: "GPT-5.6", tag: "OpenAI · the brain",

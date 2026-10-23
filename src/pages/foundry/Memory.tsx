@@ -2,6 +2,7 @@ import React from "react";
 import { fmtDay } from "./lib";
 import { FounderIdentity } from "./components/founderPhoto";
 import type { BuyerCard, FounderCard, ProductCard } from "./store";
+import { whereOf } from "./store";
 import type { PageProps } from "./types";
 import { SOURCE_LABEL } from "./Content";
 import { Empty, Field, ListField, Note, Section } from "./components/ui";
@@ -58,7 +59,7 @@ export default function Memory({ p, up }: PageProps) {
 
       <div className="fx-grid2">
         <Section title="Buyer quotes" hint="Words real buyers used, saved by Outreach. Content turns them into topics, and Optics searches the newest one on Google." explain={m.quotes.slice(0, 8).map((q) => q.text)}>
-          {m.quotes.length ? <ul className="fx-mem">{m.quotes.slice(0, 10).map((q) => <li key={q.id}>"{q.text}"<small><a href={q.url} target="_blank" rel="noopener noreferrer">r/{q.community}</a> · {fmtDay(q.at)}</small></li>)}</ul> : <Empty title="No quotes yet">Outreach saves them when it finds people.</Empty>}
+          {m.quotes.length ? <ul className="fx-mem">{m.quotes.slice(0, 10).map((q) => <li key={q.id}>"{q.text}"<small><a href={q.url} target="_blank" rel="noopener noreferrer">{whereOf(q)}</a> · {fmtDay(q.at)}</small></li>)}</ul> : <Empty title="No quotes yet">Outreach saves them when it finds people.</Empty>}
         </Section>
         <Section title="Gaps" hint="Buyer questions where AI names someone else. Saved by Optics, written about by Content." explain={m.gaps.map((g) => g.question)}>
           {m.gaps.length ? <ul className="fx-mem">{m.gaps.map((g) => <li key={g.id}>{g.question}<small>Named instead: {g.rivals.join(", ") || "no one"}</small></li>)}</ul> : <Empty title="No gaps">Optics saves these after it checks.</Empty>}

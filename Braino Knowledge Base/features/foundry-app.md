@@ -167,3 +167,11 @@ Version 1 checks whenever the app is open (no server). **Version 2**, true "ever
 - Needs the migration `supabase/migrations/20261023000001_foundry_projects.sql` applied to production; until then the sidebar says "Account saving is not switched on yet" and everything stays in the browser.
 - **Search**: `APIFY_TOKEN` set in `.env.local` and in Vercel production on 23 Oct 2026.
 - Google sign-in returns to `/foundry/app`, so that URL must be in Supabase Auth's allowed redirect URLs.
+
+## Reach people on every platform (23 Oct 2026)
+
+- **Where people are found.** Reddit, X, LinkedIn, Quora and forums (Indie Hackers, Hacker News, Product Hunt discussions). One Apify Google run (`kind: "people"` in `api/foundry-apify.js`): each buyer phrase on each platform's `site:` filter, up to 12 searches, last year only. Only real threads and posts are kept (Reddit `/comments/`, X `/status/`, LinkedIn `/posts/`, Quora questions, forum threads).
+- **Each person has a platform.** Shown as a chip on the card; Reach people has platform tabs (All, Reddit, X, LinkedIn, Quora, Forums) above the stage tabs, and Approvals can filter messages the same way. People found before this are treated as Reddit.
+- **Replies fit the platform.** Reddit: a helpful comment. X: under 260 characters, no hashtags. LinkedIn: 2 to 4 sentences. Quora: a full answer, product named once. Forums: a forum reply.
+- **No false "I wrote about this".** A message only mentions one of your posts if that post is approved (out). Otherwise it never claims you wrote or posted anything.
+- **Honest limits.** Google indexes X late and only partly, so fresh tweets often do not show up. Instagram and Facebook groups are not covered: Google cannot see inside them.

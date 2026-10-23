@@ -3,7 +3,7 @@ import { Group } from "./components/group";
 import "./components/brandmap.css";
 import { copy, DAY } from "./lib";
 import { followUp, learnObjection, replyTo } from "./engines";
-import { log, STAGES, STAGE_LABEL, type Person, type Stage } from "./store";
+import { log, PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, STAGES, STAGE_LABEL, whereOf, type Person, type PersonPlatform, type Stage } from "./store";
 import { followUpDue, type PageProps } from "./types";
 import { approvePerson, moveStage, setPerson } from "./actions";
 import { Meter } from "./components/charts";
@@ -31,7 +31,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
       up((q) => {
         const stage: Stage = STAGES.indexOf(r.stage) > STAGES.indexOf(x.stage) ? r.stage : x.stage === "messaged" || x.stage === "found" ? "replied" : x.stage;
         let n = { ...q, people: q.people.map((y) => y.id === x.id ? { ...y, stage, stageAt: Date.now(), followUp: "", thread: [...y.thread, { at: Date.now(), from: "them" as const, text: reply.trim() }, { at: Date.now(), from: "us" as const, text: r.answer, note: r.nudge }] } : y) };
-        n = log(n, "outreach", `r/${x.community} replied. Drafted an answer${r.nudge ? ` that moves toward ${r.nudge.toLowerCase()}` : ""}`);
+        n = log(n, "outreach", `${whereOf(x)} replied. Drafted an answer${r.nudge ? ` that moves toward ${r.nudge.toLowerCase()}` : ""}`);
         return learnObjection(n, x, r.objection, r.objectionAnswer);
       });
       setReply(""); setPasting(false);
@@ -43,7 +43,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
   return (
     <article className={`fx-person ${x.stage}`}>
       <header>
-        <span className="fx-plat">r/{x.community}</span>
+        <span className="fx-plat"><span className="fx-pchip">{PERSON_PLATFORM_LABEL[x.platform || "reddit"]}</span> {whereOf(x)}</span>
         {x.stage === "found" ? <Chip status={x.status} /> : <span className="fx-faint">{days ? `${days} day${days === 1 ? "" : "s"} in ${STAGE_LABEL[x.stage]}` : `In ${STAGE_LABEL[x.stage]} today`}</span>}
       </header>
       <a className="fx-person-t" href={x.url} target="_blank" rel="noopener noreferrer">{x.title}</a>
@@ -62,7 +62,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
           <small>Your message</small>
           {x.opener && (
             <div className={`fx-opener${openerLive ? " live" : ""}`}>
-              <p><b>This message mentions one of your own posts:</b> "{x.opener}". {openerLive ? "That post is out, so the line works as it is." : "That post is written but not out yet. Post it first, or the line \"I wrote about this\" won't be true."}</p>
+              <p><b>This message mentions one of your own posts:</b> "{x.opener}". {openerLive ? "That post is out, so the line works as it is." : "That post is written but not out yet. Post it first, or the mention won't be true."}</p>
               <button className="fx-link" onClick={() => { try { if (openerTopic) sessionStorage.setItem("foundry-focus-topic", openerTopic.id); } catch (_) { /* private */ } go("content"); }}>{openerPosts.length ? "See the post in Be seen" : "Open Be seen"}</button>
             </div>
           )}
@@ -93,7 +93,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
             <button className="fx-ghost" onClick={() => setEditing((e) => !e)}>{editing ? "Done" : "Edit"}</button>
             <button className="fx-link" onClick={() => setPerson(up, x.id, { status: "skipped" })}>Skip</button>
           </>)}
-        {x.followUp && x.stage === "messaged" && <button className="fx-btn sm" onClick={() => { void copy(x.followUp); window.open(x.url, "_blank", "noopener"); up((q) => log({ ...q, people: q.people.map((y) => y.id === x.id ? { ...y, stageAt: Date.now(), thread: [...y.thread, { at: Date.now(), from: "us", text: y.followUp }], followUp: "" } : y) }, "outreach", `Sent a follow-up to r/${x.community}`)); }}>Copy follow-up, open</button>}
+        {x.followUp && x.stage === "messaged" && <button className="fx-btn sm" onClick={() => { void copy(x.followUp); window.open(x.url, "_blank", "noopener"); up((q) => log({ ...q, people: q.people.map((y) => y.id === x.id ? { ...y, stageAt: Date.now(), thread: [...y.thread, { at: Date.now(), from: "us", text: y.followUp }], followUp: "" } : y) }, "outreach", `Sent a follow-up to ${whereOf(x)}`)); }}>Copy follow-up, open</button>}
         {lastUs && x.stage !== "found" && <button className="fx-ghost" onClick={() => { void copy(lastUs.text); window.open(x.url, "_blank", "noopener"); }}>Copy answer, open</button>}
         {x.stage !== "found" && !pasting && <button className="fx-ghost" onClick={() => setPasting(true)}>Paste their reply</button>}
         <label className="fx-stage">
@@ -107,6 +107,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
 
 export default function Outreach({ p, up, busy, run, go }: PageProps) {
   const [view, setView] = useState<Stage | "all">("all");
+  const [plat, setPlat] = useState<PersonPlatform | "all">("all");
   const drafting = useRef(false);
   const due = followUpDue(p).filter((x) => !x.followUp);
   // Messaged 3 or more days ago with no reply: draft a follow-up, one at a time.
@@ -114,11 +115,13 @@ export default function Outreach({ p, up, busy, run, go }: PageProps) {
     if (drafting.current || !due.length) return;
     drafting.current = true;
     const x = due[0];
-    followUp(p, x).then((m) => up((q) => log({ ...q, people: q.people.map((y) => (y.id === x.id ? { ...y, followUp: m } : y)) }, "outreach", `Drafted a follow-up for r/${x.community}, quiet for 3 days`)))
+    followUp(p, x).then((m) => up((q) => log({ ...q, people: q.people.map((y) => (y.id === x.id ? { ...y, followUp: m } : y)) }, "outreach", `Drafted a follow-up for ${whereOf(x)}, quiet for 3 days`)))
       .catch(() => undefined).finally(() => { drafting.current = false; });
   }, [due.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const people = p.people.filter((x) => x.status !== "skipped" || x.stage !== "found");
+  const everyone = p.people.filter((x) => x.status !== "skipped" || x.stage !== "found");
+  const onPlat = (k: PersonPlatform | "all") => everyone.filter((x) => k === "all" || (x.platform || "reddit") === k);
+  const people = onPlat(plat);
   const last = p.people.reduce((m, x) => Math.max(m, x.stageAt), 0) || null;
   const count = (s: Stage) => people.filter((x) => x.stage === s).length;
 
@@ -127,15 +130,20 @@ export default function Outreach({ p, up, busy, run, go }: PageProps) {
       <PageHead engine="outreach" title="Reach people" status={p.people.length ? `${p.people.length} people, ${count("paid")} paid` : "Nobody found yet"} last={last} onRun={run.outreach} running={busy.outreach} explainData={STAGES.map((s) => `${STAGE_LABEL[s]}: ${count(s)}`)} />
       {p.searchNote && <Note>{p.searchNote} Outreach needs search to find people, so this page stays empty until it is set up.</Note>}
 
-      <Group engine="outreach" step={1} title="People asking for this today" line="Real people on Reddit describing the problem you solve. Each has a message ready, one person at a time, until they pay." />
-      <div className="fx-tabs" role="tablist">
+      <Group engine="outreach" step={1} title="People asking for this today" line="Real people on Reddit, X, LinkedIn, Quora and forums describing the problem you solve. Each has a message ready, one person at a time, until they pay." />
+      <div className="fx-tabs" role="tablist" aria-label="Platform">
+        {(["all", ...PERSON_PLATFORMS] as (PersonPlatform | "all")[]).filter((k) => k === "all" || onPlat(k).length).map((k) => (
+          <button key={k} role="tab" aria-selected={plat === k} onClick={() => setPlat(k)}>{k === "all" ? "All" : PERSON_PLATFORM_LABEL[k]} <span>{onPlat(k).length}</span></button>
+        ))}
+      </div>
+      <div className="fx-tabs" role="tablist" aria-label="Stage">
         <button role="tab" aria-selected={view === "all"} onClick={() => setView("all")}>Board</button>
         {STAGES.map((s) => <button key={s} role="tab" aria-selected={view === s} onClick={() => setView(s)}>{STAGE_LABEL[s]} <span>{count(s)}</span></button>)}
       </div>
 
-      {!people.length ? (
+      {!everyone.length ? (
         <Empty title="No people yet" action={<button className="fx-btn" disabled={!!busy.outreach} onClick={run.outreach}>{busy.outreach ? <Busy text={busy.outreach} /> : "Find people asking today"}</button>}>
-          Outreach searches Reddit for people describing your problem in the last year, keeps the real ones, and writes a message for each.
+          Outreach searches Reddit, X, LinkedIn, Quora and forums for people describing your problem in the last year, keeps the real ones, and writes a message for each.
         </Empty>
       ) : view === "all" ? (
         <div className="fx-board">
