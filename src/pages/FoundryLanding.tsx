@@ -258,15 +258,15 @@ export default function FoundryLanding() {
         </div>
       </header>
 
-      <section className="ah-os fl-center" id="problem">
+      <section className="ah-os" id="problem">
         <div className="aff-wrap">
           <p className="ah-kicker">The problem</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Building got easy. Getting seen did not." /></h2>
-          <p className="fl-lead aff-reveal">You built it, you shipped it, and nobody saw it. 8 of the 8 founders we interviewed named distribution their biggest problem. 0 of them pay for a tool to fix it. So they post into the void and hunt for customers by hand.</p>
+          <p className="fl-lead aff-reveal">Every day, founders post the same thing on Reddit and X: "I built it, I launched it, and nobody came." Building is now as easy as describing your app. What if getting it seen was just as easy? There you go. We made it happen for you.</p>
         </div>
       </section>
 
-      <section className="ah-os fl-center" id="engines">
+      <section className="ah-os" id="engines">
         <div className="aff-wrap">
           <BrainoMascot variant="foundry" size={88} className="fl-mascot" />
           <p className="ah-kicker">The fix</p>
@@ -278,7 +278,7 @@ export default function FoundryLanding() {
         </div>
       </section>
 
-      <section className="ah-os fl-center" id="see">
+      <section className="ah-os" id="see">
         <div className="aff-wrap">
           <p className="ah-kicker">The product</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="See what you get in the first minute." /></h2>
@@ -287,7 +287,7 @@ export default function FoundryLanding() {
         </div>
       </section>
 
-      <section className="ah-os fl-center" id="braino">
+      <section className="ah-os" id="braino">
         <div className="aff-wrap">
           <p className="ah-kicker">Braino and Braino Foundry</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="One Braino. Two jobs." /></h2>
@@ -299,7 +299,7 @@ export default function FoundryLanding() {
         </div>
       </section>
 
-      <section className="ah-os bp-day fl-center" id="where">
+      <section className="ah-os bp-day" id="where">
         <div className="aff-wrap">
           <p className="ah-kicker">Where it runs</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="On the web, or inside Braino on your Mac." /></h2>
@@ -312,7 +312,7 @@ export default function FoundryLanding() {
         <DayScroll day={MAC_DAY} date="Fri 23 Oct" />
       </section>
 
-      <section className="ah-os fl-center" id="pricing">
+      <section className="ah-os" id="pricing">
         <div className="aff-wrap">
           <p className="ah-kicker">Pricing</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Your buyers are asking. Be the one they find." /></h2>

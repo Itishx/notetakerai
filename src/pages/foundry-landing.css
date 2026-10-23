@@ -135,3 +135,6 @@
   .fl-done, .fl-plan { padding: 24px; }
   .fl-lead { font-size: 17px; }
 }
+
+/* Section headings read left to right, like the rest of the site (2026-10-23). */
+.fl .ah-os .aff-wrap > .ah-kicker, .fl .ah-os .aff-wrap > .aff-h1, .fl .ah-os .aff-wrap > .fl-lead, .fl .ah-os .aff-wrap > p { text-align: left; margin-left: 0; margin-right: 0; }
