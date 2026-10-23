@@ -57,6 +57,7 @@ Return: {"name": "product name (make a short one if none)", "oneLiner": "one pla
 
 export async function readFounder(linkedin: string, whyText: string, product: ProductCard, onStage: (s: number) => void): Promise<{ founder: FounderCard; note: ReadNote }> {
   let snippet = "";
+  let name = "";
   let note: ReadNote = { ok: false, note: "No LinkedIn given, so the card is built from your words.", pages: 0 };
   const slug = linkedinSlug(linkedin);
   if (linkedin.trim() && !slug) note = { ok: false, note: "That does not look like a linkedin.com/in/ link, so the card is built from your words.", pages: 0 };
@@ -67,7 +68,7 @@ export async function readFounder(linkedin: string, whyText: string, product: Pr
       onStage(1);
       const g = await apifyWait<GoogleQuery[]>("google", id, undefined, 90000);
       const top = (g[0]?.results || []).find((r) => r.url.toLowerCase().includes(slug.toLowerCase())) || g[0]?.results?.[0];
-      if (top) { snippet = `${top.title}. ${top.description}`; note = { ok: true, note: "Read your public LinkedIn headline through Google.", pages: 1 }; }
+      if (top) { snippet = `${top.title}. ${top.description}`; name = top.title.split(/\s[-–|]\s/)[0].replace(/\s*\|?\s*LinkedIn.*$/i, "").trim(); note = { ok: true, note: "Read your public LinkedIn headline through Google.", pages: 1 }; }
       else note = { ok: false, note: "Google has no public LinkedIn page for that link yet, so the card is built from your words.", pages: 0 };
     } catch (e) { note = { ok: false, note: `${searchNote(e)} The card is built from your words alone.`, pages: 0 }; }
   }
@@ -77,7 +78,7 @@ Product: ${product.name}. ${product.oneLiner}
 Their public LinkedIn headline: """${snippet || "not found"}"""
 Why they are the one building this, in their words: """${whyText || "not given"}"""
 Only use what is given. Return: {"who": "one line on who they are", "whyTrust": "one line on why a buyer should trust them with this", "voice": "how their posts should sound, a few words"}`);
-  return { founder: { who: clean(r.who), whyTrust: clean(r.whyTrust), voice: clean(r.voice), linkedin, why: whyText }, note };
+  return { founder: { name: clean(name), who: clean(r.who), whyTrust: clean(r.whyTrust), voice: clean(r.voice), linkedin, why: whyText }, note };
 }
 
 /* ── Optics: they find you ───────────────────────────────────────────── */

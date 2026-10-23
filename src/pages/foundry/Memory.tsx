@@ -1,5 +1,6 @@
 import React from "react";
 import { fmtDay } from "./lib";
+import { FounderIdentity } from "./components/founderPhoto";
 import type { BuyerCard, FounderCard, ProductCard } from "./store";
 import type { PageProps } from "./types";
 import { SOURCE_LABEL } from "./Content";
@@ -38,6 +39,7 @@ export default function Memory({ p, up }: PageProps) {
         <div className="fx-stack">
           <Section title="Founder card" explain={m.founder}>
             <div className="fx-form">
+              <FounderIdentity f={m.founder} set={(k, v) => setFounder(k, v)} />
               <Field label="Who you are" value={m.founder.who} onChange={(v) => setFounder("who", v)} />
               <Field label="Why trust you" multiline value={m.founder.whyTrust} onChange={(v) => setFounder("whyTrust", v)} />
               <Field label="How you sound" value={m.founder.voice} onChange={(v) => setFounder("voice", v)} />

@@ -5,6 +5,8 @@ import { hostOf } from "./lib";
 import type { BuyerCard, FounderCard, ProductCard, Project } from "./store";
 import { log } from "./store";
 import "./onboarding-profiles.css";
+import { FounderIdentity } from "./components/founderPhoto";
+import "./components/brandmap.css";
 import { Field, ListField, Note } from "./components/ui";
 
 /* Onboarding: three steps, full screen, one question at a time.
@@ -186,8 +188,8 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
                 <p className="fo-profiles-h">Use a saved profile</p>
                 {profiles.map((f) => (
                   <button key={f.linkedin || f.who} className="fo-profile" onClick={() => useProfile(f)}>
-                    <span className="fo-profile-av">{f.who.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span>
-                    <span className="fo-profile-t"><b>{f.who}</b>{f.whyTrust && <small>{f.whyTrust}</small>}</span>
+                    {f.photo ? <img className="fo-profile-av" src={f.photo} alt="" /> : <span className="fo-profile-av">{(f.name || f.who).trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span>}
+                    <span className="fo-profile-t"><b>{f.name || f.who}</b>{f.whyTrust && <small>{f.whyTrust}</small>}</span>
                     <span className="fo-profile-go">Use</span>
                   </button>
                 ))}
@@ -214,6 +216,7 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
             <span className="fo-eyebrow">Step 2 of 3 · Your founder card</span>
             <h1>Is this you?</h1>
             {project.linkedinRead && <Note>{project.linkedinRead.note}</Note>}
+            <FounderIdentity f={m.founder} set={(k, v) => setFounder(k, v)} />
             <Field label="Who you are" value={m.founder.who} onChange={(v) => setFounder("who", v)} />
             <Field label="Why a buyer should trust you" multiline value={m.founder.whyTrust} onChange={(v) => setFounder("whyTrust", v)} />
             <Field label="How you sound" value={m.founder.voice} onChange={(v) => setFounder("voice", v)} hint="Every post and message is written in this voice." />

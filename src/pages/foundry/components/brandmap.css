@@ -39,3 +39,14 @@
   .fx-map-feed li { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .fx-map-feed li b { display: none; }
 }
+
+/* Founder card: name and photo. */
+.fx-fid { display: flex; align-items: center; gap: 16px; padding: 14px 16px; margin-bottom: 4px; border: 1px solid var(--a-line); border-radius: 16px; background: var(--a-box); }
+.fx-fid-r { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.fx-fid-name { display: grid; gap: 4px; }
+.fx-fid-name span { font-size: 12px; font-weight: 600; color: var(--a-ink-faint); }
+.fx-fid-name input { width: 100%; padding: 8px 10px; border: 1px solid var(--a-line); border-radius: 10px; background: var(--a-bg); color: var(--a-ink); font: inherit; font-size: 15px; font-weight: 600; }
+.fx-fid-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-fid-btn { padding: 6px 12px; border: 1px solid var(--a-line); border-radius: 999px; background: none; color: var(--a-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.fx-fid-btn:hover { border-color: var(--a-ink); }
+.fx-fid-btn.quiet { color: var(--a-ink-faint); }

@@ -9,3 +9,5 @@
 .fo-profile-t small { font-size: 13px; color: var(--a-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fo-profile-go { flex: none; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; background: var(--a-ink); color: var(--a-bg); }
 .fo-profiles-or { margin: 6px 0 0; font-size: 13px; color: var(--a-ink-faint); text-align: center; }
+
+img.fo-profile-av { object-fit: cover; }
