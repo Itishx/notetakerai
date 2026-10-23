@@ -137,8 +137,8 @@ export function AffFooter() {
             <nav className="aff-foot-col aff-tree" aria-label="Braino">
               <h4><Link to="/braino">Braino</Link></h4>
               <ul>
-                <li><Link to="/braino">Braino Companion</Link></li>
-                <li><Link to="/foundry">Braino Co-founder</Link></li>
+                <li><Link to="/braino">For everyday life</Link></li>
+                <li><Link to="/foundry">For your startup</Link></li>
                 <li><Link to="/braino#early-access">Join the waitlist</Link></li>
               </ul>
             </nav>
