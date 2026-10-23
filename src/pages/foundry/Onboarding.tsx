@@ -4,6 +4,7 @@ import { buildProduct, readFounder, readSite } from "./engines";
 import { hostOf } from "./lib";
 import type { BuyerCard, FounderCard, ProductCard, Project } from "./store";
 import { log } from "./store";
+import "./onboarding-profiles.css";
 import { Field, ListField, Note } from "./components/ui";
 
 /* Onboarding: three steps, full screen, one question at a time.
@@ -44,12 +45,40 @@ function Reading({ stages, at, elapsed, pages }: { stages: string[]; at: number;
   );
 }
 
+/* Founder profiles already written in other projects on this device (or this
+   account's synced copy). Starting a new project, the founder picks one
+   instead of typing themselves in again. */
+function savedFounders(currentId: string): FounderCard[] {
+  const out: FounderCard[] = [];
+  const seen = new Set<string>();
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith("foundry-v2") && !k.endsWith("-active")).forEach((k) => {
+      let list: unknown;
+      try { list = JSON.parse(localStorage.getItem(k) || "null"); } catch (_) { return; }
+      if (!Array.isArray(list)) return;
+      (list as Project[]).forEach((p) => {
+        const f = p?.memory?.founder;
+        if (!f || p.id === currentId || !(f.who || "").trim()) return;
+        const id = (f.linkedin || f.who).trim().toLowerCase();
+        if (seen.has(id)) return;
+        seen.add(id); out.push(f);
+      });
+    });
+  } catch (_) { /* private window */ }
+  return out;
+}
+
 export default function Onboarding({ project, update, onStart, theme }: { project: Project; update: (fn: (p: Project) => Project) => void; onStart: () => void; theme: string }) {
   const [step, setStep] = useState<Step>(() => firstStep(project));
   const [stage, setStage] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [pages, setPages] = useState<string[]>([]);
   const [err, setErr] = useState("");
+  const [profiles] = useState(() => savedFounders(project.id));
+  const useProfile = (f: FounderCard) => {
+    update((p) => log({ ...p, draft: { ...p.draft, linkedin: f.linkedin, why: f.why }, memory: { ...p.memory, founder: { ...f } } }, "memory", "Used your saved founder profile"));
+    setStep("founderCard");
+  };
   const tick = useRef<number>();
   const d = project.draft;
   const m = project.memory;
@@ -152,6 +181,19 @@ export default function Onboarding({ project, update, onStart, theme }: { projec
             <span className="fo-eyebrow">Step 2 of 3</span>
             <h1>Who is building it?</h1>
             <p className="fo-sub">People buy from people. This makes the posts and messages sound like you.</p>
+            {profiles.length > 0 && (
+              <div className="fo-profiles">
+                <p className="fo-profiles-h">Use a saved profile</p>
+                {profiles.map((f) => (
+                  <button key={f.linkedin || f.who} className="fo-profile" onClick={() => useProfile(f)}>
+                    <span className="fo-profile-av">{f.who.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span>
+                    <span className="fo-profile-t"><b>{f.who}</b>{f.whyTrust && <small>{f.whyTrust}</small>}</span>
+                    <span className="fo-profile-go">Use</span>
+                  </button>
+                ))}
+                <p className="fo-profiles-or">Or add a new founder below</p>
+              </div>
+            )}
             <Field label="Your LinkedIn" value={d.linkedin} onChange={(v) => setDraft("linkedin", v)} placeholder="linkedin.com/in/yourname (optional)" hint="Braino reads your public headline through Google. It never logs in to LinkedIn." />
             <Field label="Why are you the one building this?" multiline value={d.why} onChange={(v) => setDraft("why", v)} placeholder="I ran a PG for 3 years and chased rent every month" />
             {err && <Note tone="warn">{err}</Note>}

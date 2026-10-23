@@ -1,0 +1,63 @@
+/* Architecture page: five steps, a request travelling through them. */
+.ar { --s1: #2f6fed; --s2: #b8842a; --s3: #6b52c4; --s4: #b8842a; --s5: #3a8f5f; max-width: 1080px; margin: 0 auto; padding: 8px 0 64px; display: grid; gap: 28px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color: var(--a-ink); }
+.ar-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint); }
+.ar-head h1 { margin: 8px 0 10px; font-family: var(--a-display); font-weight: 500; font-size: clamp(28px, 3.4vw, 40px); line-height: 1.12; letter-spacing: -.015em; }
+.ar-sub { margin: 0; max-width: 640px; font-size: 16px; line-height: 1.6; color: var(--a-ink-soft); }
+
+.ar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.ar-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--a-line); border-radius: 12px; background: var(--a-box); }
+.ar-seg button { border: 0; background: none; padding: 8px 14px; border-radius: 9px; font: inherit; font-size: 14px; font-weight: 600; color: var(--a-ink-soft); cursor: pointer; }
+.ar-seg button.on { background: var(--a-ink); color: var(--a-bg); }
+.ar-play { margin-left: auto; height: 40px; padding: 0 22px; border: 0; border-radius: 999px; background: #d9645b; color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+.ar-track { display: grid; grid-template-columns: repeat(5, 1fr); }
+.ar-track-cell { display: flex; align-items: center; min-width: 0; }
+.ar-node { flex: 1; min-width: 0; display: grid; justify-items: center; gap: 4px; padding: 18px 10px; border: 1px solid var(--a-line); border-radius: 18px; background: var(--a-box); color: var(--a-ink); font: inherit; cursor: pointer; text-align: center; transition: transform .3s cubic-bezier(.16,1,.3,1), border-color .3s, box-shadow .3s; }
+.ar-node b { font-family: var(--a-display); font-weight: 500; font-size: 19px; }
+.ar-node small { font-size: 12.5px; color: var(--a-ink-faint); line-height: 1.35; }
+.ar-node-n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff; background: var(--a-ink-faint); transition: background .3s; }
+.ar-node.s1 .ar-node-n, .ar-dot.s1 { background: var(--s1); } .ar-node.s2 .ar-node-n, .ar-dot.s2 { background: var(--s2); }
+.ar-node.s3 .ar-node-n, .ar-dot.s3 { background: var(--s3); } .ar-node.s4 .ar-node-n, .ar-dot.s4 { background: var(--s4); }
+.ar-node.s5 .ar-node-n, .ar-dot.s5 { background: var(--s5); }
+.ar-node.live { transform: translateY(-4px); border-color: var(--a-ink); box-shadow: 0 18px 40px -22px rgba(22,21,15,.45); }
+.ar-node.done { opacity: .75; }
+.ar-link { flex: none; width: 28px; height: 2px; background: var(--a-line-strong); position: relative; overflow: hidden; }
+.ar-link.done { background: var(--a-ink); }
+.ar-link i { position: absolute; top: -2px; left: -8px; width: 8px; height: 6px; border-radius: 3px; background: #d9645b; opacity: 0; }
+.ar-link.flow i { opacity: 1; animation: ar-pack 1.1s ease-in-out infinite; }
+@keyframes ar-pack { to { left: 30px; } }
+
+.ar-services { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; border: 1px dashed var(--a-line-strong); border-radius: 18px; transition: background .3s, border-color .3s; }
+.ar-services::before { content: "Step 3 · Services"; grid-column: 1 / -1; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--a-ink-faint); }
+.ar-services.live { border-color: var(--s3); background: color-mix(in srgb, var(--s3) 6%, transparent); }
+.ar-svc { display: grid; gap: 3px; padding: 14px 16px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); opacity: .45; transition: opacity .3s, border-color .3s; }
+.ar-svc.used { opacity: 1; }
+.ar-services.live .ar-svc.used { border-color: var(--s3); }
+.ar-svc b { font-size: 15px; } .ar-svc small { font-size: 13px; color: var(--a-ink-soft); }
+
+.ar-now { display: flex; align-items: flex-start; gap: 16px; padding: 22px 24px; border-radius: 18px; background: var(--a-ink); color: var(--a-bg); animation: ar-in .45s cubic-bezier(.16,1,.3,1) both; }
+.ar-now-n { flex: none; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .6; padding-top: 6px; }
+.ar-now p { margin: 0; font-family: var(--a-display); font-size: clamp(19px, 2.2vw, 24px); line-height: 1.4; }
+@keyframes ar-in { from { opacity: 0; transform: translateY(6px); } }
+
+.ar-steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.ar-step { padding: 20px; border: 1px solid var(--a-line); border-radius: 18px; background: var(--a-box); transition: border-color .3s; }
+.ar-step.live { border-color: var(--a-ink); }
+.ar-step-h { display: flex; align-items: center; gap: 12px; }
+.ar-step-h b { display: block; font-family: var(--a-display); font-weight: 500; font-size: 19px; } .ar-step-h small { font-size: 12.5px; color: var(--a-ink-faint); }
+.ar-dot { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 700; }
+.ar-step-what { margin: 12px 0; font-size: 14.5px; line-height: 1.55; color: var(--a-ink-soft); }
+.ar-step ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ar-step li li, .ar-step ul li { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--a-line); font-size: 13.5px; line-height: 1.5; }
+.ar-step ul li span { color: var(--a-ink-soft); }
+.ar-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--a-line); font-size: 15px; line-height: 1.6; color: var(--a-ink-soft); }
+
+@media (max-width: 860px) {
+  .ar-track { grid-template-columns: 1fr; gap: 0; }
+  .ar-track-cell { flex-direction: column; }
+  .ar-node { width: 100%; }
+  .ar-link { width: 2px; height: 20px; }
+  .ar-services { grid-template-columns: 1fr; }
+  .ar-play { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .ar * { animation: none !important; transition: none !important; } }

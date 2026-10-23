@@ -16,6 +16,7 @@ import Content from "./Content";
 import Outreach from "./Outreach";
 import Approvals from "./Approvals";
 import Memory from "./Memory";
+import Architecture from "./Architecture";
 import "../affective.css";
 import "./foundry.css";
 
@@ -30,6 +31,7 @@ const NAV: { id: PageId; label: string; icon: string; engine?: Engine }[] = [
   { id: "outreach", label: "Reach people", icon: IC.outreach, engine: "outreach" },
   { id: "approvals", label: "Approvals", icon: IC.inbox },
   { id: "memory", label: "Product and founder", icon: IC.memory },
+  { id: "architecture", label: "Architecture", icon: "M4 5h6v5H4zM14 5h6v5h-6zM9 15h6v5H9zM7 10v2h10v-2M12 12v3" },
 ];
 
 type Busy = Record<string, Partial<Record<Engine | "setup", string>>>;
@@ -194,6 +196,7 @@ export default function FoundryRoot() {
           {page === "outreach" && <Outreach {...props} />}
           {page === "approvals" && <Approvals {...props} />}
           {page === "memory" && <Memory {...props} />}
+          {page === "architecture" && <Architecture />}
         </main>
       </div>
 

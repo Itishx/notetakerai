@@ -1,7 +1,7 @@
 import type { AiAnswer, Engine, Project, Settings } from "./store";
 import { DAY, mentions } from "./lib";
 
-export type PageId = "dashboard" | "optics" | "content" | "outreach" | "approvals" | "memory";
+export type PageId = "dashboard" | "optics" | "content" | "outreach" | "approvals" | "memory" | "architecture";
 export type Runner = { all: () => void; optics: () => void; content: (extra?: string) => void; outreach: () => void };
 export type PageProps = {
   p: Project;
