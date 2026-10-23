@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { findRealQuestions } from "./engines";
 import { Group } from "./components/group";
+import "./components/brandmap.css";
 import { copy, hostOf, mentions } from "./lib";
 import { checkCrawl, makeFix } from "./engines";
 import { log, type Fix } from "./store";
+import { faviconOf, PLACES } from "./launchPlaces";
 import { isNamed, namedCount, namedRange, shareOfVoice, type PageProps } from "./types";
 import { Ring } from "./components/charts";
 import { Busy, Empty, Hint, Note, PageHead, Section, SideSheet } from "./components/ui";
@@ -92,6 +94,16 @@ export default function Optics({ p, up, busy, run }: PageProps) {
       <PageHead engine="optics" title="Get found" status={o?.answers.length ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
       <Group engine="optics" step={1} title="Can AI see you at all?" line="Before anything else: can AI assistants and Google actually read your website? If they cannot, nothing else here matters." />
       {crawlBlock}
+      {(() => {
+        const mine = Object.entries(p.launches || {}).filter(([, l]) => l.status === "live" && l.link);
+        if (!mine.length) return null;
+        return (
+          <ul className="fx-lp-mine">
+            <li><b>Your live listings</b></li>
+            {mine.map(([id, l]) => { const pl = PLACES.find((x) => x.id === id); return <li key={id}><img src={faviconOf(pl?.url || l.link || "")} alt="" width={16} height={16} /><a href={l.link} target="_blank" rel="noopener noreferrer">{pl?.name || id}</a></li>; })}
+          </ul>
+        );
+      })()}
       {!o || !o.answers.length ? (
         <Empty title="Optics has not looked yet" action={<button className="fx-btn" disabled={!!busy.optics} onClick={run.optics}>{busy.optics ? <Busy text={busy.optics} /> : "Check how buyers find me"}</button>}>
           It asks an AI assistant and Google your 8 buyer questions and shows who gets named instead of you.

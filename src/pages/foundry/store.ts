@@ -67,6 +67,10 @@ export type Person = {
 export type Flows = { quotesToContent: number; quotesToOptics: number; gapsToContent: number; postsToOutreach: number; objections: number };
 export type RunEntry = { at: number; named: number; of: number; google: number; posts: number; people: number; approved: number; flows: Flows };
 
+/* Launch places (2026-10-23): per place, where the founder is with it. */
+export type Listing = { tagline: string; short: string; long: string; category: string; title?: string; firstComment?: string };
+export type Launch = { status: "todo" | "submitted" | "live"; link?: string; listing?: Listing; at: number };
+
 export type ReadNote = { ok: boolean; note: string; pages: number };
 
 export type Project = {
@@ -83,6 +87,8 @@ export type Project = {
   lastRun: number | null;
   autopilot: boolean;
   searchNote: string;
+  launches?: Record<string, Launch>;
+  launchTags?: string[];
 };
 
 export type Settings = { name: string; photo?: string };

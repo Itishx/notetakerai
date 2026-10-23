@@ -79,3 +79,25 @@
 .fo-real small { flex: none; font-size: 11.5px; font-weight: 600; color: var(--fx-r, #3a8f5f); white-space: nowrap; }
 .fo-real small.g { color: var(--a-ink-faint); }
 .fx-src.qsrc { margin-left: 8px; color: var(--fx-r); } .fx-src.qsrc.g { color: var(--a-ink-faint); }
+
+/* Launch places (Be seen, step 4). */
+.fx-lp-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--a-line); background: var(--a-box); font-size: 14px; }
+.fx-lp-bar span { color: var(--a-ink-faint); font-size: 13px; }
+.fx-lp { list-style: none; margin: 0 0 12px; padding: 0; border-top: 1px solid var(--a-line); }
+.fx-lp li { display: grid; gap: 6px; padding: 14px 4px; border-bottom: 1px solid var(--a-line); }
+.fx-lp li.live { background: color-mix(in srgb, var(--fx-c) 5%, transparent); }
+.fx-lp-n { display: flex; align-items: center; gap: 8px; }
+.fx-lp-n img { border-radius: 4px; flex: none; }
+.fx-lp-n a { color: var(--a-ink); text-decoration: none; } .fx-lp-n b { font-weight: 650; font-size: 15px; }
+.fx-lp-st { margin-left: auto; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--a-line); color: var(--a-ink-faint); }
+.fx-lp-st.submitted { color: var(--a-ink); border-color: var(--a-line-strong); }
+.fx-lp-st.live { color: #fff; background: var(--fx-c); border-color: var(--fx-c); }
+.fx-lp p { margin: 0; font-size: 13.5px; color: var(--a-ink-soft); }
+.fx-lp-c, .fx-lp-a { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fx-lp-a { gap: 14px; margin-top: 2px; }
+.fx-lp-dots { display: inline-flex; gap: 3px; align-items: center; }
+.fx-lp-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--a-line-strong); } .fx-lp-dots i.on { background: var(--fx-c); }
+.fx-lp-link { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fx-lp-link input { flex: 1; min-width: 200px; padding: 7px 10px; border: 1px solid var(--a-line); border-radius: 10px; background: var(--a-bg); color: var(--a-ink); font: inherit; font-size: 14px; }
+.fx-lp-mine { list-style: none; margin: 10px 0 0; padding: 12px 14px; border: 1px solid var(--a-line); border-radius: 12px; background: var(--a-box); display: grid; gap: 6px; font-size: 14px; }
+.fx-lp-mine li { display: flex; align-items: center; gap: 8px; } .fx-lp-mine a { color: var(--a-ink); }

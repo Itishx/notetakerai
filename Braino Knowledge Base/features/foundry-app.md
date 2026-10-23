@@ -175,3 +175,22 @@ Version 1 checks whenever the app is open (no server). **Version 2**, true "ever
 - **Replies fit the platform.** Reddit: a helpful comment. X: under 260 characters, no hashtags. LinkedIn: 2 to 4 sentences. Quora: a full answer, product named once. Forums: a forum reply.
 - **No false "I wrote about this".** A message only mentions one of your posts if that post is approved (out). Otherwise it never claims you wrote or posted anything.
 - **Honest limits.** Google indexes X late and only partly, so fresh tweets often do not show up. Instagram and Facebook groups are not covered: Google cannot see inside them.
+
+## Launch places (Be seen, Step 4)
+
+Released 2026-10-23. Status: built, in the Foundry app.
+
+**What it is.** A list of websites where new startups get listed: Product Hunt, Show HN, BetaList, AlternativeTo, the AI tool directories, G2 and Capterra, YourStory and Inc42 for India, and more (about 55 in all). Each one brings visitors, and every live listing is one more page AI and Google can find you on.
+
+**How to use it.**
+- Open Be seen and scroll to Step 4. Braino picks the 18 best places for your product. "Show all" shows the rest.
+- Tap "Write my listing". Braino writes the tagline, short and long description and category inside that site's limits. Product Hunt also gets a maker's first comment, Hacker News gets a "Show HN" title and first comment.
+- "Copy and open" copies the tagline and opens the site. Submit it, then tap "Mark submitted". When it is up, tap "Mark live" and paste the link.
+- Live listings show on Get found, Step 1, under "Your live listings".
+
+**Honest limits.**
+- Braino cannot submit for you. These sites need your login, and many have captchas or payment.
+- The list is picked by hand, so a site may change its rules, prices or shut down.
+- The fit is a best guess from your product card plus one small AI call that tags your product (saas, ai, dev, and so on). It runs once per project.
+
+**Technical shape.** The list lives in `src/pages/foundry/launchPlaces.ts` with a pure `rankPlaces(tags)` that sorts by fit, then strength. Tags come from `classifyLaunch` (one cached `askJson`, stored as `project.launchTags`) merged with a keyword guess. Progress is `project.launches[placeId] = { status, link, listing, at }`. Listings come from `writeListing` in `engines.ts`. The UI is `components/launches.tsx`. Writing a listing and marking one live log to the activity feed as Content.

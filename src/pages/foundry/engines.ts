@@ -1,6 +1,6 @@
 import { apifyStart, apifyWait, ask, askJson, COLD_AI, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type FoundPost, type RedditPost, type SitePage } from "./lib";
 import { namedCount } from "./types";
-import { log, PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, whereOf, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim } from "./store";
+import { log, PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, whereOf, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim, type Listing } from "./store";
 
 /* The three engines and the memory between them (2026-10-23).
    Optics: they find you. Content: they see you. Outreach: you reach them.
@@ -467,4 +467,31 @@ Section: ${title}
 Its data right now: ${JSON.stringify(data).slice(0, 3000)}
 In 2 or 3 short, plain sentences: what this shows, what the numbers mean for them, and the one thing to do next. No jargon, no lists, no dashes.`);
   return clean(t.trim());
+}
+
+/* ── Launch places ───────────────────────────────────────────────────── */
+
+/* One cheap call, cached on the project: which kinds of launch place fit. */
+export async function classifyLaunch(p: Project): Promise<string[]> {
+  const r = await askJson<{ tags: string[] }>(`${about(p)}
+Which of these tags describe this product? saas, ai, dev, consumer, b2b, india, mobile, open-source. "india" only if it is built for or sold in India. "mobile" only if it is a phone app. "open-source" only if the code is public.
+Return: {"tags": [string]}`);
+  const ok = ["saas", "ai", "dev", "consumer", "b2b", "india", "mobile", "open-source"];
+  return (r.tags || []).map((t) => String(t).toLowerCase()).filter((t) => ok.includes(t));
+}
+
+/* A listing for one launch place, inside that site's limits. */
+export async function writeListing(p: Project, place: { id: string; name: string; needs: string; note: string }): Promise<Listing> {
+  const ph = place.id === "producthunt", hn = place.id === "showhn";
+  const r = await askJson<Listing>(`${about(p)}
+Write this product's listing for ${place.name} (${place.note}). What the site asks for: ${place.needs}.
+Respect the site's limits. Tagline: at most 60 characters, no hype words. Short: one or two sentences, at most 260 characters. Long: 2 to 4 short paragraphs, plain and honest, in the founder's voice. Category: the best category name on this site.
+${ph ? 'Also write "firstComment": the maker\'s first comment, who you are, why you built it, what is free, what feedback you want. Under 150 words.' : ""}
+${hn ? 'Also write "title": "Show HN: " then a plain description, under 80 characters, no superlatives. And "firstComment": a plain, technical first comment on what it does, how it is built and what is not done yet. Under 200 words.' : ""}
+Never invent customers, numbers or awards.
+JSON: {"tagline": string, "short": string, "long": string, "category": string${ph || hn ? ', "firstComment": string' : ""}${hn ? ', "title": string' : ""}}`);
+  return {
+    tagline: clean(r.tagline).slice(0, 80), short: clean(r.short), long: clean(r.long), category: clean(r.category),
+    ...(r.title ? { title: clean(r.title) } : {}), ...(r.firstComment ? { firstComment: clean(r.firstComment) } : {}),
+  };
 }

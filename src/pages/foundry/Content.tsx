@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Group } from "./components/group";
+import { LaunchPlaces } from "./components/launches";
 import "./components/brandmap.css";
 import type { Topic, TopicSource } from "./store";
 import type { PageProps } from "./types";
@@ -125,6 +126,9 @@ export default function Content({ p, up, busy, run }: PageProps) {
           }))} /></div>
         ) : !busy.content && <Empty title="No posts yet" action={<button className="fx-btn" onClick={() => run.content()}>Write this week's posts</button>}>Braino writes one post for each of X, LinkedIn, Reddit, Instagram and Threads.</Empty>}
       </Section>
+      <Group engine="content" step={4} title="Places to launch" line="Websites where new startups get listed. Each one brings visitors, and every live listing helps AI and Google find you." />
+      <LaunchPlaces p={p} up={up} />
+
       <p className="fx-small">Content only writes public posts. A message to one person lives in Reach people.<Hint>Keeping them apart keeps each engine honest: posts are for everyone, messages are for one person.</Hint></p>
     </div>
   );
