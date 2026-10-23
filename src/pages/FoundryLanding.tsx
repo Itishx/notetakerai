@@ -5,6 +5,8 @@ import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "
 import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
+import "./braino-final.css";
+import "./braino-page.css";
 import "./foundry-landing.css";
 
 /* Braino Foundry (2026-10-22). Built from the homepage's own pieces (affPage,
@@ -135,8 +137,8 @@ export default function FoundryLanding() {
   }, []);
 
   return (
-    <div className="aff fl" data-theme={theme} ref={root}>
-      <AffNav theme={theme} onToggle={toggle} links={[["How it works", "#engines"], ["Pricing", "#pricing"], ["Done for you", "#services"], ["Braino", "/braino"]]} go={["Start free", "/foundry/app"]} />
+    <div className="aff bf bp fl" data-theme={theme} ref={root}>
+      <AffNav braino brand={["Braino Foundry", "/foundry"]} theme={theme} onToggle={toggle} links={[["How it works", "#engines"], ["Pricing", "#pricing"], ["Done for you", "#services"], ["Braino", "/braino"]]} go={["Start free", "/foundry/app"]} />
       {guide && <Guide onClose={() => setGuide(false)} />}
 
       <header className="aff-hero">

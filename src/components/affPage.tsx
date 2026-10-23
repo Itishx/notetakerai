@@ -100,13 +100,13 @@ export function useAffReveal(deps: unknown[] = []) {
 }
 
 /* `braino` puts his name in the corner instead of the company's, for his own page. */
-export function AffNav({ theme, onToggle, links, braino = false, go }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean; go?: [string, string] }) {
+export function AffNav({ theme, onToggle, links, braino = false, go, brand }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean; go?: [string, string]; brand?: [string, string] }) {
   const items = links || [["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
   return (
     <nav className="aff-nav">
       <div className="aff-nav-in">
         {braino ? (
-          <Link to="/braino" className="aff-logo aff-logo-braino" aria-label="Braino">Braino</Link>
+          <Link to={brand ? brand[1] : "/braino"} className="aff-logo aff-logo-braino" aria-label={brand ? brand[0] : "Braino"}>{brand ? brand[0] : "Braino"}</Link>
         ) : (
           <Link to="/" className="aff-logo" aria-label="Affective">
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
