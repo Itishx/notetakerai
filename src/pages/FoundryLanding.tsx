@@ -294,7 +294,7 @@ export default function FoundryLanding() {
         </div>
       </section>
 
-      <section className="ah-os" id="braino">
+      <section className="ah-os fl-mid" id="braino">
         <div className="aff-wrap">
           <p className="ah-kicker">Braino and Braino Foundry</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="One Braino. Two jobs." /></h2>

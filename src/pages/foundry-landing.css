@@ -138,3 +138,11 @@
 
 /* Section headings read left to right, like the rest of the site (2026-10-23). */
 .fl .ah-os .aff-wrap > .ah-kicker, .fl .ah-os .aff-wrap > .aff-h1, .fl .ah-os .aff-wrap > .fl-lead, .fl .ah-os .aff-wrap > p { text-align: left; margin-left: 0; margin-right: 0; }
+
+/* One Braino, two jobs: centred, heading and table on one axis. */
+.fl .fl-mid .aff-wrap { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.fl .fl-mid .aff-wrap > .ah-kicker, .fl .fl-mid .aff-wrap > .aff-h1, .fl .fl-mid .aff-wrap > .fl-lead { text-align: center; margin-left: auto; margin-right: auto; }
+.fl .fl-mid .fl-cmp { max-width: 980px; margin: 40px auto 0; }
+.fl .fl-mid .fl-cmp-h, .fl .fl-mid .fl-cmp-r { grid-template-columns: 180px 1fr 1fr; }
+.fl .fl-mid .fl-cmp-h div { justify-content: flex-start; }
+@media (max-width: 760px) { .fl .fl-mid .fl-cmp-h, .fl .fl-mid .fl-cmp-r { grid-template-columns: 1fr 1fr; } }
