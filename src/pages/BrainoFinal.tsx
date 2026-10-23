@@ -473,7 +473,10 @@ function clockText(m: number) {
   const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60);
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
-export function DayScroll({ day, date = "Tue 13 Oct" }: { day: { at: string; p: string }[]; date?: string }) {
+/* `say`/`you` (2026-10-23, Foundry): Braino speaks in the notch in first
+   person, and your answer shows under it. Without them, the /braino day as before. */
+type DayMoment = { at: string; p?: string; say?: string; you?: string };
+export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [f, setF] = useState(0);
   const mins = day.map((d) => toMinutes(d.at) as number);
@@ -505,8 +508,9 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: { at: string; p: 
   const moon = Math.min(1, Math.max(0, (now - 19 * 60) / (5 * 60)));
   const night = Math.min(1, Math.max(0, (now - 18 * 60) / 120));
   const parts = day.map((d) => {
-    const m = d.p.match(/^\u201c([^\u201d]+)\u201d\s*(.*)$/);
-    return m ? { said: m[1], did: m[2] } : { said: "", did: d.p };
+    if (d.say) return { said: "", did: "", say: d.say, you: d.you || "" };
+    const m = (d.p || "").match(/^\u201c([^\u201d]+)\u201d\s*(.*)$/);
+    return m ? { said: m[1], did: m[2], say: "", you: "" } : { said: "", did: d.p || "", say: "", you: "" };
   });
   return (
     <div className="bf-ds" ref={ref} style={{ height: `${day.length * 55 + 60}vh` }}>
@@ -518,10 +522,17 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: { at: string; p: 
             <i className="bf-ds-sun" style={{ left: `${8 + sun * 84}%`, top: `${70 - Math.sin(sun * Math.PI) * 52}%`, opacity: 1 - night }} />
             <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
             <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={[date, clockText(now)]} />
+            {parts[on].say ? (
+              <NotchSheet className={"ns-big ns-glow bf-ds-ns ns-work"} label="Braino" done={false}
+                extra={parts[on].you ? <p className="bf-ds-did" key={`y${on}`}>You: \u201c{parts[on].you}\u201d</p> : undefined}>
+                <span key={on}>{parts[on].say}</span>
+              </NotchSheet>
+            ) : (
             <NotchSheet className={"ns-big ns-glow bf-ds-ns " + (open ? "ns-work" : "is-fold")} label={parts[on].said ? "Braino" : "Live notes"} done={false}
               extra={open ? <p className="bf-ds-did" key={on}>{parts[on].did}</p> : undefined}>
               <span key={on}>{parts[on].said ? `\u201c${parts[on].said}\u201d` : "Listening. Writing it down."}</span>
             </NotchSheet>
+            )}
             </div>
             <div className="bf-ds-dock" aria-hidden="true">{["#3b82f6", "#22c55e", "#f59e0b", "#1ed760", "#ef4444", "#a855f7"].map((c) => <i key={c} style={{ background: c }} />)}</div>
           </div>
