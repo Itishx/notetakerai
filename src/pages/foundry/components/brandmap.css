@@ -101,3 +101,13 @@
 .fx-lp-link input { flex: 1; min-width: 200px; padding: 7px 10px; border: 1px solid var(--a-line); border-radius: 10px; background: var(--a-bg); color: var(--a-ink); font: inherit; font-size: 14px; }
 .fx-lp-mine { list-style: none; margin: 10px 0 0; padding: 12px 14px; border: 1px solid var(--a-line); border-radius: 12px; background: var(--a-box); display: grid; gap: 6px; font-size: 14px; }
 .fx-lp-mine li { display: flex; align-items: center; gap: 8px; } .fx-lp-mine a { color: var(--a-ink); }
+
+/* Approvals: one switch, then plain groups. */
+.fx-ap-switch { display: inline-flex; gap: 2px; padding: 3px; margin: 4px 0 8px; border: 1px solid var(--a-line); border-radius: 12px; background: var(--a-box); }
+.fx-ap-switch button { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 8px 18px; border-radius: 9px; font: inherit; font-size: 14px; font-weight: 600; color: var(--a-ink-soft); cursor: pointer; }
+.fx-ap-switch button.on { background: var(--a-ink); color: var(--a-bg); }
+.fx-ap-switch em { font-style: normal; font-size: 12px; opacity: .7; }
+.fx-ap-group { margin-top: 26px; display: grid; gap: 4px; }
+.fx-ap-group h2 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: 24px; display: flex; align-items: baseline; gap: 10px; }
+.fx-ap-group h2 span { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; font-weight: 700; color: var(--a-ink-faint); }
+.fx-ap-group > p { margin: 0 0 10px; font-size: 14px; color: var(--a-ink-soft); }
