@@ -17,6 +17,7 @@ import Outreach from "./Outreach";
 import Approvals from "./Approvals";
 import Memory from "./Memory";
 import Architecture from "./Architecture";
+import FirstRun from "./FirstRun";
 import "../affective.css";
 import "./foundry.css";
 
@@ -81,6 +82,8 @@ export default function FoundryRoot() {
   const { theme, toggle } = useAffTheme();
   const [page, setPage] = useState<PageId>("dashboard");
   const [busy, setBusy] = useState<Busy>({});
+  // Projects whose first run is on screen: the founder watches it before the dashboard.
+  const [launching, setLaunching] = useState<Record<string, boolean>>({});
   const [navOpen, setNavOpen] = useState(false);
   const [switcher, setSwitcher] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -124,11 +127,15 @@ export default function FoundryRoot() {
   if (!active.onboarded) {
     return (
       <div className="aff fx" data-theme={theme}>
-        <Onboarding project={active} update={up} theme={theme} onStart={() => { setPage("dashboard"); runner.all(); }} />
+        <Onboarding project={active} update={up} theme={theme} onStart={() => { setLaunching((l) => ({ ...l, [active.id]: true })); setPage("dashboard"); runner.all(); }} />
         {projects.length > 1 && <button className="fo-out" onClick={() => setActiveId(projects.find((p) => p.id !== active.id)!.id)}>Back to my other project</button>}
         {!user && <button className="fo-signin" onClick={signIn}>Sign in to save your work</button>}
       </div>
     );
+  }
+
+  if (launching[active.id]) {
+    return <div className="aff fx" data-theme={theme}><FirstRun p={active} busy={pb} onDone={() => setLaunching((l) => ({ ...l, [active.id]: false }))} /></div>;
   }
 
   const go = (id: PageId) => { setPage(id); setNavOpen(false); window.scrollTo({ top: 0 }); };
@@ -166,7 +173,7 @@ export default function FoundryRoot() {
             {NAV.map((n) => (
               <button key={n.id} className={page === n.id ? "on" : ""} aria-current={page === n.id ? "page" : undefined} onClick={() => go(n.id)}>
                 <Icon d={n.icon} />
-                <span>{n.label}</span>
+                <span>{n.label}{n.engine && <small className="fx-nav-eng">{n.engine === "optics" ? "Optics" : n.engine === "content" ? "Content" : "Outreach"}</small>}</span>
                 {n.engine && pb[n.engine] && <i className={`fx-live ${n.engine}`} title={pb[n.engine]} />}
                 {n.id === "approvals" && waiting > 0 && <em className="fx-badge">{waiting}</em>}
               </button>

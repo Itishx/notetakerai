@@ -1,0 +1,45 @@
+/* First run: the three engines working, before the dashboard. */
+.fr { min-height: 100svh; display: grid; place-items: center; padding: 40px 16px; background: var(--a-bg); color: var(--a-ink); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+.fr-in { width: min(640px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
+.fr-mascot svg { animation: fr-bob 1.6s ease-in-out infinite; }
+.fr-mascot.happy svg { animation: fr-hop .6s ease 2; }
+@keyframes fr-bob { 50% { transform: translateY(-4px) rotate(-2deg); } }
+@keyframes fr-hop { 50% { transform: translateY(-12px); } }
+.fr-kicker { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fr h1 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: clamp(28px, 4vw, 40px); line-height: 1.12; letter-spacing: -.015em; }
+.fr-sub { margin: 0; font-size: 15.5px; color: var(--a-ink-soft); }
+.fr-bar { width: 100%; height: 4px; margin: 10px 0 6px; border-radius: 2px; background: var(--a-line); overflow: hidden; }
+.fr-bar span { display: block; height: 100%; border-radius: 2px; background: var(--a-ink); transition: width .8s cubic-bezier(.16,1,.3,1); }
+
+.fr-engines { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 10px; text-align: left; }
+.fr-eng { --k: #6b52c4; display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; border: 1px solid var(--a-line); border-radius: 18px; background: var(--a-box); transition: border-color .3s, box-shadow .3s, opacity .3s; }
+.fr-eng.e-content { --k: #d9645b; } .fr-eng.e-outreach { --k: #3a8f5f; }
+.fr-eng.waiting { opacity: .55; }
+.fr-eng.working { border-color: var(--k); box-shadow: 0 16px 36px -24px color-mix(in srgb, var(--k) 80%, transparent); }
+.fr-icon { flex: none; width: 30px; height: 30px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--a-line-strong); display: grid; place-items: center; }
+.fr-eng.working .fr-icon { border-color: color-mix(in srgb, var(--k) 25%, transparent); border-top-color: var(--k); animation: fr-spin .9s linear infinite; }
+.fr-eng.working .fr-icon i { display: none; }
+.fr-eng.done .fr-icon { border-color: var(--k); background: var(--k); }
+.fr-icon svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes fr-spin { to { transform: rotate(360deg); } }
+.fr-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.fr-name { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+.fr-name b { font-family: var(--a-display); font-weight: 500; font-size: 20px; }
+.fr-name span { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--k); }
+.fr-job { margin: 0; font-size: 13.5px; color: var(--a-ink-faint); }
+.fr-now { margin: 4px 0 0; font-size: 15px; color: var(--a-ink); }
+.fr-eng.waiting .fr-now { color: var(--a-ink-faint); }
+.fr-state { flex: none; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--a-line); color: var(--a-ink-soft); }
+.fr-eng.working .fr-state { background: color-mix(in srgb, var(--k) 14%, transparent); color: var(--k); }
+.fr-eng.done .fr-state { background: var(--k); color: #fff; }
+
+.fr-feed { list-style: none; margin: 6px 0 0; padding: 14px 0 0; width: 100%; border-top: 1px solid var(--a-line); display: grid; gap: 7px; text-align: left; }
+.fr-feed li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--a-ink-soft); animation: fr-in .4s ease both; }
+.fr-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--a-ink-faint); }
+.fr-dot.w-optics { background: #6b52c4; } .fr-dot.w-content { background: #d9645b; } .fr-dot.w-outreach { background: #3a8f5f; }
+@keyframes fr-in { from { opacity: 0; transform: translateY(4px); } }
+.fr-skip { margin-top: 8px; border: 0; background: none; color: var(--a-ink-soft); font: inherit; font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .fr * { animation: none !important; } }
+
+/* Sidebar: the engine name beside its friendly name. */
+.fx-nav-eng { margin-left: 8px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--a-ink-faint); }
