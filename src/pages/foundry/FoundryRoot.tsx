@@ -18,6 +18,7 @@ import Approvals from "./Approvals";
 import Memory from "./Memory";
 import Architecture from "./Architecture";
 import FirstRun from "./FirstRun";
+import WebNotch from "./components/WebNotch";
 import "../affective.css";
 import "./foundry.css";
 import "./redesign.css";
@@ -103,6 +104,7 @@ export default function FoundryRoot() {
   }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sure, setSure] = useState(false);
+  const [notchOpen, setNotchOpen] = useState(false);
 
   const active = projects.find((p) => p.id === activeId) || projects[0] || null;
   useEffect(() => { if (!projects.length) create(); }, [projects.length, create]);
@@ -161,7 +163,8 @@ export default function FoundryRoot() {
   const projShown = projects.filter((x) => !ql || (x.memory.product.name || x.name).toLowerCase().includes(ql));
 
   return (
-    <div className="aff fx" data-theme={theme}>
+    <div className="aff fx" data-theme={theme} style={{ ["--wn-offset" as string]: mini ? "36px" : "130px" } as React.CSSProperties}>
+      <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={() => setNotchOpen(false)} text={waiting ? `${waiting} things are ready for your yes.` : "All caught up."} buttons={waiting ? [{ label: "Open Approvals", onClick: () => { go("approvals"); setNotchOpen(false); } }] : []} dot={waiting > 0} />
       <div className={`fx-shell${mini ? " mini" : ""}`}>
         <aside className={`fx-side ${navOpen ? "open" : ""}`}>
           <div className="fx-side-top">

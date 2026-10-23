@@ -1,0 +1,71 @@
+/* Braino on the web (2026-10-24): the Mac notch, fixed top centre over the
+   Foundry app. One black sheet, square where it meets the top, rounded where
+   it leaves it (aff-figures .ns). Two shapes only: folded and open. Each is
+   a fixed size, so the notch never jumps while he talks. */
+
+.wn {
+  --wn-w-fold: 132px;
+  --wn-w-open: min(480px, calc(100vw - 32px));
+  position: fixed; top: 12px; left: calc(50% + var(--wn-offset, 0px)); z-index: 40;
+  transform: translateX(-50%);
+  width: var(--wn-w-fold); height: 32px;
+  background: linear-gradient(180deg, rgba(0,0,0,.99), rgba(8,8,8,.98));
+  color: #f7f7f5; border-radius: 0 0 18px 18px;
+  box-shadow: 0 18px 50px -18px rgba(0,0,0,.45);
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  transition: width .38s cubic-bezier(.16, 1, .3, 1), height .38s cubic-bezier(.16, 1, .3, 1), border-radius .38s;
+}
+.aff[data-theme="dark"] .wn { box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 50px -18px rgba(0,0,0,.8); }
+.wn.open { width: var(--wn-w-open); height: 132px; border-radius: 0 0 26px 26px; }
+
+/* Folded: just his eyes, and a dot when something is waiting. */
+.wn-fold { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; transition: opacity .2s; }
+.wn.open .wn-fold { opacity: 0; pointer-events: none; }
+.wn-eyes { display: flex; gap: 9px; }
+.wn-eyes i { width: 9px; height: 9px; border-radius: 50%; background: #fff; position: relative; animation: wnBlink 4.2s infinite; }
+.wn-eyes i::after { content: ""; position: absolute; left: 2.5px; top: 2.5px; width: 4.5px; height: 4.5px; border-radius: 50%; background: #1b1713; }
+.wn-dot { position: absolute; right: 14px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: #f2a33a; box-shadow: 0 0 0 3px rgba(242,163,58,.18); }
+.wn-fold:focus-visible, .wn-btn:focus-visible, .wn-mic:focus-visible, .wn-x:focus-visible { outline: 2px solid #8fb4ff; outline-offset: 2px; }
+
+/* Open: one line of what he says, up to two buttons. */
+.wn-body { position: absolute; inset: 0; padding: 14px 18px 14px 16px; display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 10px; opacity: 0; pointer-events: none; transition: opacity .22s .08s; }
+.wn.open .wn-body { opacity: 1; pointer-events: auto; }
+.wn-face { grid-row: 1 / span 2; align-self: start; width: 44px; height: 54px; display: grid; place-items: center; }
+.wn-say { min-width: 0; display: grid; align-content: start; gap: 4px; }
+.wn-say small { color: rgba(255,255,255,.55); font-size: 9.5px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+.wn-say p { margin: 0; font-size: 15px; line-height: 1.36; letter-spacing: -.012em; color: #f7f7f5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wn-say p.heard { color: rgba(255,255,255,.72); font-style: italic; }
+.wn-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wn-btn { height: 28px; padding: 0 13px; border-radius: 999px; border: 0; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; background: rgba(255,255,255,.12); color: #f7f7f5; white-space: nowrap; }
+.wn-btn.main { background: #f7f7f5; color: #111; }
+.wn-btn:hover { filter: brightness(1.12); }
+.wn-mic, .wn-x { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; border: 0; display: grid; place-items: center; background: rgba(255,255,255,.1); color: #f7f7f5; cursor: pointer; flex: none; }
+.wn-x { margin-left: 0; background: none; color: rgba(255,255,255,.55); }
+.wn-mic svg, .wn-x svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.wn-mic.on { background: #e5484d; animation: wnPulse 1.4s ease-in-out infinite; }
+
+/* Alive: a gentle bob while engines run, a little hop when something lands. */
+.wn.thinking .wn-eyes, .wn.thinking .wn-face svg { animation: wnBob 1.6s ease-in-out infinite; }
+.wn.hop .wn-eyes, .wn.hop .wn-face svg { animation: wnHop .7s cubic-bezier(.3, 1.6, .5, 1); }
+
+@keyframes wnBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes wnBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes wnHop { 0% { transform: translateY(0); } 40% { transform: translateY(-6px); } 70% { transform: translateY(1px); } 100% { transform: translateY(0); } }
+@keyframes wnPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(229,72,77,.5); } 50% { box-shadow: 0 0 0 6px rgba(229,72,77,0); } }
+
+/* Room for the notch above every page title. */
+.fx-main > .fx-page { padding-top: 60px; }
+.fx-glow { animation: fxGlow 1.5s ease-out; }
+@keyframes fxGlow { 0%, 60% { box-shadow: 0 0 0 3px rgba(242,163,58,.75), 0 0 28px rgba(242,163,58,.35); } 100% { box-shadow: 0 0 0 0 rgba(242,163,58,0); } }
+
+@media (max-width: 900px) {
+  .wn { top: 53px; --wn-offset: 0px !important; --wn-w-fold: 104px; height: 28px; }
+  .wn.open { height: 128px; }
+  .wn-say p { font-size: 14px; }
+  .fx-main > .fx-page { padding-top: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wn, .wn-body, .wn-fold { transition: none; }
+  .wn-eyes i, .wn.thinking .wn-eyes, .wn.thinking .wn-face svg, .wn.hop .wn-eyes, .wn.hop .wn-face svg, .wn-mic.on, .fx-glow { animation: none; }
+}
