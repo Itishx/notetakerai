@@ -749,6 +749,7 @@ export default function BrainoFinal() {
           <div className="hb2-faq-side">
             <h3 className="hb2-faq-h aff-reveal">Questions</h3>
             <p>Including the ones about what we did not build.</p>
+            <p className="bp-foundry-note">Building a startup? There is a version of Braino that runs your distribution. <Link to="/foundry">Meet Braino Foundry →</Link></p>
           </div>
           <div className="hb2-faq-list">
             {FAQ.map((f) => (

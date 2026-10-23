@@ -99,6 +99,7 @@ const DOES = [
 
 const FAQS = [
   { q: "What is Braino?", a: "A companion who lives in your Mac's notch. You say what you want, and he does it in the apps you already use." },
+  { q: "What is Braino Foundry?", a: "Braino, as your startup's CMO. He gets your product found on Google and AI, gets it seen with posts and launch listings, and finds the people asking for what you made, so you get your first users and first paying customers. You only say yes. See affctve.com/foundry." },
   { q: "What is AffectiveOS?", a: "The layer we built that Braino runs on. It lets the Mac you already own see your screen, hear you, talk back, use your apps and remember you." },
   { q: "Do I have to install a new operating system?", a: "No. AffectiveOS runs on top of macOS. You install Braino, and that is it." },
   { q: "Who makes Braino?", a: "Affective, a small product company in Bengaluru. Braino is the first thing we have built." },

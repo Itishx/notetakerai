@@ -740,3 +740,5 @@
   .bp .bft-more { grid-column: 1 / -1; }
 }
 @media (max-width: 520px) { .bp .bft-cols { grid-template-columns: 1fr 1fr; } }
+
+.bp-foundry-note { margin-top: 14px; font-size: 15px; } .bp-foundry-note a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
