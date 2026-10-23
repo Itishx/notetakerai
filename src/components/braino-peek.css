@@ -1,0 +1,66 @@
+/* Big thin-outlined Braino peeking up from the bottom of a section. */
+.bpk {
+  position: relative;
+  width: 100%;
+  height: clamp(220px, 34vw, 440px);
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--a-ink, #16150f);
+  max-width: 100%;
+}
+.bpk svg {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  transform: translateX(-50%);
+  width: min(1200px, 100%);
+  height: auto;
+  overflow: visible;
+}
+.bpk-head, .bpk-fold, .bpk-eye, .bpk-glass {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+.bpk-head { opacity: .32; }
+.bpk-fold { opacity: .18; }
+.bpk-eye { opacity: .45; fill: var(--a-surface, #faf9f5); }
+.bpk-glass { opacity: .4; stroke-width: 2; }
+.bpk-pupil { fill: currentColor; opacity: .85; }
+.bpk-glint { fill: var(--a-bg, #f4f2ec); }
+@media (max-width: 640px) {
+  .bpk-head, .bpk-fold, .bpk-eye, .bpk-glass { stroke-width: 1.2; }
+}
+
+/* Launch pill above the hero headline. */
+.lpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: 0 0 22px;
+  padding: 5px 5px 5px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--a-ink, #16150f) 14%, transparent);
+  background: var(--a-surface, #faf9f5);
+  color: var(--a-ink, #16150f);
+  font-size: 14px;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: border-color .2s ease, transform .2s ease;
+}
+.lpill:hover { border-color: color-mix(in srgb, var(--a-ink, #16150f) 32%, transparent); }
+.lpill b { font-weight: 650; white-space: nowrap; }
+.lpill .lpill-dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .45; flex: none; }
+.lpill .lpill-txt { color: var(--a-ink-soft, #625f54); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lpill .lpill-go {
+  width: 26px; height: 26px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--a-ink, #16150f);
+  color: var(--a-bg, #f4f2ec);
+  font-size: 13px;
+}
+@media (max-width: 400px) { .lpill { font-size: 13px; gap: 8px; } }

@@ -6,6 +6,8 @@ import { BrainoMascot } from "@/components/BrainoMascot";
 import FoundryFooterGame from "@/components/FoundryFooterGame";
 import "@/components/foundry-footer.css";
 import { DayScroll } from "./BrainoFinal";
+import { BrainoPeek } from "@/components/BrainoPeek";
+import { LaunchPill } from "@/components/LaunchPill";
 import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
@@ -342,6 +344,7 @@ export default function FoundryLanding() {
 
       <header className="aff-hero">
         <div className="aff-wrap">
+          <LaunchPill lead="Braino Foundry is here" text="Read the launch post" href="/labs/introducing-braino-foundry" />
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
               <span className="aff-h1-line">You built it.</span>
@@ -370,6 +373,7 @@ export default function FoundryLanding() {
           </div>
         </div>
       </header>
+      <BrainoPeek variant="foundry" />
 
       <section className="ah-os" id="problem">
         <div className="aff-wrap">
