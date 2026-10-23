@@ -72,19 +72,35 @@ export function Meter({ value, label }: { value: number; label?: string }) {
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/* When to post (2026-10-23): a real week calendar. Seven day columns with the
+   date, today marked, and each post as a card in its platform's colour with
+   its time and whether it is waiting, approved or skipped. */
+const PLAT_COLOR: Record<string, string> = { X: "#111", LinkedIn: "#0a66c2", Reddit: "#ff4500", Instagram: "#d62976", Threads: "#333" };
+const ST_LABEL: Record<string, string> = { waiting: "Waiting", approved: "Approved", skipped: "Skipped" };
 export function WeekStrip({ items }: { items: { day: number; time: string; label: string; status: string }[] }) {
   const today = (new Date().getDay() + 6) % 7;
+  const monday = new Date(); monday.setDate(monday.getDate() - today);
   return (
-    <ol className="fx-week">
-      {DAYS.map((d, i) => (
-        <li key={d} className={i === today ? "today" : ""}>
-          <span className="fx-week-d">{d}</span>
-          {items.filter((x) => x.day === i).sort((a, z) => a.time.localeCompare(z.time)).map((x, j) => (
-            <span key={j} className={`fx-week-i ${x.status}`}><small>{x.time}</small>{x.label}</span>
-          ))}
-        </li>
-      ))}
-    </ol>
+    <div className="fx-cal" role="table" aria-label="This week's posts">
+      {DAYS.map((d, i) => {
+        const date = new Date(monday); date.setDate(monday.getDate() + i);
+        const posts = items.filter((x) => x.day === i).sort((a, z) => a.time.localeCompare(z.time));
+        return (
+          <div key={d} className={`fx-cal-day${i === today ? " today" : ""}${i < today ? " past" : ""}`} role="row">
+            <div className="fx-cal-h"><span>{d}</span><b>{date.getDate()}</b>{i === today && <em>Today</em>}</div>
+            <div className="fx-cal-b">
+              {posts.length ? posts.map((x, j) => (
+                <div key={j} className={`fx-cal-p ${x.status}`} style={{ ["--pc" as string]: PLAT_COLOR[x.label] || "var(--fx-c)" }}>
+                  <small>{x.time}</small>
+                  <b>{x.label}</b>
+                  <span>{ST_LABEL[x.status] || x.status}</span>
+                </div>
+              )) : <p className="fx-cal-none">Nothing</p>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

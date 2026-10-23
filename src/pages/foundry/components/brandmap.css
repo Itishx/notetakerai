@@ -111,3 +111,34 @@
 .fx-ap-group h2 { margin: 0; font-family: var(--a-display); font-weight: 500; font-size: 24px; display: flex; align-items: baseline; gap: 10px; }
 .fx-ap-group h2 span { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; font-weight: 700; color: var(--a-ink-faint); }
 .fx-ap-group > p { margin: 0 0 10px; font-size: 14px; color: var(--a-ink-soft); }
+
+/* When to post: a week calendar. */
+.fx-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.fx-cal-day { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); overflow: hidden; }
+.fx-cal-day.past { opacity: .55; }
+.fx-cal-day.today { border-color: var(--fx-c); box-shadow: 0 0 0 1px var(--fx-c); }
+.fx-cal-h { display: flex; align-items: baseline; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--a-line); }
+.fx-cal-h span { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fx-cal-h b { font-family: var(--a-display); font-weight: 500; font-size: 22px; line-height: 1; }
+.fx-cal-h em { margin-left: auto; font-style: normal; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--fx-c); padding: 2px 7px; border-radius: 999px; }
+.fx-cal-b { flex: 1; display: grid; align-content: start; gap: 6px; padding: 8px; }
+.fx-cal-p { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; border-left: 3px solid var(--pc); background: color-mix(in srgb, var(--pc) 8%, var(--a-bg)); }
+.fx-cal-p small { font-size: 11.5px; color: var(--a-ink-faint); font-variant-numeric: tabular-nums; }
+.fx-cal-p b { font-size: 13.5px; font-weight: 650; }
+.fx-cal-p span { font-size: 11px; font-weight: 600; color: var(--a-ink-soft); }
+.fx-cal-p.approved span { color: var(--fx-r); } .fx-cal-p.skipped { opacity: .45; } .fx-cal-p.skipped b { text-decoration: line-through; }
+.fx-cal-none { margin: 6px 4px; font-size: 12px; color: var(--a-ink-faint); }
+@media (max-width: 900px) { .fx-cal { grid-template-columns: 1fr; } .fx-cal-day { min-height: 0; } .fx-cal-b { grid-auto-flow: column; justify-content: start; } }
+
+/* Launch places as a magazine grid of cards. */
+.fx-lp { list-style: none; margin: 0; padding: 0; display: grid !important; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.fx-lp > li { display: flex !important; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--a-line); border-radius: 18px; background: var(--a-box); border-bottom: 1px solid var(--a-line) !important; transition: border-color .2s, transform .2s; }
+.fx-lp > li:hover { border-color: var(--a-line-strong); transform: translateY(-2px); }
+.fx-lp > li.live { border-color: var(--fx-r); }
+.fx-lp > li.submitted { border-color: color-mix(in srgb, var(--fx-c) 50%, var(--a-line)); }
+.fx-lp-n { display: grid !important; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; }
+.fx-lp-c { display: flex !important; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.fx-lp-a { display: flex !important; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid var(--a-line); }
+.fx-lp-n img { width: 24px; height: 24px; border-radius: 6px; }
+.fx-lp-n b { font-size: 16px; }
+.fx-lp > li > p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--a-ink-soft); }
