@@ -2,167 +2,169 @@ import { useEffect, useState } from "react";
 import "./architecture.css";
 
 /* ============================================================================
-   Architecture (2026-10-23): how Braino Foundry works, in five steps, for the
-   founder to understand and to present. Pick a real request, press Play, and
-   the request travels the five steps with what actually happens at each one.
+   Architecture (2026-10-23): the system we actually built, drawn as one
+   diagram with its real names. Click a box: what it is, why it exists, and
+   one line to say when presenting. Play: one real request lights its path.
    ============================================================================ */
 
-type StepId = 1 | 2 | 3 | 4 | 5;
+type Box = "app" | "logic" | "route" | "fn" | "db" | "apify" | "gpt";
 
-const STEPS: { n: StepId; title: string; role: string; what: string; parts: { h: string; p: string }[] }[] = [
-  {
-    n: 1, title: "Frontend", role: "Where you type and click",
-    what: "The screens you use: onboarding, the dashboard, the three engine pages and Approvals. It collects what you enter and sends it on.",
-    parts: [
-      { h: "React app", p: "affctve.com/foundry/app, the same look as the AffectiveOS site." },
-      { h: "Your input", p: "A product description, your website, your LinkedIn, a pasted reply." },
-    ],
+const BOX: Record<Box, { name: string; tag: string; plain: string; why: string; say: string }> = {
+  app: {
+    name: "Foundry app", tag: "React, on Vercel",
+    plain: "Every screen you see: onboarding, the dashboard, the three engines and Approvals.",
+    why: "It is where the founder types, reads and says yes.",
+    say: "The founder only ever touches this. Everything else happens behind it.",
   },
-  {
-    n: 2, title: "Backend", role: "The application logic",
-    what: "Receives the request, decides what has to happen and in what order, and coordinates the services. This is where the three engines live.",
-    parts: [
-      { h: "Engine logic", p: "Optics, Content and Outreach, and how they feed each other through memory." },
-      { h: "Server routes", p: "A Vercel route for search, and a Supabase function for the AI, so keys never reach your browser." },
-    ],
+  logic: {
+    name: "Engine logic", tag: "engines.ts, in the app",
+    plain: "Decides what runs and in what order: Optics, then Content, then Outreach. Passes what one engine learns to the next.",
+    why: "This is the product: three engines sharing one memory.",
+    say: "The engines feed each other. What Outreach hears becomes Content's topics and Optics' searches.",
   },
-  {
-    n: 3, title: "Services", role: "The specialists it calls",
-    what: "The backend asks three kinds of specialists for help. Each does one thing well.",
-    parts: [
-      { h: "AI model (GPT-5.6)", p: "Reasons, classifies, extracts and writes: reads your site, judges who is a real buyer, writes posts and replies." },
-      { h: "Database", p: "Keeps your projects, founder profile, memory and approvals. Supabase when signed in, this browser otherwise." },
-      { h: "External APIs and tools", p: "Apify reads websites, Google results, Reddit threads and your public LinkedIn headline." },
-    ],
+  route: {
+    name: "Search route", tag: "Vercel · api/foundry-apify",
+    plain: "A small server that holds our Apify key and starts web searches.",
+    why: "So the key never reaches anyone's browser.",
+    say: "Secrets stay on the server. The browser asks, the server searches.",
   },
-  {
-    n: 4, title: "Backend", role: "Prepares the result",
-    what: "Before anything reaches you, the answer is checked and cleaned.",
-    parts: [
-      { h: "Processes the response", p: "Matches names exactly, so ordinary words are never counted as your brand." },
-      { h: "Checks for errors", p: "Repairs broken AI output, retries once, and turns failures into plain sentences." },
-      { h: "Formats the output", p: "Turns raw data into scores, charts, cards and ready-to-post text." },
-    ],
+  fn: {
+    name: "AI function", tag: "Supabase · chat-about-notes",
+    plain: "A small server that holds our OpenAI key and calls GPT-5.6.",
+    why: "Same reason: the AI key stays secret.",
+    say: "Every AI call goes through one server function we control.",
   },
-  {
-    n: 5, title: "Frontend", role: "You get the result",
-    what: "The result appears on screen: your score, the people asking, the posts to approve. Nothing goes out until you say yes.",
-    parts: [
-      { h: "Shown to you", p: "Dashboard, charts, Approvals and the activity feed." },
-      { h: "Your yes", p: "Approve copies the text and opens the site. Posting for you comes next, through n8n." },
-    ],
+  db: {
+    name: "Database", tag: "Supabase · Google sign-in",
+    plain: "Saves your projects, founder profile and memory when you sign in. Without sign-in they stay in your browser.",
+    why: "So your work follows you to any device.",
+    say: "Sign in with Google and Braino remembers everything about you and your product.",
   },
-];
+  apify: {
+    name: "Apify", tag: "the web reader",
+    plain: "Reads the internet for us: up to 5 pages of your website, Google results, your public LinkedIn headline, and Reddit threads found through Google.",
+    why: "The AI cannot browse on its own. Apify fetches real pages.",
+    say: "Apify reads the real web, so nothing is made up: real sites, real Google, real people on Reddit.",
+  },
+  gpt: {
+    name: "GPT-5.6", tag: "OpenAI · the brain",
+    plain: "Thinks and writes: your product card, how ChatGPT would answer your buyers, posts, replies, and who is a real buyer.",
+    why: "It turns raw pages into decisions and words.",
+    say: "GPT-5.6 is the brain. It reads what Apify found and writes in the founder's voice.",
+  },
+};
 
-/* Real requests, and what each step does for them. */
-const FLOWS: { id: string; label: string; say: Record<StepId, string>; uses: ("ai" | "db" | "api")[] }[] = [
+/* One real request, the boxes it lights in order, and what happens at each. */
+const FLOWS: { id: string; label: string; path: { box: Box; text: string }[] }[] = [
   {
-    id: "site", label: "Read my website", uses: ["api", "ai", "db"],
-    say: {
-      1: "You paste rentontime.in and tap Read my website.",
-      2: "The backend asks Apify to crawl up to 5 pages of your site.",
-      3: "Apify returns the page text. GPT-5.6 pulls out the product, buyer, pricing and proof. The card is saved.",
-      4: "Long pages are trimmed, broken output repaired, and the card is shaped into fields.",
-      5: "Your product card appears, ready for you to correct.",
-    },
+    id: "site", label: "Read my website",
+    path: [
+      { box: "app", text: "You paste your website and tap Read my website." },
+      { box: "route", text: "The app asks the search route to read it." },
+      { box: "apify", text: "Apify opens up to 5 pages and brings back the text." },
+      { box: "fn", text: "The text goes to the AI function." },
+      { box: "gpt", text: "GPT-5.6 writes your product card: what you sell, for whom, pricing, proof." },
+      { box: "db", text: "The card is saved to your project." },
+      { box: "app", text: "Your product card appears. You fix anything that is wrong." },
+    ],
   },
   {
-    id: "optics", label: "Check if AI names me", uses: ["ai", "api", "db"],
-    say: {
-      1: "You tap Run on Get found.",
-      2: "Optics takes your 8 buyer questions and runs two checks at once.",
-      3: "GPT-5.6 answers the questions like ChatGPT would. Apify searches Google. Results are saved to memory.",
-      4: "Your name is matched exactly, rivals are counted, and each gap becomes a fix.",
-      5: "You see the score ring, the rivals chart and the fixes to publish.",
-    },
+    id: "optics", label: "Does AI name me?",
+    path: [
+      { box: "app", text: "You tap Run on Get found." },
+      { box: "logic", text: "Optics takes your 8 buyer questions." },
+      { box: "gpt", text: "GPT-5.6 answers them like ChatGPT would, naming the products it recommends." },
+      { box: "apify", text: "At the same time Apify checks who shows up on Google." },
+      { box: "logic", text: "Your name is matched exactly. Each question you lose becomes a fix." },
+      { box: "app", text: "You see your score, who beats you, and what to publish." },
+    ],
   },
   {
-    id: "reply", label: "Someone replied", uses: ["ai", "db"],
-    say: {
-      1: "You paste Riya's reply: does it work with UPI?",
-      2: "Outreach loads her thread and your product memory.",
-      3: "GPT-5.6 drafts your answer and spots the objection. Memory saves UPI as something buyers ask.",
-      4: "The draft is checked, Riya moves to Replied, and UPI becomes a Content topic and an Optics fix.",
-      5: "Your answer waits in Approvals, and the activity feed shows what changed.",
-    },
+    id: "reply", label: "Someone replied",
+    path: [
+      { box: "app", text: "You paste Riya's reply: does it work with UPI?" },
+      { box: "logic", text: "Outreach loads her thread and what Braino knows about your product." },
+      { box: "gpt", text: "GPT-5.6 drafts your answer and spots the question behind it: UPI." },
+      { box: "db", text: "Memory saves UPI as something buyers ask." },
+      { box: "logic", text: "UPI becomes a Content topic and an Optics fix too." },
+      { box: "app", text: "Your answer waits in Approvals for your yes." },
+    ],
   },
 ];
 
 export default function Architecture() {
+  const [sel, setSel] = useState<Box>("app");
   const [flow, setFlow] = useState(FLOWS[0].id);
-  const [at, setAt] = useState<StepId | 0>(0);
-  const [playing, setPlaying] = useState(false);
+  const [at, setAt] = useState(-1);
   const f = FLOWS.find((x) => x.id === flow)!;
+  const playing = at >= 0 && at < f.path.length;
 
   useEffect(() => {
     if (!playing) return;
-    const t = window.setTimeout(() => {
-      if (at >= 5) { setPlaying(false); return; }
-      setAt((a) => ((a || 0) + 1) as StepId);
-    }, at === 0 ? 200 : 2200);
+    setSel(f.path[at].box);
+    const t = window.setTimeout(() => setAt((a) => a + 1), 2300);
     return () => window.clearTimeout(t);
-  }, [playing, at]);
+  }, [at, playing, f]);
 
-  const play = () => { setAt(0); setPlaying(true); };
-  const pick = (id: string) => { setFlow(id); setAt(0); setPlaying(false); };
-  const show = (at || 1) as StepId;
+  const lit = (b: Box) => (playing ? f.path[at].box === b : sel === b);
+  const seen = (b: Box) => playing && f.path.slice(0, at).some((s) => s.box === b);
+  const B = ({ id }: { id: Box }) => (
+    <button className={`ar-box b-${id}${lit(id) ? " lit" : ""}${seen(id) ? " seen" : ""}`} onClick={() => { setAt(-1); setSel(id); }}>
+      <b>{BOX[id].name}</b><small>{BOX[id].tag}</small>
+    </button>
+  );
+  const info = BOX[sel];
 
   return (
     <div className="ar">
       <header className="ar-head">
-        <div>
-          <p className="ar-kicker">Architecture</p>
-          <h1>How Braino Foundry works, in five steps.</h1>
-          <p className="ar-sub">Every request takes the same path: from your screen, through the logic and the services, and back to your screen. Pick one and press Play.</p>
-        </div>
+        <p className="ar-kicker">Architecture</p>
+        <h1>What we built, and how a request moves through it.</h1>
+        <p className="ar-sub">Click any box to see what it does. Or pick a request and press Play to watch it travel.</p>
       </header>
 
-      <div className="ar-controls">
-        <div className="ar-seg" role="tablist" aria-label="Pick a request">
-          {FLOWS.map((x) => <button key={x.id} className={flow === x.id ? "on" : ""} onClick={() => pick(x.id)}>{x.label}</button>)}
+      <div className="ar-grid">
+        {/* The diagram, top to bottom: the founder, the app, the servers, the outside services */}
+        <div className="ar-map">
+          <div className="ar-lane"><span className="ar-lane-k">Founder</span><div className="ar-you">You</div></div>
+          <span className="ar-v" aria-hidden />
+          <div className="ar-lane"><span className="ar-lane-k">In the browser</span><div className="ar-row two"><B id="app" /><B id="logic" /></div></div>
+          <span className="ar-v" aria-hidden />
+          <div className="ar-lane"><span className="ar-lane-k">Our servers</span><div className="ar-row three"><B id="route" /><B id="fn" /><B id="db" /></div></div>
+          <span className="ar-v" aria-hidden />
+          <div className="ar-lane"><span className="ar-lane-k">Outside services</span><div className="ar-row two"><B id="apify" /><B id="gpt" /></div></div>
+          <p className="ar-key">Keys for Apify and OpenAI live only on our servers. The browser never sees them.</p>
         </div>
-        <button className="ar-play" onClick={play}>{playing ? "Playing" : at === 5 ? "Play again" : "Play"}</button>
+
+        {/* What the selected box is, in plain words */}
+        <aside className="ar-info" key={sel}>
+          <p className="ar-info-tag">{info.tag}</p>
+          <h2>{info.name}</h2>
+          <p>{info.plain}</p>
+          <p className="ar-why"><b>Why it exists</b>{info.why}</p>
+          <div className="ar-say"><b>Say this</b><p>"{info.say}"</p></div>
+        </aside>
       </div>
 
-      {/* The path: five stations, a packet travelling between them */}
-      <div className="ar-track" aria-label="The five steps">
-        {STEPS.map((s, i) => (
-          <div key={s.n} className="ar-track-cell">
-            <button className={`ar-node s${s.n}${at === s.n ? " live" : ""}${at > s.n ? " done" : ""}`} onClick={() => { setPlaying(false); setAt(s.n); }}>
-              <span className="ar-node-n">{s.n}</span>
-              <b>{s.title}</b>
-              <small>{s.role}</small>
-            </button>
-            {i < 4 && <span className={`ar-link${at > s.n ? " done" : ""}${at === s.n && playing ? " flow" : ""}`} aria-hidden><i /></span>}
+      <section className="ar-play-sec">
+        <div className="ar-controls">
+          <div className="ar-seg" role="tablist" aria-label="Pick a request">
+            {FLOWS.map((x) => <button key={x.id} className={flow === x.id ? "on" : ""} onClick={() => { setFlow(x.id); setAt(-1); }}>{x.label}</button>)}
           </div>
-        ))}
-      </div>
+          <button className="ar-play" onClick={() => setAt(0)}>{playing ? "Playing" : "Play"}</button>
+        </div>
+        <ol className="ar-path">
+          {f.path.map((s, i) => (
+            <li key={i} className={`${i === at ? "now" : ""}${playing && i < at ? " done" : ""}`} onClick={() => { setAt(-1); setSel(s.box); }}>
+              <span className="ar-path-n">{i + 1}</span>
+              <span className="ar-path-box">{BOX[s.box].name}</span>
+              <span className="ar-path-t">{s.text}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-      {/* The services row, lit when this request uses them */}
-      <div className={`ar-services${show === 3 ? " live" : ""}`}>
-        {([["ai", "AI model", "GPT-5.6 reasons and writes"], ["db", "Database", "Supabase or this browser"], ["api", "External APIs", "Apify: sites, Google, Reddit"]] as const).map(([k, h, p]) => (
-          <div key={k} className={`ar-svc${f.uses.includes(k) ? " used" : ""}`}><b>{h}</b><small>{p}</small></div>
-        ))}
-      </div>
-
-      {/* What happens right now, for this request */}
-      <div className="ar-now" key={`${flow}-${show}`}>
-        <span className="ar-now-n">Step {show}</span>
-        <p>{f.say[show]}</p>
-      </div>
-
-      {/* The full explanation of each step */}
-      <ol className="ar-steps">
-        {STEPS.map((s) => (
-          <li key={s.n} className={`ar-step${at === s.n ? " live" : ""}`}>
-            <div className="ar-step-h"><span className={`ar-dot s${s.n}`}>{s.n}</span><div><b>{s.title}</b><small>{s.role}</small></div></div>
-            <p className="ar-step-what">{s.what}</p>
-            <ul>{s.parts.map((p) => <li key={p.h}><b>{p.h}</b><span>{p.p}</span></li>)}</ul>
-          </li>
-        ))}
-      </ol>
-
-      <p className="ar-foot">In one line: your screen sends a request, the backend decides what to do, the AI, the database and outside tools do the work, the backend checks and shapes the answer, and your screen shows it for your yes.</p>
+      <p className="ar-foot"><b>In one line:</b> a React app on Vercel; secrets stay on our servers, a Vercel route for reading the web through Apify and a Supabase function for GPT-5.6; projects are saved in Supabase; the founder approves everything.</p>
     </div>
   );
 }
