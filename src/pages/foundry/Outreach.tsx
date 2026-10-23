@@ -40,7 +40,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
   const lastUs = [...x.thread].reverse().find((m) => m.from === "us");
 
   return (
-    <article className={`fx-person ${x.stage}`}>
+    <article className={`fx-person ${x.stage}`} data-person={x.id}>
       <header className="fx-person-h">
         <span className="fx-person-av">{PERSON_PLATFORM_LABEL[x.platform || "reddit"].charAt(0)}</span>
         <span className="fx-person-who"><a className="fx-person-t" href={x.url} target="_blank" rel="noopener noreferrer">{x.title}</a><small>{whereOf(x)}</small></span>
@@ -110,7 +110,21 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
 }
 
 export default function Outreach({ p, up, busy, run, go }: PageProps) {
-  const [view, setView] = useState<Stage | "all" | "board">("all");
+  /* Arriving from Braino's notch: open on that stage and make that person's
+     card glow for a moment (same light pattern as foundry-focus-topic). */
+  const [focus] = useState(() => { try { const f = { person: sessionStorage.getItem("foundry-focus-person") || "", stage: sessionStorage.getItem("foundry-focus-stage") || "" }; sessionStorage.removeItem("foundry-focus-person"); sessionStorage.removeItem("foundry-focus-stage"); return f; } catch (_) { return { person: "", stage: "" }; } });
+  const [view, setView] = useState<Stage | "all" | "board">(() => (STAGES.includes(focus.stage as Stage) ? (focus.stage as Stage) : "all"));
+  useEffect(() => {
+    if (!focus.person) return;
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-person="${CSS.escape(focus.person)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("fx-glow");
+      window.setTimeout(() => el.classList.remove("fx-glow"), 1500);
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [focus.person]);
   const [find, setFind] = useState("");
   const [plat, setPlat] = useState<PersonPlatform | "all">("all");
   const drafting = useRef(false);

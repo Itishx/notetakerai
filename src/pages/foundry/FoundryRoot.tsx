@@ -19,6 +19,9 @@ import Memory from "./Memory";
 import Architecture from "./Architecture";
 import FirstRun from "./FirstRun";
 import WebNotch from "./components/WebNotch";
+import { brainoLine, counts, type Go } from "./braino-lines";
+import { moveStage } from "./actions";
+import { copy } from "./lib";
 import "../affective.css";
 import "./foundry.css";
 import "./redesign.css";
@@ -105,6 +108,10 @@ export default function FoundryRoot() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sure, setSure] = useState(false);
   const [notchOpen, setNotchOpen] = useState(false);
+  const [greet, setGreet] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [hop, setHop] = useState(false);
+  const [navKey, setNavKey] = useState(0);
 
   const active = projects.find((p) => p.id === activeId) || projects[0] || null;
   useEffect(() => { if (!projects.length) create(); }, [projects.length, create]);
@@ -137,13 +144,44 @@ export default function FoundryRoot() {
     if (Date.now() >= active.lastRun + WEEK) runner.all();
   }, [active?.id, active?.autopilot, active?.lastRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* Braino on the web: he greets you once a day per project, then rests
+     folded. He never speaks on his own after that. */
+  const anyBusy = !!active && Object.values(busy[active.id] || {}).some(Boolean);
+  const wasBusy = useRef(false);
+  const doHop = useCallback(() => { setHop(true); window.setTimeout(() => setHop(false), 750); }, []);
+  useEffect(() => {
+    if (wasBusy.current && !anyBusy) { setFinished(true); doHop(); }
+    wasBusy.current = anyBusy;
+  }, [anyBusy, doHop]);
+  useEffect(() => {
+    if (!active || sync === "loading" || launching[active.id]) return;
+    const k = `foundry-braino-greet-${active.id}`, today = new Date().toDateString();
+    let seen = "";
+    try { seen = localStorage.getItem(k) || ""; localStorage.setItem(k, today); } catch (_) { /* private */ }
+    if (seen === today) return;
+    setGreet(true); setNotchOpen(true);
+  }, [active?.id, sync, launching[active?.id || ""]]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Someone replied since you last looked: a little hop.
+  const repliedN = active ? counts(active).replied.length : 0;
+  useEffect(() => {
+    if (!active) return;
+    const k = `foundry-braino-replied-${active.id}`;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(k) || 0); localStorage.setItem(k, String(repliedN)); } catch (_) { /* private */ }
+    if (repliedN > seen) doHop();
+  }, [active?.id, repliedN]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closeNotch = () => { setNotchOpen(false); setGreet(false); setFinished(false); };
+
   if (!active || !runner || sync === "loading") return <div className="aff fx" data-theme={theme}><div className="fx-loading">Loading your projects</div></div>;
   const up = (fn: (p: Project) => Project) => update(active.id, fn);
   const pb = busy[active.id] || {};
 
+  const line = brainoLine(active, pb, { greeting: greet, finished });
+
   if (!active.onboarded) {
     return (
       <div className="aff fx" data-theme={theme}>
+        <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={closeNotch} text={line.text} buttons={[]} dot={false} />
         <Onboarding project={active} update={up} theme={theme} onStart={() => { setLaunching((l) => ({ ...l, [active.id]: true })); setPage("dashboard"); runner.all(); }} />
         {projects.length > 1 && <button className="fo-out" onClick={() => setActiveId(projects.find((p) => p.id !== active.id)!.id)}>Back to my other project</button>}
         {!user && <button className="fo-signin" onClick={signIn}>Sign in to save your work</button>}
@@ -156,6 +194,32 @@ export default function FoundryRoot() {
   }
 
   const go = (id: PageId) => { setPage(id); setNavOpen(false); window.scrollTo({ top: 0 }); };
+  /* "Send it" on a reply: the same as "Copy answer, open" in Reach people,
+     then they move to Talking. Nothing goes out without this tap. */
+  const sendReply = (id: string) => {
+    const x = active.people.find((y) => y.id === id);
+    const answer = x && [...x.thread].reverse().find((m) => m.from === "us");
+    if (!x || !answer) return false;
+    void copy(answer.text);
+    window.open(x.url, "_blank", "noopener");
+    moveStage(up, x, "talking");
+    return true;
+  };
+  const act = (g: Go) => {
+    if ("do" in g) {
+      if (g.do === "run-all") { runner.all(); setGreet(false); setFinished(false); return; }
+      if (g.do === "send") sendReply(g.person);
+      closeNotch();
+      return;
+    }
+    try {
+      if (g.person) sessionStorage.setItem("foundry-focus-person", g.person);
+      if (g.stage) sessionStorage.setItem("foundry-focus-stage", g.stage);
+    } catch (_) { /* private */ }
+    setNavKey((k) => k + 1);
+    go(g.page);
+    closeNotch();
+  };
   const props = { p: active, up, busy: pb, run: runner, go, me: settings };
   const waiting = waitingCount(active);
   const ql = q.trim().toLowerCase();
@@ -164,7 +228,7 @@ export default function FoundryRoot() {
 
   return (
     <div className="aff fx" data-theme={theme} style={{ ["--wn-offset" as string]: mini ? "36px" : "130px" } as React.CSSProperties}>
-      <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={() => setNotchOpen(false)} text={waiting ? `${waiting} things are ready for your yes.` : "All caught up."} buttons={waiting ? [{ label: "Open Approvals", onClick: () => { go("approvals"); setNotchOpen(false); } }] : []} dot={waiting > 0} />
+      <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={closeNotch} text={line.text} buttons={line.actions.map((a) => ({ label: a.label, onClick: () => act(a.go) }))} dot={waiting > 0 || repliedN > 0} thinking={anyBusy} hop={hop} />
       <div className={`fx-shell${mini ? " mini" : ""}`}>
         <aside className={`fx-side ${navOpen ? "open" : ""}`}>
           <div className="fx-side-top">
@@ -247,12 +311,12 @@ export default function FoundryRoot() {
             <span>{NAV.find((n) => n.id === page)?.label}</span>
             {waiting > 0 ? <button className="fx-badge" onClick={() => go("approvals")}>{waiting}</button> : <span />}
           </div>
-          {page === "dashboard" && <Dashboard {...props} />}
-          {page === "optics" && <Optics {...props} />}
-          {page === "content" && <Content {...props} />}
-          {page === "outreach" && <Outreach {...props} />}
-          {page === "approvals" && <Approvals {...props} />}
-          {page === "memory" && <Memory {...props} />}
+          {page === "dashboard" && <Dashboard key={navKey} {...props} />}
+          {page === "optics" && <Optics key={navKey} {...props} />}
+          {page === "content" && <Content key={navKey} {...props} />}
+          {page === "outreach" && <Outreach key={navKey} {...props} />}
+          {page === "approvals" && <Approvals key={navKey} {...props} />}
+          {page === "memory" && <Memory key={navKey} {...props} />}
           {page === "architecture" && <Architecture />}
         </main>
       </div>
