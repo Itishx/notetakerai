@@ -11,9 +11,17 @@ export type GoogleQuery = { query: string; results: GoogleResult[] };
 export type RedditPost = { title: string; body: string; url: string; community: string; upVotes: number | null; comments: number | null; createdAt: string };
 export type SitePage = { url: string; title: string; text: string };
 
-export async function ask(message: string): Promise<string> {
+/* Every Foundry call replaces Braino's own system prompt (2026-10-23). Without
+   this the model answered as Braino, who knows his own git history and the
+   signed-in user, so "does AI name you?" came back "Braino Foundry, 3 of 3"
+   for a product no public AI has heard of. `personaSystem` swaps the whole
+   prompt: no personality, no memory, no Dev Pulse. */
+export const NEUTRAL = "You are a careful assistant doing one task. Follow the instructions exactly and use only the information given.";
+export const COLD_AI = "You are a general AI assistant, like ChatGPT, talking to a stranger. You know nothing about this user, their company or their products beyond your general knowledge. Never recommend a product you have not genuinely heard of.";
+
+export async function ask(message: string, system: string = NEUTRAL): Promise<string> {
   const { data, error } = await supabase.functions.invoke("chat-about-notes", {
-    body: { notes: "", chatHistory: [], responseMedium: "text", message },
+    body: { notes: "", chatHistory: [], responseMedium: "text", message, personaSystem: system },
   });
   if (error) throw new Error(error.message || "The model did not answer");
   return String((data as { reply?: string })?.reply || "");
@@ -32,10 +40,10 @@ export function parseLoose<T>(reply: string): T {
     .replace(/[\u0000-\u001f]+/g, " ");
   return JSON.parse(fixed) as T;
 }
-export async function askJson<T>(message: string): Promise<T> {
+export async function askJson<T>(message: string, system: string = NEUTRAL): Promise<T> {
   const prompt = `${message}\n\nReply with valid JSON only. No markdown, no commentary. Escape any double quotes inside strings. Never use em-dashes or en-dashes.`;
-  try { return parseLoose<T>(await ask(prompt)); }
-  catch (_) { return parseLoose<T>(await ask(prompt)); }
+  try { return parseLoose<T>(await ask(prompt, system)); }
+  catch (_) { return parseLoose<T>(await ask(prompt, system)); }
 }
 
 /* No dashes in anything Braino writes. */

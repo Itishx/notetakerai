@@ -1,4 +1,4 @@
-import { apifyStart, apifyWait, ask, askJson, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type RedditPost, type SitePage } from "./lib";
+import { apifyStart, apifyWait, ask, askJson, COLD_AI, clean, googleProof, linkedinSlug, mentions, NO_TOKEN, readJson, uid, type GoogleQuery, type RedditPost, type SitePage } from "./lib";
 import { namedCount } from "./types";
 import { log, type BuyerCard, type Engine, type Fix, type FounderCard, type Made, type Person, type Platform, type Post, type ProductCard, type Project, type ReadNote, type RunEntry, type Stage, type Topic, type TopicSource, type CrawlCheck, type Claim } from "./store";
 
@@ -103,7 +103,7 @@ export async function runOptics(ctx: Ctx) {
 Questions:
 ${qs.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 Return for each: "answer" (your answer as you would say it to the user, 2 to 3 sentences) and "names" (the products you recommended in it, best first, up to 5).
-Return: [{"question": "...", "answer": "...", "names": ["..."]}]`);
+Return: [{"question": "...", "answer": "...", "names": ["..."]}]`, COLD_AI);
     const samples = (await Promise.allSettled(Array.from({ length: RUNS }, ask1))).filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<{ question: string; names: string[]; answer: string }[]>).value);
     if (!samples.length) throw new Error("The AI check did not answer");
     const answers = qs.map((q, i) => {

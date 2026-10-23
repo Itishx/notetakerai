@@ -115,10 +115,10 @@ export default function Optics({ p, up, busy, run }: PageProps) {
             </Section>
           </div>
 
-          <Section title="Question by question" hint="Each row is a question a buyer asks. AI: did the assistant name you. Google: was your site or your exact name on page one. Google only checks 3 searches per run, to keep it fast." explain={o.answers.map((a) => ({ q: a.question, named: a.names.some((n) => mentions(n, name, site)) }))}>
+          <Section title="Question by question" hint="Each row is a question your buyer might ask. AI column: we ask GPT-5.6 the question 3 times, as a stranger would ask ChatGPT, and count how many of the 3 answers name you. It stands in for ChatGPT; it is not ChatGPT itself. Google column: is your site on page one. Only 3 questions are searched on Google per run, the rest say Not searched." explain={o.answers.map((a) => ({ q: a.question, named: a.names.some((n) => mentions(n, name, site)) }))}>
             {o.googleNote && <Note>{o.googleNote} The AI column still works.</Note>}
             <div className="fx-qgrid" role="table">
-              <div className="fx-qgrid-h" role="row"><span>Buyer question</span><span>AI named you</span><span>Google</span></div>
+              <div className="fx-qgrid-h" role="row"><span>Buyer question (tap one for detail)</span><span>AI named you, out of 3 tries</span><span>Google page one</span></div>
               {o.answers.map((a, i) => {
                 const ai = isNamed(p, a);
                 const g = o.google.find((x) => x.query.toLowerCase() === a.question.toLowerCase());
@@ -126,14 +126,16 @@ export default function Optics({ p, up, busy, run }: PageProps) {
                   <details key={i} className="fx-qrow" role="row">
                     <summary>
                       <span>{a.question}</span>
-                      <span className={`fx-yes ${ai ? "y" : (a.hits || 0) > 0 ? "m" : "n"}`}>{a.runs ? `${a.hits || 0} of ${a.runs}` : ai ? "Named" : "Not named"}</span>
-                      <span className={`fx-yes ${g ? (g.found ? "y" : "n") : "na"}`}>{g ? (g.found ? "Page one" : "Not found") : "Not checked"}</span>
+                      <span className={`fx-yes ${ai ? "y" : (a.hits || 0) > 0 ? "m" : "n"}`}>{a.runs ? ((a.hits || 0) === 0 ? `Never (0 of ${a.runs})` : `${a.hits} of ${a.runs} tries`) : ai ? "Named" : "Not named"}</span>
+                      <span className={`fx-yes ${g ? (g.found ? "y" : "n") : "na"}`}>{g ? (g.found ? "Yes" : "No") : "Not searched"}</span>
                     </summary>
                     <div className="fx-qrow-b">
-                      {a.answer && <><small>What AI said, word for word</small><blockquote className="fx-said">{a.answer}</blockquote></>}
+                      <small>Who we asked</small>
+                      <p>GPT-5.6, set up like ChatGPT talking to a stranger: it knows nothing about you. We asked "{a.question}" {a.runs || 1} {(a.runs || 1) === 1 ? "time" : "times"}{a.runs ? `, and it named you in ${a.hits || 0}` : ""}.</p>
+                      {a.answer && <><small>What it said, word for word{a.runs && (a.hits || 0) > 0 ? " (an answer that named you)" : ""}</small><blockquote className="fx-said">{a.answer}</blockquote></>}
                       <small>Where you were found</small>
                       {ai || g?.found ? (
-                        <ul>{ai && <li>Named by the AI assistant</li>}{g?.found && <li><a href={g.found} target="_blank" rel="noopener noreferrer">{hostOf(g.found)}</a> on Google</li>}</ul>
+                        <ul>{ai && <li>In the AI's answer, {a.hits || 1} of {a.runs || 1} tries</li>}{g?.found && <li><a href={g.found} target="_blank" rel="noopener noreferrer">{hostOf(g.found)}</a> on Google</li>}</ul>
                       ) : <p>Nowhere yet for this question.</p>}
                       <small>Named instead</small>
                       <p>{a.names.filter((n) => !mentions(n, name, site)).join(", ") || "No one"}</p>
@@ -170,8 +172,9 @@ export default function Optics({ p, up, busy, run }: PageProps) {
               </ol>
             ) : <Empty title="No fixes">You are named everywhere Optics looked. Add more buyer questions on Product and founder.</Empty>}
           </Section>
-          <Section title="Your real buyer questions" explain={{ questions: p.memory.buyer.questions }}>
-            <p className="fx-small">Right now Optics checks questions Braino guessed from your description. Paste what people really search, one per line, or drop the Queries export from Google Search Console. The top 8 are checked on the next run.</p>
+          <Section title="Check real searches instead of guesses (optional)" explain={{ questions: p.memory.buyer.questions }}>
+            <p className="fx-small"><b>Why this is here:</b> the 8 questions above were guessed by Braino from your description. Guesses are fine to start. If you know what people actually type, the check gets more accurate.</p>
+            <p className="fx-small"><b>What to do:</b> paste real searches below, one per line, then tap Use these and Run Optics. Where to find them: words customers used when they emailed or called you, or, if your site is on Google Search Console, its Queries export (upload the file). Nothing to add? Skip this.</p>
             <textarea className="fx-paste" rows={4} value={paste} placeholder={"best app for pg rent reminders\nhow to collect rent on upi automatically"} onChange={(e) => setPaste(e.target.value)} />
             <div className="fx-acts">
               <button className="fx-btn sm" disabled={!paste.trim()} onClick={() => applyQuestions(paste)}>Use these</button>
