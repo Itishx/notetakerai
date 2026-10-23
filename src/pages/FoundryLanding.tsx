@@ -293,14 +293,25 @@ export default function FoundryLanding() {
         <div className="aff-wrap">
           <p className="ah-kicker">The problem</p>
           <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Building got easy. Getting seen did not." /></h2>
-          <p className="fl-lead aff-reveal">Every day, founders post the same thing on Reddit and X: "I built it, I launched it, and nobody came." Building is now as easy as describing your app. What if getting it seen was just as easy? There you go. We made it happen for you.</p>
+          <div className="fl-prob aff-reveal">
+            <p className="fl-prob-k">What founders post, every day, on Reddit and X</p>
+            <div className="fl-prob-q">
+              <blockquote>"I built it, I launched it, and nobody came."</blockquote>
+              <blockquote>"Three months of building. Twelve sign-ups. All friends."</blockquote>
+              <blockquote>"How do you get your first users? I have tried everything."</blockquote>
+            </div>
+            <div className="fl-prob-turn">
+              <p>Building is now as easy as describing your app.</p>
+              <p><b>What if getting it seen was just as easy?</b> There you go. We made it happen for you.</p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="ah-os" id="engines">
         <div className="aff-wrap">
           <p className="ah-kicker">The fix</p>
-          <h2 className="aff-h1 ah-os-line fl-meet">Meet <span className="fl-meet-m" aria-hidden="true"><BrainoMascot variant="foundry" size={64} /></span> Braino Foundry, your CMO.</h2>
+          <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Meet Braino Foundry, your CMO." /></h2>
           <p className="fl-lead aff-reveal">Braino becomes your chief marketing officer. He runs your marketing and distribution on autopilot, all in one place, and you only say yes. Getting seen brings your first users. Some of them pay.</p>
           <ul className="fl-eng aff-reveal">
             {ENGINES.map((e, i) => (
@@ -313,6 +324,20 @@ export default function FoundryLanding() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      <section className="ah-os fl-nums-sec" id="numbers">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Every run, done for you</p>
+          <div className="fl-nums aff-reveal">
+            <div><b>24</b><span>AI answers checked</span><small>8 buyer questions, asked 3 times each</small></div>
+            <div><b>5</b><span>platforms searched for people</span><small>Reddit, X, LinkedIn, Quora, forums</small></div>
+            <div><b>56</b><span>launch places ranked</span><small>your best 18 picked, each listing written</small></div>
+            <div><b>3</b><span>engines, one memory</span><small>each one feeds the other two</small></div>
+            <div><b>0</b><span>things sent without your yes</span><small>you approve everything</small></div>
+            <div><b>2 min</b><span>to your first full run</span><small>from your website to your dashboard</small></div>
+          </div>
         </div>
       </section>
 

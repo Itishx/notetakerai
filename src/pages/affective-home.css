@@ -873,4 +873,4 @@
 .hb2-faq-list details p { font-size: 16px; line-height: 1.6; }
 
 /* Second product card on the homepage: Braino Foundry. */
-.hb6-foundry { margin-top: 24px; }
+.hb6-also { margin: 18px 0 0; font-size: 16px; color: var(--a-ink-soft); } .hb6-also a { color: var(--a-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

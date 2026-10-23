@@ -618,30 +618,8 @@ export default function Affective() {
           )}
           </div>
 
-          {/* Braino Foundry: the same Braino, as a founder's co-founder (2026-10-23). */}
-          <div className="hb6-box hb6-foundry aff-reveal">
-            <div className="hb6-head">
-              <div>
-                <p className="ah-kicker">For your startup · Open to try</p>
-                <div className="hb5-name">
-                  <h2>Braino Foundry</h2>
-                  <BrainoMascot variant="foundry" size={92} className="hb4-him" />
-                </div>
-                <p className="hb6-line">Braino as your CMO. He gets your product found, gets it seen, and finds the people asking for it today, so you get your first users and your first paying customers. You only say yes.</p>
-              </div>
-              <div className="hb6-side">
-                <div className="hb5-go">
-                  <Link to="/foundry" className="aff-cta">Meet Braino Foundry</Link>
-                  <Link to="/foundry/app" className="aff-cta aff-cta-ghost">Try it free</Link>
-                </div>
-              </div>
-            </div>
-            <ul className="hb4-does hb6-jobs">
-              <li className="is-key"><small>Get found</small><h3>Named by AI and Google</h3><p>Checks if ChatGPT-style AI and Google name you when buyers ask, and writes every fix.</p></li>
-              <li className="is-key"><small>Be seen</small><h3>Posts and launch places</h3><p>A week of posts in your voice, and your listings on the 18 best launch sites.</p></li>
-              <li className="is-key"><small>Reach people</small><h3>People asking today</h3><p>Real people on Reddit, X, LinkedIn and Quora, with one honest reply each.</p></li>
-            </ul>
-          </div>
+          {/* One small line, not a second card (2026-10-23). */}
+          <p className="hb6-also aff-reveal">Braino runs your day. There is also a version of him that runs your startup. <Link to="/foundry">Meet Braino Foundry →</Link></p>
           <div className="hb6-demo">
           <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
           <p className="hb6-story aff-reveal">We grew up watching Tony Stark talk to Jarvis and Jarvis just get it done. That is the future of computing we believe in, and now it is on the Mac you already own. Say it once, and Braino does it for you.</p>
