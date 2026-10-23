@@ -148,7 +148,7 @@ export default function FoundryLanding() {
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                We take care of your marketing. We help you get found, get seen and make your first revenue. You tell us what you built, we do most of the work, and you just watch it happen and say yes.
+                We take care of your marketing. We help you get found and get seen, which brings you your first users. Some will try it for free, some will pay, and that is your first revenue. You tell us what you built, we do most of the work, and you just watch it happen and say yes.
               </p>
               <div className="aff-hero-cta">
                 <Link to="/foundry/app" className="aff-cta">Start free</Link>
@@ -178,6 +178,7 @@ export default function FoundryLanding() {
           </h2>
           <div className="ah-os-say hb6-say aff-reveal">
             <p>8 of the 8 founders we interviewed named distribution their biggest problem, and none of them pays for a tool to fix it. They post into the void, hunt for customers by hand, and never know what worked.</p>
+            <p>Braino Foundry fixes that. As more people see you, more of them try what you built. Your first users come first, and from them, your first paying customers.</p>
           </div>
           <div className="hb6-box aff-reveal">
             <div className="hb6-head">
