@@ -57,9 +57,33 @@ function Pricing() {
 }
 
 const ENGINES = [
-  { key: "Get found", sub: "Optics", h: "SEO, AEO and GEO.", p: "Asks Google and AI the questions your buyers ask, sees who gets named, and writes the fixes so it starts being you." },
-  { key: "Be seen", sub: "Content", h: "Posts, articles, launch places.", p: "Writes in your voice for X, LinkedIn and Reddit, plans the week, and gets you listed where new products get found." },
-  { key: "Reach people", sub: "Outreach", h: "Reddit, X, LinkedIn, Quora, forums.", p: "Finds real people asking for what you made today, and writes one honest reply to each." },
+  { key: "Get found", sub: "Optics", h: "SEO, AEO and GEO.", p: "Your SEO agency. Gets you found on Google and named by AI.",
+    does: [
+      "Asks ChatGPT-style AI and Google the questions your buyers really search, 3 times each",
+      "Shows who gets named instead of you, word for word, with sources",
+      "Checks if AI can even read your site, and what blocks it",
+      "Finds real searches from Google autocomplete, People also ask and Reddit",
+      "Writes the fix for every gap: FAQ pages, comparison pages, answers",
+      "Re-checks every week and shows if AI names you more",
+    ], gets: "A score, the gaps, and every fix written and ready" },
+  { key: "Be seen", sub: "Content", h: "Posts, articles, launch places.", p: "Your content team. Puts you in front of buyers every week.",
+    does: [
+      "Writes posts for X, LinkedIn, Reddit, Instagram and Threads, in your voice",
+      "Every topic comes from something real: a buyer's words or an AI gap",
+      "Plans the week: what goes out, where, and at what time",
+      "Picks your best 18 of 56 launch places: Product Hunt, Hacker News, BetaList and more",
+      "Writes each listing to that site's rules, with the maker's first comment",
+      "Writes long articles that AI and Google quote",
+    ], gets: "A full week of posts and your launch listings, ready for a yes" },
+  { key: "Reach people", sub: "Outreach", h: "Reddit, X, LinkedIn, Quora, forums.", p: "Your sales rep. Finds the people asking today and starts the conversation.",
+    does: [
+      "Finds people asking for what you made, today, on 5 platforms",
+      "Scores how ready each one is to buy, from how they wrote it",
+      "Writes one honest reply per person, shaped for each platform",
+      "Paste their answer and it drafts yours, toward a call or a payment",
+      "Follows up after 3 days of silence, for your yes",
+      "Tracks everyone: Found, Messaged, Replied, Talking, Paid",
+    ], gets: "Real people, a reply each, and a pipeline to your first paying customer" },
 ];
 
 /* Product shots (2026-10-23): drawn in code from what /foundry/app really
@@ -275,12 +299,19 @@ export default function FoundryLanding() {
 
       <section className="ah-os" id="engines">
         <div className="aff-wrap">
-          <BrainoMascot variant="foundry" size={88} className="fl-mascot" />
           <p className="ah-kicker">The fix</p>
-          <h2 className="aff-h1 ah-os-line" data-lit><Lit text="Meet Braino Foundry, your CMO." /></h2>
+          <h2 className="aff-h1 ah-os-line fl-meet">Meet <span className="fl-meet-m" aria-hidden="true"><BrainoMascot variant="foundry" size={64} /></span> Braino Foundry, your CMO.</h2>
           <p className="fl-lead aff-reveal">Braino becomes your chief marketing officer. He runs your marketing and distribution on autopilot, all in one place, and you only say yes. Getting seen brings your first users. Some of them pay.</p>
           <ul className="fl-eng aff-reveal">
-            {ENGINES.map((e, i) => <li key={e.key} className={`fl-e${i}`}><small>{e.key}<span>{e.sub}</span></small><h3>{e.h}</h3><p>{e.p}</p></li>)}
+            {ENGINES.map((e, i) => (
+              <li key={e.key} className={`fl-e${i}`}>
+                <small>{e.key}<span>{e.sub}</span></small>
+                <h3>{e.h}</h3>
+                <p>{e.p}</p>
+                <ul className="fl-does">{e.does.map((d) => <li key={d}>{d}</li>)}</ul>
+                <p className="fl-gets"><b>You get</b>{e.gets}</p>
+              </li>
+            ))}
           </ul>
         </div>
       </section>
