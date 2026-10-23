@@ -524,7 +524,7 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date
             <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={[date, clockText(now)]} />
             {parts[on].say ? (
               <NotchSheet className={"ns-big ns-glow bf-ds-ns ns-work"} label="Braino" done={false}
-                extra={parts[on].you ? <p className="bf-ds-did" key={`y${on}`}>You: \u201c{parts[on].you}\u201d</p> : undefined}>
+                extra={parts[on].you ? <p className="bf-ds-did" key={`y${on}`}>You: “{parts[on].you}”</p> : undefined}>
                 <span key={on}>{parts[on].say}</span>
               </NotchSheet>
             ) : (
