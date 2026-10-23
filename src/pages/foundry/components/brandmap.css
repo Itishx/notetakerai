@@ -142,3 +142,18 @@
 .fx-lp-n img { width: 24px; height: 24px; border-radius: 6px; }
 .fx-lp-n b { font-size: 16px; }
 .fx-lp > li > p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--a-ink-soft); }
+
+/* Launch places, editorial (2026-10-23): no boxes. Columns of entries split
+   only by thin top rules, like a magazine index. */
+.fx-lp { gap: 0 36px !important; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important; }
+.fx-lp > li { padding: 20px 0 22px !important; border: 0 !important; border-top: 1px solid var(--a-line) !important; border-radius: 0 !important; background: none !important; transform: none !important; }
+.fx-lp > li:hover { border-top-color: var(--a-ink) !important; }
+.fx-lp > li.live, .fx-lp > li.submitted { border-color: transparent !important; border-top: 1px solid var(--a-line) !important; }
+.fx-lp-n b { font-family: var(--a-display); font-weight: 500; font-size: 19px !important; }
+.fx-lp-n a { color: var(--a-ink); text-decoration: none; }
+.fx-lp-n img { width: 18px !important; height: 18px !important; margin-top: 4px; }
+.fx-lp-st { background: none !important; padding: 0 !important; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fx-lp-st.live { color: var(--fx-r); } .fx-lp-st.submitted { color: var(--fx-c); }
+.fx-lp-c .fx-chip { border: 0 !important; background: none !important; padding: 0 !important; font-size: 12px; color: var(--a-ink-faint); }
+.fx-lp-c .fx-chip + .fx-chip::before { content: "·"; margin-right: 6px; }
+.fx-lp-a { border-top: 0 !important; padding-top: 2px !important; }
