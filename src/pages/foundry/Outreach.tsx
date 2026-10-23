@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import "./components/brandmap.css";
 import { copy, DAY } from "./lib";
 import { followUp, learnObjection, replyTo } from "./engines";
 import { log, STAGES, STAGE_LABEL, type Person, type Stage } from "./store";
@@ -7,7 +8,13 @@ import { approvePerson, moveStage, setPerson } from "./actions";
 import { Meter } from "./components/charts";
 import { Busy, Chip, Empty, Hint, Note, PageHead, Section } from "./components/ui";
 
-function PersonCard({ x, p, up }: { x: Person; p: PageProps["p"]; up: PageProps["up"] }) {
+function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PageProps["up"]; go: PageProps["go"] }) {
+  /* The message may open with one of your own posts ("I wrote about this last
+     week"). Find that post, and say plainly whether it is out yet: the line
+     only makes sense once the post is live. */
+  const openerTopic = x.opener ? p.memory.topics.find((t) => t.title.toLowerCase() === x.opener.toLowerCase()) || p.memory.topics.find((t) => t.title.toLowerCase().includes(x.opener.toLowerCase().slice(0, 24))) : undefined;
+  const openerPosts = openerTopic ? p.posts.filter((q) => q.topicId === openerTopic.id) : [];
+  const openerLive = openerPosts.some((q) => q.status === "approved");
   const [editing, setEditing] = useState(false);
   const [pasting, setPasting] = useState(false);
   const [reply, setReply] = useState("");
@@ -51,7 +58,13 @@ function PersonCard({ x, p, up }: { x: Person; p: PageProps["p"]; up: PageProps[
 
       {x.stage === "found" && x.message && (
         <div className="fx-msg">
-          <small>Your message {x.opener && <span className="fx-src content">opens with your post on {x.opener}</span>}</small>
+          <small>Your message</small>
+          {x.opener && (
+            <div className={`fx-opener${openerLive ? " live" : ""}`}>
+              <p><b>This message mentions one of your own posts:</b> "{x.opener}". {openerLive ? "That post is out, so the line works as it is." : "That post is written but not out yet. Post it first, or the line \"I wrote about this\" won't be true."}</p>
+              <button className="fx-link" onClick={() => go("content")}>{openerPosts.length ? "See the post in Be seen" : "Open Be seen"}</button>
+            </div>
+          )}
           {editing ? <textarea rows={6} value={x.message} onChange={(e) => setPerson(up, x.id, { message: e.target.value })} /> : <p>{x.message}</p>}
         </div>
       )}
@@ -91,7 +104,7 @@ function PersonCard({ x, p, up }: { x: Person; p: PageProps["p"]; up: PageProps[
   );
 }
 
-export default function Outreach({ p, up, busy, run }: PageProps) {
+export default function Outreach({ p, up, busy, run, go }: PageProps) {
   const [view, setView] = useState<Stage | "all">("all");
   const drafting = useRef(false);
   const due = followUpDue(p).filter((x) => !x.followUp);
@@ -126,13 +139,13 @@ export default function Outreach({ p, up, busy, run }: PageProps) {
         <div className="fx-board">
           {STAGES.map((s) => (
             <Section key={s} className={`fx-col ${s}`} title={`${STAGE_LABEL[s]} · ${count(s)}`} hint={s === "found" ? "People asking today. Approve a message to move them to Messaged." : s === "messaged" ? "Waiting for a reply. After 3 quiet days, Braino drafts a follow-up." : s === "replied" ? "They wrote back. Paste their reply to get your answer." : s === "talking" ? "On a call or clearly interested. Ask for the payment." : "Your paying customers."}>
-              {people.filter((x) => x.stage === s).map((x) => <PersonCard key={x.id} x={x} p={p} up={up} />)}
+              {people.filter((x) => x.stage === s).map((x) => <PersonCard key={x.id} x={x} p={p} up={up} go={go} />)}
               {!count(s) && <p className="fx-faint">Nobody here yet.</p>}
             </Section>
           ))}
         </div>
       ) : (
-        <div className="fx-people">{people.filter((x) => x.stage === view).map((x) => <PersonCard key={x.id} x={x} p={p} up={up} />)}{!count(view) && <Empty title={`Nobody in ${STAGE_LABEL[view]}`}>Move people here with the stage menu on each card.</Empty>}</div>
+        <div className="fx-people">{people.filter((x) => x.stage === view).map((x) => <PersonCard key={x.id} x={x} p={p} up={up} go={go} />)}{!count(view) && <Empty title={`Nobody in ${STAGE_LABEL[view]}`}>Move people here with the stage menu on each card.</Empty>}</div>
       )}
       <p className="fx-small">Outreach only writes to one person at a time. Public posts live in Be seen.</p>
     </div>

@@ -50,3 +50,9 @@
 .fx-fid-btn { padding: 6px 12px; border: 1px solid var(--a-line); border-radius: 999px; background: none; color: var(--a-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .fx-fid-btn:hover { border-color: var(--a-ink); }
 .fx-fid-btn.quiet { color: var(--a-ink-faint); }
+
+/* Outreach: a message that mentions your own post. */
+.fx-opener { margin: 6px 0 8px; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--fx-c); background: color-mix(in srgb, var(--fx-c) 8%, transparent); display: grid; gap: 4px; justify-items: start; }
+.fx-opener.live { border-left-color: var(--fx-r); background: color-mix(in srgb, var(--fx-r) 8%, transparent); }
+.fx-opener p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--a-ink-soft); }
+.fx-opener b { color: var(--a-ink); font-weight: 600; }
