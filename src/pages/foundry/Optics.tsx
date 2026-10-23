@@ -91,7 +91,7 @@ export default function Optics({ p, up, busy, run }: PageProps) {
 
   return (
     <div className="fx-page">
-      <PageHead engine="optics" title="Get found" status={o?.answers.length ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
+      <PageHead crumb={p.memory.product.name || "Your product"} engine="optics" title="Get found" status={o?.answers.length ? `Named in ${named} of ${o.answers.length}` : "Not run yet"} last={o?.at || null} onRun={run.optics} running={busy.optics} explainData={o ? { named, of: o.answers.length, rivals, fixes: o.fixes.map((f) => f.what) } : undefined} />
       <Group engine="optics" step={1} title="Can AI see you at all?" line="Before anything else: can AI assistants and Google actually read your website? If they cannot, nothing else here matters." />
       {crawlBlock}
       {(() => {

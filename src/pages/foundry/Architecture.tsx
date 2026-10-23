@@ -118,7 +118,7 @@ export default function Architecture() {
   return (
     <div className="ar">
       <header className="ar-head">
-        <p className="ar-kicker">Architecture</p>
+        <nav className="fx-crumb" aria-label="Breadcrumb"><span>Braino Foundry</span><span><i>/</i>Architecture</span></nav>
         <h1>What we built, and how a request moves through it.</h1>
         <p className="ar-sub">Click any box to see what it does. Or pick a request and press Play to watch it travel.</p>
       </header>

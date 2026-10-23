@@ -1,15 +1,35 @@
 import React from "react";
 import { fmtDay, WEEK } from "./lib";
-import { STAGES, type Stage } from "./store";
+import { STAGES, STAGE_LABEL, type Stage } from "./store";
 import { moves, namedCount, waitingCount, type PageProps } from "./types";
 import { Funnel, KPI, Ring } from "./components/charts";
-import { Busy, Empty, Hint, Note, Section } from "./components/ui";
+import { Busy, Crumb, Empty, ENGINE_LINE, Explain, Icon, IC, Note, Section } from "./components/ui";
 import { BrandMap } from "./components/brandmap";
 
 
 /* Who this is for, before any numbers (2026-10-23): the company and the
    founder sit at the top of the dashboard, so every number below reads in
    context. Editing stays in Product and founder. */
+/* A small delta pill: up green, down red, flat grey. */
+function Delta({ v, note }: { v: number | null; note: string }) {
+  return (
+    <span className="fx-delta-l">
+      {v !== null && <em className={`fx-delta ${v > 0 ? "up" : v < 0 ? "down" : ""}`}>{v > 0 ? "↗" : v < 0 ? "↘" : "→"} {Math.abs(v)}%</em>}
+      <small>{note}</small>
+    </span>
+  );
+}
+/* One bar split into parts, with a legend underneath. */
+function SplitBar({ parts }: { parts: { k: string; label: string; n: number }[] }) {
+  const total = parts.reduce((m, x) => m + x.n, 0);
+  return (
+    <div className="fx-split">
+      <div className="fx-split-bar">{total ? parts.filter((x) => x.n).map((x) => <i key={x.k} className={x.k} style={{ flexGrow: x.n }} title={`${x.label}: ${x.n}`} />) : <i className="none" style={{ flexGrow: 1 }} />}</div>
+      <ul className="fx-split-l">{parts.map((x) => <li key={x.k}><i className={x.k} />{x.label}<b>{x.n}</b></li>)}</ul>
+    </div>
+  );
+}
+
 export function Avatar({ name, photo, size = 56 }: { name: string; photo?: string; size?: number }) {
   const initials = (name || "You").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   return photo
@@ -115,19 +135,103 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
   const next = p.lastRun ? p.lastRun + WEEK : null;
   const spark = (k: "named" | "people" | "approved" | "posts") => p.runs.map((r) => r[k]);
 
+  const last2 = p.runs.slice(-2);
+  const delta = (k: "people" | "approved" | "named") => {
+    if (last2.length < 2) return null;
+    const [a, z] = [last2[0][k] || 0, last2[1][k] || 0];
+    return a ? Math.round(((z - a) / a) * 1000) / 10 : z ? 100 : 0;
+  };
+  const approved = p.posts.filter((x) => x.status === "approved").length + p.people.filter((x) => x.status === "approved").length;
+  const stageNow = Object.fromEntries(STAGES.map((s) => [s, p.people.filter((x) => x.stage === s).length])) as Record<Stage, number>;
+  const recEngines: { e: "optics" | "content" | "outreach"; title: string; icon: string }[] = [
+    { e: "optics", title: "Get found", icon: IC.optics },
+    { e: "content", title: "Be seen", icon: IC.content },
+    { e: "outreach", title: "Reach people", icon: IC.outreach },
+  ];
+
   return (
     <div className="fx-page">
-      <header className="fx-hero fx-hero-top">
-        <span className="fx-eyebrow">{p.memory.product.name || "Your product"} · Dashboard</span>
-        <h1><span className="fx-num">{paid}</span> paying customer{paid === 1 ? "" : "s"}.</h1>
-        <p>{mv[0] ? <>Next move: <button className="fx-inline" onClick={() => (mv[0].id === "run" ? run.all() : go(mv[0].page))}>{mv[0].text}</button></> : "Next move: run the engines again to find more people."}</p>
-        {running && <div className="fx-hero-run"><Busy text={running} /></div>}
-        <div className="fx-autobar">
-          <label className="fx-switch"><input type="checkbox" checked={p.autopilot} onChange={(e) => up((q) => ({ ...q, autopilot: e.target.checked }))} /><i /><span>Autopilot</span></label>
-          <span className="fx-small">{p.autopilot && next ? `Next run ${fmtDay(next)}` : "Off. Runs every week when on."}{p.lastRun ? ` · Last run ${fmtDay(p.lastRun)}` : ""}</span>
-          <button className="fx-btn sm" disabled={!!running} onClick={run.all}>{running ? "Running" : "Run now"}</button>
+      <header className="fx-head fx-dash-head">
+        <div className="fx-head-t">
+          <Crumb items={[p.memory.product.name || "Your product", "Overview"]} />
+          <h1>Overview</h1>
+          <p>{mv[0] ? <>Next move: <button className="fx-inline" onClick={() => (mv[0].id === "run" ? run.all() : go(mv[0].page))}>{mv[0].text}</button></> : "Next move: run the engines again to find more people."}</p>
+        </div>
+        <div className="fx-head-m">
+          <div className="fx-head-b">
+            <button className="fx-ghost" onClick={() => go("approvals")}>Approvals{waitingCount(p) ? ` (${waitingCount(p)})` : ""}</button>
+            <button className="fx-btn" disabled={!!running} onClick={run.all}><Icon d={IC.play} size={14} />{running ? "Running" : "Run now"}</button>
+          </div>
+          {running && <span className="fx-stat live"><Busy text={running} /></span>}
         </div>
       </header>
+
+      <div className="fx-dash-top">
+        <section className="fx-sec fx-stat-card">
+          <header className="fx-sec-h"><h2>Customers</h2><div className="fx-sec-a"><Explain title="Customers" data={{ paid, found: p.people.length, stages: stageNow }} /></div></header>
+          <div className="fx-stat-row">
+            <div className="fx-stat-n">
+              <span>Paying customers</span>
+              <b className="fx-num">{paid}</b>
+              <Delta v={null} note={`of ${p.people.length} found`} />
+            </div>
+            <div className="fx-stat-n">
+              <span>People found</span>
+              <b className="fx-num">{p.people.length}</b>
+              <Delta v={delta("people")} note="vs last run" />
+            </div>
+            <div className="fx-stat-n">
+              <span>You approved</span>
+              <b className="fx-num">{approved}</b>
+              <Delta v={delta("approved")} note={`${waitingCount(p)} waiting`} />
+            </div>
+          </div>
+          <SplitBar parts={STAGES.map((s) => ({ k: s, label: STAGE_LABEL[s], n: stageNow[s] }))} />
+        </section>
+
+        <section className="fx-sec fx-todo">
+          <header className="fx-sec-h">
+            <h2>This week's moves</h2>
+            <div className="fx-sec-a"><Explain title="This week's moves" data={mv.slice(0, 5).map((m) => m.text)} /><button className="fx-icon-b" aria-label="Open Approvals" onClick={() => go("approvals")}><Icon d={IC.arrow} size={16} /></button></div>
+          </header>
+          {mv.length ? (
+            <ol className="fx-moves">
+              {mv.slice(0, 5).map((m) => (
+                <li key={m.id}>
+                  <button onClick={() => (m.id === "run" ? run.all() : go(m.page))}>
+                    <span className="fx-moves-n" aria-hidden />
+                    <span className="fx-moves-t"><b>{m.text}</b><small>{m.why}</small></span>
+                    <i className={`fx-dot ${m.engine === "approvals" ? "outreach" : m.engine}`} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : <Empty title="All clear">Nothing is waiting on you. Run again to find more people and fresh topics.</Empty>}
+          {mv.length > 5 && <p className="fx-faint">{mv.length - 5} more after these.</p>}
+        </section>
+      </div>
+
+      <div className="fx-dash-top two">
+        <section className="fx-sec fx-rec">
+          <header className="fx-sec-h"><h2>Recommended next</h2></header>
+          {recEngines.map((r) => {
+            const m = mv.find((x) => (x.engine === "approvals" ? "outreach" : x.engine) === r.e);
+            return (
+              <button key={r.e} className={`fx-rec-row ${r.e}`} onClick={() => (m?.id === "run" ? run.all() : go(m?.page || r.e))}>
+                <span className="fx-rec-i"><Icon d={r.icon} size={17} /></span>
+                <span className="fx-rec-t"><b>{r.title}{m ? `: ${m.text}` : ""}</b><small>{m ? m.why : ENGINE_LINE[r.e]}</small></span>
+                <Icon d={IC.arrow} size={15} />
+              </button>
+            );
+          })}
+        </section>
+        <section className="fx-sec fx-auto-card">
+          <header className="fx-sec-h"><h2>Autopilot</h2></header>
+          <label className="fx-switch"><input type="checkbox" checked={p.autopilot} onChange={(e) => up((q) => ({ ...q, autopilot: e.target.checked }))} /><i /><span>{p.autopilot ? "On, every week" : "Off"}</span></label>
+          <p className="fx-small">{p.autopilot && next ? `Next run ${fmtDay(next)}` : "Off. Runs every week when on."}</p>
+          <p className="fx-small">{p.lastRun ? `Last run ${fmtDay(p.lastRun)}` : "Not run yet"}</p>
+        </section>
+      </div>
 
       {p.searchNote && <Note>{p.searchNote} Optics still checks AI answers, and Content still writes posts. Outreach needs search to find people.</Note>}
 
@@ -148,24 +252,6 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
               </div>
             </div>
           ) : <Empty title="Not checked yet">Optics asks AI and Google your buyers' questions and sees if you come up.</Empty>}
-        </Section>
-      </div>
-
-      <div className="fx-auto-row">
-        <Section title="This week's moves" hint="Ranked by how close each move is to a paying customer. Tap one to go there." explain={mv.slice(0, 5).map((m) => m.text)}>
-          {mv.length ? (
-            <ol className="fx-moves">
-              {mv.slice(0, 10).map((m, i) => (
-                <li key={m.id}>
-                  <button onClick={() => (m.id === "run" ? run.all() : go(m.page))}>
-                    <span className="fx-moves-n">{i + 1}</span>
-                    <span className="fx-moves-t"><b>{m.text}</b><small>{m.why}</small></span>
-                    <i className={`fx-dot ${m.engine === "approvals" ? "outreach" : m.engine}`} />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : <Empty title="All clear">Nothing is waiting on you. Run again to find more people and fresh topics.</Empty>}
         </Section>
       </div>
 

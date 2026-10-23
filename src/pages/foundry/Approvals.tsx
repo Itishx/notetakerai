@@ -4,7 +4,7 @@ import "./components/brandmap.css";
 import type { PageProps } from "./types";
 import { approveArticle, approvePerson, approvePost, setPerson, setPost, setTopic } from "./actions";
 import { PLATFORM_LABEL } from "./components/previews";
-import { Empty } from "./components/ui";
+import { Crumb, Empty } from "./components/ui";
 import { ItemTable, type TableRow } from "./components/table";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -49,7 +49,7 @@ export default function Approvals({ p, up, go }: PageProps) {
     <div className="fx-page">
       <header className="fx-head">
         <div className="fx-head-t">
-          <span className="fx-eyebrow">One inbox</span>
+          <Crumb items={[p.memory.product.name || "Your product", "Approvals"]} />
           <h1>{todo.length ? `${todo.length} waiting for your yes` : "Approvals"}</h1>
           <p>Every post, message and article waits here. Nothing goes out without your yes.</p>
         </div>

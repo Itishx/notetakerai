@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,20 +20,23 @@ import Architecture from "./Architecture";
 import FirstRun from "./FirstRun";
 import "../affective.css";
 import "./foundry.css";
+import "./redesign.css";
 
 /* Braino Foundry, the app (rebuilt 2026-10-23). Onboarding first, then a calm
    workspace: Dashboard, the three engines, Approvals, and the shared memory.
    The previous chat version is kept at src/pages/FoundryApp.tsx. */
 
 const NAV: { id: PageId; label: string; icon: string; engine?: Engine }[] = [
-  { id: "dashboard", label: "Dashboard", icon: IC.home },
+  { id: "dashboard", label: "Overview", icon: IC.home },
   { id: "optics", label: "Get found", icon: IC.optics, engine: "optics" },
   { id: "content", label: "Be seen", icon: IC.content, engine: "content" },
   { id: "outreach", label: "Reach people", icon: IC.outreach, engine: "outreach" },
   { id: "approvals", label: "Approvals", icon: IC.inbox },
-  { id: "memory", label: "Product and founder", icon: IC.memory },
+  { id: "memory", label: "Product & founder", icon: IC.memory },
   { id: "architecture", label: "Architecture", icon: "M4 5h6v5H4zM14 5h6v5h-6zM9 15h6v5H9zM7 10v2h10v-2M12 12v3" },
 ];
+
+const PROJ_COLORS = ["#6b52c4", "#d9645b", "#3a8f5f", "#b8842a", "#2f6fed", "#8a8577"];
 
 type Busy = Record<string, Partial<Record<Engine | "setup", string>>>;
 
@@ -88,7 +91,16 @@ export default function FoundryRoot() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmDel, setConfirmDel] = useState("");
   const [navOpen, setNavOpen] = useState(false);
-  const [switcher, setSwitcher] = useState(false);
+  const [switcher, setSwitcher] = useState(true);
+  const [mini, setMini] = useState(false);
+  const [q, setQ] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  // ⌘F (or Ctrl+F) jumps to the sidebar search.
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f" && searchRef.current) { e.preventDefault(); setMini(false); setNavOpen(true); searchRef.current.focus(); } };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sure, setSure] = useState(false);
 
@@ -144,72 +156,83 @@ export default function FoundryRoot() {
   const go = (id: PageId) => { setPage(id); setNavOpen(false); window.scrollTo({ top: 0 }); };
   const props = { p: active, up, busy: pb, run: runner, go, me: settings };
   const waiting = waitingCount(active);
+  const ql = q.trim().toLowerCase();
+  const navShown = NAV.filter((n) => !ql || n.label.toLowerCase().includes(ql));
+  const projShown = projects.filter((x) => !ql || (x.memory.product.name || x.name).toLowerCase().includes(ql));
 
   return (
     <div className="aff fx" data-theme={theme}>
-      <div className="fx-shell">
+      <div className={`fx-shell${mini ? " mini" : ""}`}>
         <aside className={`fx-side ${navOpen ? "open" : ""}`}>
           <div className="fx-side-top">
             <Link to="/foundry" className="fx-word"><BrainoMascot variant="foundry" size={24} /><span>Braino Foundry</span></Link>
+            <button className="fx-icon-b fx-only-d" aria-label="Collapse menu" title="Collapse menu" onClick={() => setMini((m) => !m)}><Icon d={IC.sidebar} size={17} /></button>
             <button className="fx-icon-b fx-only-m" aria-label="Close menu" onClick={() => setNavOpen(false)}><Icon d={IC.close} /></button>
           </div>
 
-          <div className="fx-switch-p">
-            <button className="fx-proj" aria-expanded={switcher} onClick={() => setSwitcher((s) => !s)}>
-              <span className="fx-proj-a">{(active.memory.product.name || "N").charAt(0).toUpperCase()}</span>
-              <span className="fx-proj-n"><b>{active.memory.product.name || active.name}</b><small>{active.memory.product.site ? active.memory.product.site.replace(/^https?:\/\//, "") : "Project"}</small></span>
-              <Icon d={IC.chev} size={16} />
-            </button>
-            {switcher && (
-              <div className="fx-menu fx-pmenu" onMouseLeave={() => { if (!renaming && !confirmDel) setSwitcher(false); }}>
-                <p className="fx-pmenu-h">Your projects</p>
-                {projects.map((p) => {
-                  const name = p.memory.product.name || p.name;
-                  if (renaming?.id === p.id) {
-                    const save = () => { const n = renaming.name.trim(); if (n) update(p.id, (x) => ({ ...x, name: n, memory: { ...x.memory, product: { ...x.memory.product, name: n } } })); setRenaming(null); };
-                    return <div key={p.id} className="fx-prow editing"><input autoFocus value={renaming.name} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setRenaming(null); }} onBlur={save} /></div>;
-                  }
-                  if (confirmDel === p.id) {
-                    return (
-                      <div key={p.id} className="fx-prow confirm">
-                        <span>Delete {name}? Its results go too.</span>
-                        <button className="fx-pact" onClick={() => setConfirmDel("")}>Cancel</button>
-                        <button className="fx-pact del" onClick={() => { remove(p.id); setConfirmDel(""); setSwitcher(false); setPage("dashboard"); }}>Delete</button>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={p.id} className={`fx-prow${p.id === active.id ? " on" : ""}`}>
-                      <button className="fx-pname" onClick={() => { setActiveId(p.id); setSwitcher(false); setPage("dashboard"); }}>
-                        <span className="fx-pav">{name.charAt(0).toUpperCase()}</span>{name}{Object.values(busy[p.id] || {}).some(Boolean) && <i className="fx-live" />}
-                      </button>
-                      <button className="fx-pact" aria-label={`Rename ${name}`} title="Rename" onClick={() => setRenaming({ id: p.id, name })}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg></button>
-                      <button className="fx-pact" aria-label={`Delete ${name}`} title="Delete" onClick={() => setConfirmDel(p.id)}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
-                    </div>
-                  );
-                })}
-                <button className="add" onClick={() => { create(); setSwitcher(false); }}><Icon d={IC.plus} size={15} />New project</button>
-              </div>
-            )}
-          </div>
+          <label className="fx-search">
+            <Icon d={IC.optics} size={15} />
+            <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search pages and projects" />
+            <kbd>⌘F</kbd>
+          </label>
 
           <nav className="fx-nav" aria-label="Foundry">
-            {NAV.map((n) => (
+            <p className="fx-nav-h">Essentials</p>
+            {navShown.map((n) => (
               <button key={n.id} className={page === n.id ? "on" : ""} aria-current={page === n.id ? "page" : undefined} onClick={() => go(n.id)}>
-                <Icon d={n.icon} />
-                <span>{n.label}{n.engine && <small className="fx-nav-eng">{n.engine === "optics" ? "Optics" : n.engine === "content" ? "Content" : "Outreach"}</small>}</span>
+                <Icon d={n.icon} size={17} />
+                <span>{n.label}</span>
                 {n.engine && pb[n.engine] && <i className={`fx-live ${n.engine}`} title={pb[n.engine]} />}
                 {n.id === "approvals" && waiting > 0 && <em className="fx-badge">{waiting}</em>}
               </button>
             ))}
+            {!navShown.length && !projShown.length && <p className="fx-nav-none">Nothing matches "{q}"</p>}
           </nav>
+
+          <div className="fx-pgroup">
+            <div className="fx-nav-h row">
+              <button className="fx-pgroup-t" aria-expanded={switcher} onClick={() => setSwitcher((s) => !s)}><Icon d={IC.chev} size={14} />Projects</button>
+              <button className="fx-icon-b sm" aria-label="New project" title="New project" onClick={() => create()}><Icon d={IC.plus} size={15} /></button>
+            </div>
+            {switcher && projShown.map((p) => {
+              const name = p.memory.product.name || p.name;
+              const color = PROJ_COLORS[projects.indexOf(p) % PROJ_COLORS.length];
+              if (renaming?.id === p.id) {
+                const save = () => { const n = renaming.name.trim(); if (n) update(p.id, (x) => ({ ...x, name: n, memory: { ...x.memory, product: { ...x.memory.product, name: n } } })); setRenaming(null); };
+                return <div key={p.id} className="fx-prow editing"><input autoFocus value={renaming.name} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setRenaming(null); }} onBlur={save} /></div>;
+              }
+              if (confirmDel === p.id) {
+                return (
+                  <div key={p.id} className="fx-prow confirm">
+                    <span>Delete {name}? Its results go too.</span>
+                    <button className="fx-pact" onClick={() => setConfirmDel("")}>Cancel</button>
+                    <button className="fx-pact del" onClick={() => { remove(p.id); setConfirmDel(""); setPage("dashboard"); }}>Delete</button>
+                  </div>
+                );
+              }
+              return (
+                <div key={p.id} className={`fx-prow${p.id === active.id ? " on" : ""}`}>
+                  <button className="fx-pname" onClick={() => { setActiveId(p.id); setPage("dashboard"); setNavOpen(false); }}>
+                    <span className="fx-psq" style={{ background: color }} />{name}{Object.values(busy[p.id] || {}).some(Boolean) && <i className="fx-live" />}
+                  </button>
+                  <button className="fx-pact" aria-label={`Rename ${name}`} title="Rename" onClick={() => setRenaming({ id: p.id, name })}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg></button>
+                  <button className="fx-pact" aria-label={`Delete ${name}`} title="Delete" onClick={() => setConfirmDel(p.id)}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="fx-side-links">
+            <Link to="/knowledge"><Icon d={IC.help} size={17} /><span>Knowledge</span></Link>
+            <Link to="/foundry"><Icon d={IC.open} size={17} /><span>About Foundry</span></Link>
+          </div>
 
           <footer className="fx-side-foot">
             {!user && <button className="fx-btn sm fx-signin" onClick={signIn}>Sign in with Google to save</button>}
             <button className="fx-me" onClick={() => setSettingsOpen(true)}>
               <Avatar name={settings.name} photo={settings.photo} size={32} />
               <span className="fx-me-n"><b>{settings.name || "Add your name"}</b><small className={`fx-sync ${sync}`}>{SYNC_LINE[sync]}</small></span>
-              <Icon d={IC.gear} size={16} />
+              <Icon d={IC.chev} size={16} />
             </button>
           </footer>
         </aside>

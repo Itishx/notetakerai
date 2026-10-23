@@ -33,7 +33,19 @@ export const IC = {
   check: "M5 12.5l4.5 4.5L19 7.5",
   spark: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
   play: "M8 5l11 7-11 7z",
+  help: "M12 21a9 9 0 1 0 0-18a9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+  sidebar: "M4 5h16v14H4zM9 5v14",
+  arrow: "M5 12h14M13 6l6 6-6 6",
+  up: "M7 17L17 7M9 7h8v8",
+  filter: "M4 6h16M7 12h10M10 18h4",
+  grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
 };
+
+/* Breadcrumb above a page title: project, then the page. */
+export function Crumb({ items }: { items: string[] }) {
+  return <nav className="fx-crumb" aria-label="Breadcrumb">{items.filter(Boolean).map((x, i) => <span key={i}>{i > 0 && <i>/</i>}{x}</span>)}</nav>;
+}
 
 /* The (i) button is gone (2026-10-23): it said the same thing as "Explain
    this", and two buttons for one job was noise. Kept as a no-op so every
@@ -99,11 +111,11 @@ export function Busy({ text }: { text: string }) {
 }
 
 /* Every engine page opens with the same header: what it does, status, last run. */
-export function PageHead({ engine, title, status, last, onRun, running, explainData }: { engine?: Engine; title: string; status: string; last: number | null; onRun?: () => void; running?: string; explainData?: unknown }) {
+export function PageHead({ engine, title, status, last, onRun, running, explainData, crumb }: { engine?: Engine; title: string; status: string; last: number | null; onRun?: () => void; running?: string; explainData?: unknown; crumb?: string }) {
   return (
     <header className={`fx-head ${engine || ""}`}>
       <div className="fx-head-t">
-        {engine && <span className="fx-eyebrow"><i className={`fx-dot ${engine}`} />{ENGINE_NAME[engine]}</span>}
+        <Crumb items={[crumb || "", engine ? ENGINE_NAME[engine] : ""]} />
         <h1>{title}</h1>
         {engine && <p>{ENGINE_LINE[engine]}</p>}
       </div>

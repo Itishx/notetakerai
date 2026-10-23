@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Engine, Flows, Stage } from "../store";
 import { STAGES, STAGE_LABEL } from "../store";
 
@@ -135,6 +135,46 @@ export function KPI({ label, value, sub, spark, engine, hint }: { label: string;
       <b className="fx-kpi-v">{value}</b>
       {sub && <span className="fx-kpi-s">{sub}</span>}
       {spark && <Spark values={spark} engine={engine} />}
+    </div>
+  );
+}
+
+/* Gantt-style week (2026-10-24): one row per platform, days across, each post
+   a chip on its day. Day view spreads today's posts across the hours. */
+export function Timeline({ items }: { items: { day: number; time: string; label: string; status: string }[] }) {
+  const [mode, setMode] = useState<"week" | "day">("week");
+  const today = (new Date().getDay() + 6) % 7;
+  const monday = new Date(); monday.setDate(monday.getDate() - today);
+  const rows = [...new Set(items.map((x) => x.label))];
+  const hours = [6, 9, 12, 15, 18, 21];
+  const hourOf = (t: string) => { const m = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(t); if (!m) return 12; let h = Number(m[1]) % 12; if (/pm/i.test(m[3] || "")) h += 12; else if (!m[3]) h = Number(m[1]); return h + Number(m[2] || 0) / 60; };
+  const shown = mode === "week" ? items : items.filter((x) => x.day === today);
+  return (
+    <div className="fx-tl">
+      <div className="fx-tl-bar">
+        <span className="fx-tl-date">{mode === "week" ? `Week of ${monday.toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</span>
+        <div className="fx-seg" role="group" aria-label="Range"><button className={mode === "day" ? "on" : ""} onClick={() => setMode("day")}>Day</button><button className={mode === "week" ? "on" : ""} onClick={() => setMode("week")}>Week</button></div>
+      </div>
+      <div className="fx-tl-scroll">
+        <div className="fx-tl-grid" style={{ ["--cols" as string]: mode === "week" ? 7 : hours.length }}>
+          <span className="fx-tl-corner" />
+          {mode === "week"
+            ? DAYS.map((d, i) => <span key={d} className={`fx-tl-h${i === today ? " today" : ""}`}>{d}</span>)
+            : hours.map((h) => <span key={h} className="fx-tl-h">{h}:00</span>)}
+          {rows.map((r) => (
+            <React.Fragment key={r}>
+              <span className="fx-tl-row"><i style={{ background: PLAT_COLOR[r] || "var(--fx-c)" }} />{r}</span>
+              <div className="fx-tl-lane" style={{ gridColumn: `span ${mode === "week" ? 7 : hours.length}` }}>
+                {shown.filter((x) => x.label === r).map((x, j) => {
+                  const pos = mode === "week" ? x.day / 7 : Math.min(Math.max((hourOf(x.time) - 6) / 18, 0), 0.82);
+                  return <span key={j} className={`fx-tl-chip ${x.status}`} style={{ left: `${pos * 100}%`, width: mode === "week" ? `${100 / 7}%` : "18%", ["--pc" as string]: PLAT_COLOR[r] || "var(--fx-c)" }}><b>{x.time}</b>{ST_LABEL[x.status] || x.status}</span>;
+                })}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      {mode === "day" && !shown.length && <p className="fx-faint">Nothing to post today.</p>}
     </div>
   );
 }

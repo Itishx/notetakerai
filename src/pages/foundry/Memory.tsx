@@ -5,7 +5,7 @@ import type { BuyerCard, FounderCard, ProductCard } from "./store";
 import { whereOf } from "./store";
 import type { PageProps } from "./types";
 import { SOURCE_LABEL } from "./Content";
-import { Empty, Field, ListField, Note, Section } from "./components/ui";
+import { Crumb, Empty, Field, ListField, Note, Section } from "./components/ui";
 
 export default function Memory({ p, up }: PageProps) {
   const m = p.memory;
@@ -17,7 +17,7 @@ export default function Memory({ p, up }: PageProps) {
     <div className="fx-page">
       <header className="fx-head">
         <div className="fx-head-t">
-          <span className="fx-eyebrow">Shared memory</span>
+          <Crumb items={[p.memory.product.name || "Your product", "Shared memory"]} />
           <h1>Product and founder</h1>
           <p>What all three engines know. Change anything here and the next run uses it.</p>
         </div>

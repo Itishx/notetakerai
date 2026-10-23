@@ -8,7 +8,7 @@ import { approvePost, setPost, setTopic } from "./actions";
 import { checkClaims, writeArticle } from "./engines";
 import { copy } from "./lib";
 import { ItemTable, type TableRow } from "./components/table";
-import { WeekStrip } from "./components/charts";
+import { Timeline } from "./components/charts";
 import { PLATFORM_LABEL } from "./components/previews";
 import { Busy, Empty, Hint, PageHead, Section } from "./components/ui";
 
@@ -87,7 +87,7 @@ export default function Content({ p, up, busy, run }: PageProps) {
 
   return (
     <div className="fx-page">
-      <PageHead engine="content" title="Be seen" status={p.posts.length ? `${p.posts.filter((x) => x.status === "waiting").length} posts waiting` : "No posts yet"} last={last} onRun={() => run.content()} running={busy.content} explainData={{ topics: topics.slice(0, 5).map((t) => `${t.title} (${SOURCE_LABEL[t.source]})`), posts: p.posts.length }} />
+      <PageHead crumb={p.memory.product.name || "Your product"} engine="content" title="Be seen" status={p.posts.length ? `${p.posts.filter((x) => x.status === "waiting").length} posts waiting` : "No posts yet"} last={last} onRun={() => run.content()} running={busy.content} explainData={{ topics: topics.slice(0, 5).map((t) => `${t.title} (${SOURCE_LABEL[t.source]})`), posts: p.posts.length }} />
 
       <Group engine="content" step={1} title="What to talk about" line="Topics come from real things: what buyers said on Reddit, questions AI answers without you, and doubts buyers raised." />
       <Section title="Topics" hint="What the posts are about. Each one comes from something real in memory: a buyer's words on Reddit, a question AI answers without you, or a doubt a buyer raised." explain={topics.slice(0, 6).map((t) => ({ title: t.title, source: SOURCE_LABEL[t.source], from: t.sourceText }))}>
@@ -104,7 +104,7 @@ export default function Content({ p, up, busy, run }: PageProps) {
 
       <Group engine="content" step={2} title="When to post" line="Each post, on the day and time its platform's audience is around." />
       <Section title="This week" hint="When to post each one. Times are when that platform's audience is usually around. Approve on the day, or earlier and schedule it yourself.">
-        {live.length ? <WeekStrip items={live.map((x) => ({ day: x.day, time: x.time, label: PLATFORM_LABEL[x.platform], status: x.status }))} /> : <Empty title="Nothing planned">Once posts are written, they show up on the day to post them.</Empty>}
+        {live.length ? <Timeline items={live.map((x) => ({ day: x.day, time: x.time, label: PLATFORM_LABEL[x.platform], status: x.status }))} /> : <Empty title="Nothing planned">Once posts are written, they show up on the day to post them.</Empty>}
       </Section>
 
       <div ref={postsRef} />
