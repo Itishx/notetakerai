@@ -1,4 +1,5 @@
 import React from "react";
+import "./brandmap.css";
 import { fmtTime } from "../lib";
 import type { Engine, Project } from "../store";
 import { namedRange, shareOfVoice } from "../types";
@@ -12,11 +13,12 @@ import { namedRange, shareOfVoice } from "../types";
 
 type Busy = Partial<Record<Engine | "setup", string>>;
 const NODE: Record<Engine, { x: number; y: number; label: string; color: string }> = {
-  optics: { x: 150, y: 96, label: "Get found", color: "var(--fx-o)" },
-  content: { x: 570, y: 96, label: "Be seen", color: "var(--fx-c)" },
-  outreach: { x: 360, y: 340, label: "Reach people", color: "var(--fx-r)" },
+  optics: { x: 170, y: 110, label: "Get found", color: "var(--fx-o)" },
+  content: { x: 830, y: 110, label: "Be seen", color: "var(--fx-c)" },
+  outreach: { x: 500, y: 380, label: "Reach people", color: "var(--fx-r)" },
 };
-const BRAND = { x: 360, y: 190 };
+const ENGINE_NAME: Record<Engine, string> = { optics: "Optics", content: "Content", outreach: "Outreach" };
+const BRAND = { x: 500, y: 205 };
 const WHO: Record<string, string> = { optics: "Get found", content: "Be seen", outreach: "Reach people", memory: "Memory", you: "You" };
 
 /* A gentle curve from a to b, bowed to one side so two-way lines don't overlap. */
@@ -42,10 +44,10 @@ export function BrandMap({ p, busy }: { p: Project; busy: Busy }) {
   const openers = p.people.filter((x) => x.opener).length;
 
   const edges: { from: Engine; to: Engine; n: number; label: string; bow: number }[] = [
-    { from: "outreach", to: "content", n: quotedTopics, label: `${quotedTopics} buyer quote${quotedTopics === 1 ? "" : "s"} → topics`, bow: -36 },
-    { from: "optics", to: "content", n: gapTopics, label: `${gapTopics} gap${gapTopics === 1 ? "" : "s"} → posts`, bow: -28 },
-    { from: "outreach", to: "optics", n: quoteSearches + objectionFixes, label: `${quoteSearches + objectionFixes} quote${quoteSearches + objectionFixes === 1 ? "" : "s"} & doubts → fixes`, bow: 36 },
-    { from: "content", to: "outreach", n: openers, label: `${openers} post${openers === 1 ? "" : "s"} → openers`, bow: -36 },
+    { from: "outreach", to: "content", n: quotedTopics, label: "buyer quotes became post topics", bow: -60 },
+    { from: "optics", to: "content", n: gapTopics, label: "gaps on Google and AI became posts", bow: -70 },
+    { from: "outreach", to: "optics", n: quoteSearches + objectionFixes, label: "buyer questions became fixes to get found", bow: 60 },
+    { from: "content", to: "outreach", n: openers, label: "posts became openers for messages", bow: 60 },
   ];
 
   // What each engine is doing for the brand, said in its own line to the middle.
@@ -66,8 +68,8 @@ export function BrandMap({ p, busy }: { p: Project; busy: Busy }) {
       <header className="fx-sec-h">
         <h2>{anyLive ? <><i className="fx-map-pulse" />Working for {m.product.name || "you"} right now</> : `How your engines are working for ${m.product.name || "you"}`}</h2>
       </header>
-      <div className="fx-map-grid">
-        <svg className="fx-map-svg" viewBox="0 0 720 400" role="img" aria-label="Your brand in the middle, the three engines around it, and what they pass to each other">
+      <div className="fx-map-wrap">
+        <svg className="fx-map-svg" viewBox="0 0 1000 470" role="img" aria-label="Your brand in the middle, the three engines around it, and what they pass to each other">
           <defs>
             <radialGradient id="fxBrandGlow"><stop offset="0%" stopColor="var(--a-ink)" stopOpacity=".16" /><stop offset="100%" stopColor="var(--a-ink)" stopOpacity="0" /></radialGradient>
           </defs>
@@ -96,49 +98,62 @@ export function BrandMap({ p, busy }: { p: Project; busy: Busy }) {
                     <animateMotion dur={fast ? "1.4s" : "4.2s"} begin={`${k * (fast ? 0.46 : 1.4)}s`} repeatCount="indefinite"><mpath href={`#edge-${i}`} /></animateMotion>
                   </circle>
                 ))}
-                <text x={c.lx} y={c.ly} className="fx-map-elabel">{ed.label}</text>
               </g>
             );
           })}
 
           {/* Your brand. */}
-          <circle cx={BRAND.x} cy={BRAND.y} r="92" fill="url(#fxBrandGlow)" className={anyLive ? "fx-map-glow live" : "fx-map-glow"} />
+          <circle cx={BRAND.x} cy={BRAND.y} r="110" fill="url(#fxBrandGlow)" className={anyLive ? "fx-map-glow live" : "fx-map-glow"} />
           <g className="fx-map-brand">
-            <circle cx={BRAND.x} cy={BRAND.y} r="46" />
-            <text x={BRAND.x} y={BRAND.y - 4} className="n">{(m.product.name || "You").slice(0, 14)}</text>
+            <circle cx={BRAND.x} cy={BRAND.y} r="58" />
+            <text x={BRAND.x} y={BRAND.y - 4} className="n">{(m.product.name || "You").slice(0, 16)}</text>
             <text x={BRAND.x} y={BRAND.y + 14} className="s">{sov.total ? `${sov.pct}% of AI's picks` : "your brand"}</text>
           </g>
 
           {/* The engines. */}
           {(Object.keys(NODE) as Engine[]).map((e) => (
             <g key={e} className={`fx-map-node ${e} ${live(e) ? "live" : ""}`} transform={`translate(${NODE[e].x} ${NODE[e].y})`}>
-              {live(e) && <circle r="44" className="ring" style={{ stroke: NODE[e].color }} />}
-              <rect x="-74" y="-30" width="148" height="60" rx="16" style={{ stroke: NODE[e].color }} />
-              <circle cx="-56" cy="-12" r="4" style={{ fill: NODE[e].color }} />
-              <text x="-46" y="-8" className="n">{NODE[e].label}</text>
-              <text x="-62" y="14" className="s">{(live(e) || stat[e]).slice(0, 26)}</text>
+              {live(e) && <rect x="-118" y="-46" width="236" height="92" rx="24" className="ring" style={{ stroke: NODE[e].color }} />}
+              <rect x="-110" y="-38" width="220" height="76" rx="20" style={{ stroke: NODE[e].color }} />
+              <circle cx="-88" cy="-13" r="5" style={{ fill: NODE[e].color }} />
+              <text x="-76" y="-8" className="n">{NODE[e].label}</text>
+              <text x="88" y="-8" className="k" style={{ fill: NODE[e].color }}>{ENGINE_NAME[e]}</text>
+              <text x="-92" y="20" className="s">{(live(e) || stat[e]).slice(0, 32)}</text>
             </g>
           ))}
         </svg>
 
-        <aside className="fx-map-side">
+        <div className="fx-map-flows">
+          {edges.map((ed, i) => (
+            <div key={i} className={`fx-map-flow${ed.n ? " on" : ""}`}>
+              <span className="fx-map-flow-path"><i style={{ background: NODE[ed.from].color }} />{NODE[ed.from].label}<em>→</em><i style={{ background: NODE[ed.to].color }} />{NODE[ed.to].label}</span>
+              <b>{ed.n}</b><span className="fx-map-flow-t">{ed.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="fx-map-below">
+        <section>
           <p className="fx-map-k">What it's doing for your brand</p>
           <dl className="fx-map-out">
-            <div><dt>Named by AI</dt><dd>{of ? (range.low === range.high ? `${range.high} of ${of}` : `${range.low} to ${range.high} of ${of}`) : "Not yet"}</dd></div>
-            <div><dt>Share of AI's picks</dt><dd>{sov.total ? `${sov.pct}%` : "Not yet"}</dd></div>
-            <div><dt>Posts out</dt><dd>{postsOut}</dd></div>
-            <div><dt>People talking</dt><dd>{talking}{people ? <small> of {people}</small> : null}</dd></div>
-            <div><dt>Paid</dt><dd>{paid}</dd></div>
+            <div className="o"><dt>Named by AI</dt><dd>{of ? (range.low === range.high ? <>{range.high}<small> of {of}</small></> : <>{range.low} to {range.high}<small> of {of}</small></>) : "Not yet"}</dd></div>
+            <div className="o"><dt>Share of AI's picks</dt><dd>{sov.total ? `${sov.pct}%` : "Not yet"}</dd></div>
+            <div className="c"><dt>Posts out</dt><dd>{postsOut}</dd></div>
+            <div className="r"><dt>People talking</dt><dd>{talking}{people ? <small> of {people}</small> : null}</dd></div>
+            <div className="paid"><dt>Paying customers</dt><dd>{paid}</dd></div>
           </dl>
-          <p className="fx-map-k">Live</p>
+        </section>
+        <section>
+          <p className="fx-map-k">{anyLive ? <><i className="fx-map-pulse" />Live</> : "Latest"}</p>
           {m.activity.length ? (
             <ol className="fx-map-feed">
               {m.activity.slice(0, 6).map((a) => (
-                <li key={a.id}><i className={`fx-dot ${a.who}`} /><span><b>{WHO[a.who]}</b> {a.text}</span><time>{fmtTime(a.at)}</time></li>
+                <li key={a.id}><i className={`fx-dot ${a.who}`} /><b>{WHO[a.who]}</b><span>{a.text}</span><time>{fmtTime(a.at)}</time></li>
               ))}
             </ol>
           ) : <p className="fx-small">When the engines run, every step shows up here as it happens.</p>}
-        </aside>
+        </section>
       </div>
     </section>
   );

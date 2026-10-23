@@ -84,6 +84,9 @@ export default function FoundryRoot() {
   const [busy, setBusy] = useState<Busy>({});
   // Projects whose first run is on screen: the founder watches it before the dashboard.
   const [launching, setLaunching] = useState<Record<string, boolean>>({});
+  // Project switcher: rename in place, delete after a second tap.
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDel, setConfirmDel] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [switcher, setSwitcher] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -158,12 +161,33 @@ export default function FoundryRoot() {
               <Icon d={IC.chev} size={16} />
             </button>
             {switcher && (
-              <div className="fx-menu" onMouseLeave={() => setSwitcher(false)}>
-                {projects.map((p) => (
-                  <button key={p.id} className={p.id === active.id ? "on" : ""} onClick={() => { setActiveId(p.id); setSwitcher(false); setPage("dashboard"); }}>
-                    {p.memory.product.name || p.name}{Object.values(busy[p.id] || {}).some(Boolean) && <i className="fx-live" />}
-                  </button>
-                ))}
+              <div className="fx-menu fx-pmenu" onMouseLeave={() => { if (!renaming && !confirmDel) setSwitcher(false); }}>
+                <p className="fx-pmenu-h">Your projects</p>
+                {projects.map((p) => {
+                  const name = p.memory.product.name || p.name;
+                  if (renaming?.id === p.id) {
+                    const save = () => { const n = renaming.name.trim(); if (n) update(p.id, (x) => ({ ...x, name: n, memory: { ...x.memory, product: { ...x.memory.product, name: n } } })); setRenaming(null); };
+                    return <div key={p.id} className="fx-prow editing"><input autoFocus value={renaming.name} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setRenaming(null); }} onBlur={save} /></div>;
+                  }
+                  if (confirmDel === p.id) {
+                    return (
+                      <div key={p.id} className="fx-prow confirm">
+                        <span>Delete {name}? Its results go too.</span>
+                        <button className="fx-pact" onClick={() => setConfirmDel("")}>Cancel</button>
+                        <button className="fx-pact del" onClick={() => { remove(p.id); setConfirmDel(""); setSwitcher(false); setPage("dashboard"); }}>Delete</button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={p.id} className={`fx-prow${p.id === active.id ? " on" : ""}`}>
+                      <button className="fx-pname" onClick={() => { setActiveId(p.id); setSwitcher(false); setPage("dashboard"); }}>
+                        <span className="fx-pav">{name.charAt(0).toUpperCase()}</span>{name}{Object.values(busy[p.id] || {}).some(Boolean) && <i className="fx-live" />}
+                      </button>
+                      <button className="fx-pact" aria-label={`Rename ${name}`} title="Rename" onClick={() => setRenaming({ id: p.id, name })}><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z" /></svg></button>
+                      <button className="fx-pact" aria-label={`Delete ${name}`} title="Delete" onClick={() => setConfirmDel(p.id)}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
+                    </div>
+                  );
+                })}
                 <button className="add" onClick={() => { create(); setSwitcher(false); }}><Icon d={IC.plus} size={15} />New project</button>
               </div>
             )}

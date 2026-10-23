@@ -1,0 +1,41 @@
+/* Brand map, full width (2026-10-23): the diagram on its own, then the hand-offs,
+   then what it is doing for the brand and the live feed, each with room. */
+.fx-map-wrap { display: grid; gap: 18px; }
+.fx-map-svg { width: 100%; max-height: 520px; }
+.fx-map-node .n { font-size: 17px; font-weight: 650; }
+.fx-map-node .k { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-anchor: end; }
+.fx-map-node .s { font-size: 13px; }
+.fx-map-node rect { fill: var(--a-box); }
+.fx-map-node .ring { fill: none; animation: fxMapRingR 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes fxMapRingR { from { opacity: .6; } to { opacity: 0; transform: scale(1.08); } }
+.fx-map-brand .n { font-size: 17px; }
+.fx-map-brand .s { font-size: 11px; }
+.fx-map-glow { transform-origin: 500px 205px; }
+
+.fx-map-flows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fx-map-flow { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; row-gap: 2px; align-items: center; padding: 14px 16px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-box); opacity: .55; }
+.fx-map-flow.on { opacity: 1; }
+.fx-map-flow b { grid-row: span 2; font-family: var(--a-display); font-weight: 500; font-size: 32px; line-height: 1; min-width: 36px; text-align: center; }
+.fx-map-flow-path { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--a-ink); }
+.fx-map-flow-path i { width: 7px; height: 7px; border-radius: 50%; }
+.fx-map-flow-path em { font-style: normal; color: var(--a-ink-faint); margin: 0 2px; }
+.fx-map-flow-t { font-size: 13.5px; color: var(--a-ink-soft); }
+
+.fx-map-below { display: grid; gap: 28px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--a-line); }
+.fx-map-below section { display: grid; gap: 12px; }
+.fx-map-k { display: flex; align-items: center; }
+.fx-map-out { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.fx-map-out > div { position: relative; padding: 18px 18px 16px; border: 1px solid var(--a-line); border-radius: 16px; background: var(--a-box); overflow: hidden; }
+.fx-map-out > div::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 3px; background: var(--a-line-strong); }
+.fx-map-out > .o::before { background: var(--fx-o); } .fx-map-out > .c::before { background: var(--fx-c); } .fx-map-out > .r::before { background: var(--fx-r); } .fx-map-out > .paid::before { background: var(--a-ink); }
+.fx-map-out dt { font-size: 12.5px; }
+.fx-map-out dd { margin-top: 8px; font-family: var(--a-display); font-size: 34px; line-height: 1; }
+.fx-map-feed { gap: 0; border-top: 1px solid var(--a-line); }
+.fx-map-feed li { grid-template-columns: 10px 110px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--a-line); font-size: 14px; }
+.fx-map-feed li b { font-weight: 650; font-size: 13px; }
+@media (max-width: 900px) {
+  .fx-map-flows { grid-template-columns: 1fr; }
+  .fx-map-out { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fx-map-feed li { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .fx-map-feed li b { display: none; }
+}

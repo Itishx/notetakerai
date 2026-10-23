@@ -43,3 +43,20 @@
 
 /* Sidebar: the engine name beside its friendly name. */
 .fx-nav-eng { margin-left: 8px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--a-ink-faint); }
+
+/* Project switcher: rename and delete in place (2026-10-23). */
+.fx-pmenu { min-width: 260px; padding: 6px; display: grid; gap: 2px; }
+.fx-pmenu-h { margin: 6px 10px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--a-ink-faint); }
+.fx-prow { display: flex; align-items: center; gap: 2px; border-radius: 10px; }
+.fx-prow:hover, .fx-prow.on { background: color-mix(in srgb, var(--a-ink) 6%, transparent); }
+.fx-pmenu .fx-pname { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; background: none; text-align: left; font: inherit; font-size: 14px; color: var(--a-ink); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-pav { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--a-ink); color: var(--a-bg); font-size: 12px; font-weight: 700; }
+.fx-pmenu .fx-pact { flex: none; height: 30px; min-width: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--a-ink-faint); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; display: grid; place-items: center; }
+.fx-pmenu .fx-pact:hover { background: color-mix(in srgb, var(--a-ink) 8%, transparent); color: var(--a-ink); }
+.fx-pact svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.fx-prow:not(.on):not(:hover) .fx-pact { opacity: .0; }
+.fx-prow.confirm { flex-wrap: wrap; padding: 8px 10px; gap: 6px; background: color-mix(in srgb, #c0463c 8%, transparent); }
+.fx-prow.confirm span { flex: 1 1 100%; font-size: 13px; color: var(--a-ink); }
+.fx-pmenu .fx-pact.del { background: #c0463c; color: #fff; }
+.fx-prow.editing input { flex: 1; margin: 2px; padding: 7px 10px; border: 1px solid var(--a-ink-faint); border-radius: 8px; background: var(--a-bg); color: var(--a-ink); font: inherit; font-size: 14px; outline: none; }
+@media (hover: none) { .fx-prow .fx-pact { opacity: 1 !important; } }
