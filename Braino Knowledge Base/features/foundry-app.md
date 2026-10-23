@@ -194,3 +194,31 @@ Released 2026-10-23. Status: built, in the Foundry app.
 - The fit is a best guess from your product card plus one small AI call that tags your product (saas, ai, dev, and so on). It runs once per project.
 
 **Technical shape.** The list lives in `src/pages/foundry/launchPlaces.ts` with a pure `rankPlaces(tags)` that sorts by fit, then strength. Tags come from `classifyLaunch` (one cached `askJson`, stored as `project.launchTags`) merged with a keyword guess. Progress is `project.launches[placeId] = { status, link, listing, at }`. Listings come from `writeListing` in `engines.ts`. The UI is `components/launches.tsx`. Writing a listing and marking one live log to the activity feed as Content.
+
+## Braino on the web (24 Oct 2026)
+
+When you open Foundry, Braino is there. A black notch sits top centre over the app, the same shape as the Mac notch. The dashboard and pages stay exactly as they were; Braino sits on top and moves you around them. Nothing goes out without your yes.
+
+**What it does**
+- Greets you once a day per project ("Morning. I found 6 people asking about ... Want to see them?"). After that he rests folded: just his eyes, plus a small dot when something is waiting. He never interrupts: he speaks only when you open the app, click the notch, or talk.
+- Tells you what is going on: engines running ("Looking for people asking today... 3 people so far."), a run finished ("Done. 4 posts and 6 replies are ready for your yes."), someone replied ("r/startups replied. I wrote an answer. Send it?"), or all caught up ("Want me to look for more people?").
+- Buttons jump to the right page; a person's card glows for 1.5 seconds. "Send it" copies the answer and opens the site, then moves them to Talking.
+- Everything happens inside the notch. One steady shape per exchange, first person, short lines. He bobs while engines run and hops when a run finishes or someone replied.
+
+**Voice commands** (hold or tap Space when no field is focused, or tap the mic in the notch)
+- "Show me who replied" / "replies": Reach people, filtered to Replied
+- "Show me the posts": Be seen
+- "Approvals": Approvals
+- "Send it" / "Approve it": approves what the notch is about right now
+- "Write a post about X": writes one post, it waits for your yes
+- "Run again" / "Find more people": runs all three engines
+- "How did this week go": messages sent, replies, how often AI named you, posts approved
+- Anything else: a two sentence answer from the project's memory (GPT through chat-about-notes, neutral system prompt).
+
+**Honest limits**
+- No hands on the web. He gets everything ready; you post it yourself. On the Mac (private beta) he does it himself.
+- Voice listening only works in Chrome and Safari (browser speech recognition).
+- His Fish voice costs money per sentence, so he only speaks when you talk to him; the daily greeting is text only.
+- After a voice "send it", the browser may block the new tab because it was not a click. The text is still copied.
+
+**Technical shape**: `src/pages/foundry/components/WebNotch.tsx` + `web-notch.css` (the notch), `braino-lines.ts` (pure `brainoLine(project, busy, opts)`), `voiceCommands.ts` (phrase matching, then `ask`), voice through `useBrainoVoice` with `anonymous: true`. Greeting date in localStorage `foundry-braino-greet-<project id>`; Reach people focus via sessionStorage `foundry-focus-person` and `foundry-focus-stage`. Status: live on /foundry/app, 24 Oct 2026.

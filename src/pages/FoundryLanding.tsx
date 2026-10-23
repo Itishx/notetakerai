@@ -281,7 +281,7 @@ const MAC_DAY = [
 ];
 /* Where it runs: the web app, open to try, and Braino on the Mac, in private beta. */
 const WHERE = [
-  { k: "On the web", tag: "Open to try", h: "A dashboard and a few clicks.", p: "Works in any browser, on Chrome and Windows too.", does: ["Run all three engines on what you built", "Read every post, reply and listing before it goes", "Approve copies the text and opens the site", "You post it yourself, in your own account"], cta: ["Open Braino Foundry", "/foundry/app"], mac: false },
+  { k: "On the web", tag: "Open to try", h: "A dashboard, and Braino on top.", p: "On the web, Braino talks to you and gets everything ready. On your Mac, he does it himself.", does: ["Braino greets you and tells you what is waiting", "Run all three engines on what you built", "Read every post, reply and listing before it goes", "Approve copies the text and opens the site", "You post it yourself, in your own account"], cta: ["Open Braino Foundry", "/foundry/app"], mac: false },
   { k: "On your Mac", tag: "Private beta", h: "Your voice and the notch.", p: "Braino, with glasses. You talk, he does the work.", does: ["Ask out loud: \u201cwho asked about us today?\u201d", "He reads you the reply and waits for your yes", "He posts in your own browser, logged in as you", "Good morning updates on what came in overnight"], cta: ["Join the waitlist", "/braino#early-access"], mac: true },
 ] as const;
 const COMPARE: [string, string, string][] = [
@@ -319,7 +319,7 @@ const FAQS = [
   { q: "How much of my time does it take?", a: "About ten minutes a week. You read what it wrote, change anything that doesn't sound like you, and say yes." },
   { q: "Does it post for me?", a: "Never on its own. On the web, Approve copies the text and opens the site so you post it. On the Mac, Braino posts in your own browser after your yes." },
   { q: "Is this a content generator?", a: "No. It starts from what your buyers are asking right now, then writes the posts that answer it and finds the people asking." },
-  { q: "How is Foundry on the web different from Foundry on the Mac?", a: "On the web, Foundry is the engine we built. It finds, writes and prepares everything, and you approve with a click and post it yourself. On the Mac, inside Braino, it is a different experience, as close to Jarvis as it gets. You talk, and Braino does everything for you, posting in your own browser after your yes. That is what makes him Braino. The Mac app is in private beta." },
+  { q: "How is Foundry on the web different from Foundry on the Mac?", a: "On the web, Braino talks to you and gets everything ready. On your Mac, he does it himself. On the web he finds, writes and prepares everything, and you approve with a click and post it yourself. On the Mac, inside Braino, it is a different experience, as close to Jarvis as it gets. You talk, and Braino does everything for you, posting in your own browser after your yes. That is what makes him Braino. The Mac app is in private beta." },
   { q: "Do I need a Mac?", a: "No. The web app works on Chrome and Windows. The Mac version is in private beta." },
   { q: "What do I need to start?", a: "A few lines about what you're building. A website or a doc helps, but your own words are enough." },
 ];
