@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { BrainoMascot } from "@/components/BrainoMascot";
 import { WEEK } from "./lib";
 import { runAll, runContent, runOptics, runOutreach, type Ctx } from "./engines";
@@ -49,9 +51,31 @@ function shrinkPhoto(file: File): Promise<string> {
   });
 }
 
+/* Sign in with Google, then come straight back to Foundry. */
+function signIn() {
+  void supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/foundry/app` } });
+}
+const SYNC_LINE: Record<string, string> = {
+  off: "Saved in this browser only",
+  loading: "Loading your projects",
+  saving: "Saving",
+  saved: "Saved to your account",
+  error: "Could not save, will retry",
+  "no-table": "Account saving is not switched on yet",
+};
+
 export default function FoundryRoot() {
-  const store = useFoundryStore();
-  const { projects, activeId, setActiveId, update, get, create, remove, settings, setSettings, bytes, clearAll } = store;
+  const { user, signOut } = useAuth();
+  const store = useFoundryStore(user?.id);
+  const { projects, activeId, setActiveId, update, get, create, remove, settings, setSettings, bytes, clearAll, sync } = store;
+  // Your name and photo from Google, until you set your own.
+  useEffect(() => {
+    if (!user) return;
+    const meta = (user.user_metadata || {}) as { full_name?: string; name?: string; avatar_url?: string; picture?: string };
+    const name = meta.full_name || meta.name || "";
+    const photo = meta.avatar_url || meta.picture || "";
+    if ((!settings.name && name) || (!settings.photo && photo)) setSettings({ ...settings, name: settings.name || name, photo: settings.photo || photo });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const { theme, toggle } = useAffTheme();
   const [page, setPage] = useState<PageId>("dashboard");
   const [busy, setBusy] = useState<Busy>({});
@@ -91,7 +115,7 @@ export default function FoundryRoot() {
     if (Date.now() >= active.lastRun + WEEK) runner.all();
   }, [active?.id, active?.autopilot, active?.lastRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!active || !runner) return <div className="fx" data-theme={theme} />;
+  if (!active || !runner || sync === "loading") return <div className="aff fx" data-theme={theme}><div className="fx-loading">Loading your projects</div></div>;
   const up = (fn: (p: Project) => Project) => update(active.id, fn);
   const pb = busy[active.id] || {};
 
@@ -100,6 +124,7 @@ export default function FoundryRoot() {
       <div className="aff fx" data-theme={theme}>
         <Onboarding project={active} update={up} theme={theme} onStart={() => { setPage("dashboard"); runner.all(); }} />
         {projects.length > 1 && <button className="fo-out" onClick={() => setActiveId(projects.find((p) => p.id !== active.id)!.id)}>Back to my other project</button>}
+        {!user && <button className="fo-signin" onClick={signIn}>Sign in to save your work</button>}
       </div>
     );
   }
@@ -147,9 +172,10 @@ export default function FoundryRoot() {
           </nav>
 
           <footer className="fx-side-foot">
+            {!user && <button className="fx-btn sm fx-signin" onClick={signIn}>Sign in with Google to save</button>}
             <button className="fx-me" onClick={() => setSettingsOpen(true)}>
               <Avatar name={settings.name} photo={settings.photo} size={32} />
-              <span className="fx-me-n">{settings.name || "Add your name"}</span>
+              <span className="fx-me-n"><b>{settings.name || "Add your name"}</b><small className={`fx-sync ${sync}`}>{SYNC_LINE[sync]}</small></span>
               <Icon d={IC.gear} size={16} />
             </button>
           </footer>
@@ -186,8 +212,15 @@ export default function FoundryRoot() {
             <div className="fx-field"><span>Theme</span>
               <div className="fx-seg"><button className={theme === "light" ? "on" : ""} onClick={() => theme !== "light" && toggle()}>Light</button><button className={theme === "dark" ? "on" : ""} onClick={() => theme !== "dark" && toggle()}>Dark</button></div>
             </div>
-            <div className="fx-field"><span>Data on this device</span>
-              <p className="fx-small">{projects.length} project{projects.length === 1 ? "" : "s"}, {(bytes / 1024).toFixed(0)} KB, saved in this browser only. Nothing is stored on a server.</p>
+            <div className="fx-field"><span>Account</span>
+              {user ? (
+                <div className="fx-photo-row"><span className="fx-small">Signed in as {user.email}. {SYNC_LINE[sync]}.</span><button className="fx-link" onClick={() => { void signOut(); setSettingsOpen(false); }}>Sign out</button></div>
+              ) : (
+                <div className="fx-photo-row"><span className="fx-small">Not signed in. Your work is only in this browser.</span><button className="fx-btn sm" onClick={signIn}>Sign in with Google</button></div>
+              )}
+            </div>
+            <div className="fx-field"><span>Your data</span>
+              <p className="fx-small">{projects.length} project{projects.length === 1 ? "" : "s"}, {(bytes / 1024).toFixed(0)} KB. {user && sync === "saved" ? "Saved to your account and kept in this browser." : "Kept in this browser."}</p>
               <div className="fx-acts">
                 <button className="fx-ghost" onClick={() => { const b = new Blob([JSON.stringify(projects, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "braino-foundry.json"; a.click(); }}>Download a copy</button>
                 {projects.length > 1 && <button className="fx-ghost" onClick={() => { remove(active.id); setSettingsOpen(false); }}>Delete this project</button>}

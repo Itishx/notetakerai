@@ -137,3 +137,33 @@ Get found (`src/pages/foundry/Optics.tsx`, `engines.ts`, `types.ts`):
 Not done: connecting Google Search Console directly (needs Google sign-in), daily scans (needs a server schedule).
 
 Website (`src/pages/FoundryLanding.tsx`): rewritten in plain outcomes, no engine names. Three steps (tell us what you built, we do most of the work, people find you and some buy), a Pricing section (Free to try, Foundry $33 a month) and a Services section, **Done for you at $299 a month** (we run it, write, post after your yes, reply to people, weekly report). Nav: How it works, Pricing, Done for you, Braino. Pricing decided by Itish on 23 Oct 2026. Checkout is not wired yet: both plan buttons start the free app, Done for you goes to /contact.
+
+## The brand map (23 Oct 2026)
+
+**Status:** MVP, local. A live picture at the top of the dashboard of how the three engines feed each other and what that does for the brand.
+- Your brand sits in the middle (with your share of AI's picks); Get found, Be seen and Reach people sit around it, each with its live status or its result.
+- Lines between engines are real hand-offs counted from memory: buyer quotes that became topics, gaps that became posts, quotes and doubts that became fixes, posts that became openers. A line with nothing on it stays dashed. Dots run along used lines, and run fast while the engine at the start is working; a working engine pulses.
+- Beside it: Named by AI, share of AI's picks, posts out, people talking, paid, and a live feed of every step.
+- Replaces the old "Happening now" box (the feed lives in the map now). `src/pages/foundry/components/brandmap.tsx`.
+
+## What comes next (the plan)
+
+### 1. GitHub: "What you shipped" (planned 23 Oct 2026, not built)
+
+Itish's idea: connect GitHub so every change you push becomes something to talk about.
+
+- **Connect a repo.** Paste the GitHub link. Public repos need nothing more; private repos need a read-only fine-grained token (two-step guide in the app).
+- **What you shipped.** On app open, or "Check now", read new commits, merged pull requests and releases since the last check. One model call turns them into plain features ("Added dark mode to the dashboard") and drops chores (typos, version bumps). Only runs when there are new commits.
+- **Write about this.** Each shipped feature becomes a topic (source: "you shipped it"): posts for X, LinkedIn and Reddit plus an article, all waiting in Approvals.
+- **More context.** The README and recent work feed the product card, so posts and outreach talk about what is actually new.
+- **Brand map.** GitHub appears as a fourth source feeding Be seen.
+- **Reuse.** Braino's Dev Pulse (`supabase/functions/_shared/dev-pulse.ts`) already reads git history; reuse its commit reading.
+
+Version 1 checks whenever the app is open (no server). **Version 2**, true "every push, even with the app closed", needs a GitHub App with a push webhook to a server route, plus Foundry sign-in so drafts belong to someone. Build version 2 after sign-in exists.
+
+## Sign in and search live (23 Oct 2026)
+
+- **Sign in with Google** (the same Supabase account as Braino). Projects save to `foundry_projects` (one JSON row per project, row-level security: you only see your own). On sign-in, this browser's projects and your saved ones merge, newest copy wins, so nothing made before signing in is lost. Every change saves about 1.5 seconds later. Your name and photo come from Google until you set your own. Signed out, it works as before, in this browser only. The sidebar says where your work is saved.
+- Needs the migration `supabase/migrations/20261023000001_foundry_projects.sql` applied to production; until then the sidebar says "Account saving is not switched on yet" and everything stays in the browser.
+- **Search**: `APIFY_TOKEN` set in `.env.local` and in Vercel production on 23 Oct 2026.
+- Google sign-in returns to `/foundry/app`, so that URL must be in Supabase Auth's allowed redirect URLs.

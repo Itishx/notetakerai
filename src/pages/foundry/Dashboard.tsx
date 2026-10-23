@@ -1,11 +1,11 @@
 import React from "react";
-import { fmtDay, fmtTime, WEEK } from "./lib";
+import { fmtDay, WEEK } from "./lib";
 import { STAGES, type Stage } from "./store";
 import { moves, namedCount, waitingCount, type PageProps } from "./types";
 import { Funnel, KPI, Ring } from "./components/charts";
 import { Busy, Empty, Hint, Note, Section } from "./components/ui";
+import { BrandMap } from "./components/brandmap";
 
-const WHO: Record<string, string> = { optics: "Optics", content: "Content", outreach: "Outreach", memory: "Memory", you: "You" };
 
 /* Who this is for, before any numbers (2026-10-23): the company and the
    founder sit at the top of the dashboard, so every number below reads in
@@ -76,6 +76,8 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
 
       {p.searchNote && <Note>{p.searchNote} Optics still checks AI answers, and Content still writes posts. Outreach needs search to find people.</Note>}
 
+      <BrandMap p={p} busy={busy} />
+
       <div className="fx-grid2">
         <Section title="Pipeline" hint="Everyone Outreach found, and how far each one has come. Move people along on Reach people." explain={counts}>
           {p.people.length ? <Funnel counts={counts} /> : <Empty title="No people yet">Outreach finds real people asking about your problem today. {p.lastRun ? "None were found this run." : "Run the engines to start."}</Empty>}
@@ -101,7 +103,7 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
         <KPI label="You approved" value={p.posts.filter((x) => x.status === "approved").length + p.people.filter((x) => x.status === "approved").length} sub={`${waitingCount(p)} waiting`} spark={spark("approved")} />
       </div>
 
-      <div className="fx-grid2">
+      <div className="fx-auto-row">
         <Section title="This week's moves" hint="Ranked by how close each move is to a paying customer. Tap one to go there." explain={mv.slice(0, 5).map((m) => m.text)}>
           {mv.length ? (
             <ol className="fx-moves">
@@ -116,15 +118,6 @@ export default function Dashboard({ p, up, busy, run, go, me }: PageProps) {
               ))}
             </ol>
           ) : <Empty title="All clear">Nothing is waiting on you. Run again to find more people and fresh topics.</Empty>}
-        </Section>
-        <Section title="Happening now" hint="Every step the engines take, newest first. Memory lines show one engine feeding another." explain={p.memory.activity.slice(0, 10).map((a) => a.text)}>
-          {p.memory.activity.length ? (
-            <ol className="fx-feed">
-              {p.memory.activity.slice(0, 12).map((a) => (
-                <li key={a.id}><i className={`fx-dot ${a.who}`} /><span><b>{WHO[a.who]}</b> {a.text}</span><time>{fmtTime(a.at)}</time></li>
-              ))}
-            </ol>
-          ) : <Empty title="Quiet so far">When the engines run, each step shows up here.</Empty>}
         </Section>
       </div>
 

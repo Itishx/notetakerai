@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { uid } from "./lib";
+import { supabase } from "@/integrations/supabase/client";
 
 /* Braino Foundry state (2026-10-23). Everything lives on this device, in
    localStorage. One record per project, and inside each project one shared
@@ -159,7 +160,18 @@ function load(): Project[] {
   return old;
 }
 
-export function useFoundryStore() {
+/* Saved to your account (2026-10-23). Signed out, everything stays in this
+   browser as before. Signed in, projects load from foundry_projects, merge
+   with this browser (the newer copy of each project wins, so nothing made
+   before signing in is lost), and every change is saved a moment later. */
+export type SyncState = "off" | "loading" | "saving" | "saved" | "error" | "no-table";
+const TABLE = "foundry_projects";
+const SETTINGS_ROW = "__settings";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const table = () => (supabase as any).from(TABLE);
+const missingTable = (m: string) => /relation|does not exist|schema cache|not find the table/i.test(m);
+
+export function useFoundryStore(userId?: string) {
   const [projects, setProjects] = useState<Project[]>(load);
   const [activeId, setActiveId] = useState<string>(() => { try { return localStorage.getItem(`${KEY}-active`) || ""; } catch (_) { return ""; } });
   const [settings, setSettings] = useState<Settings>(() => { try { return { name: "", ...JSON.parse(localStorage.getItem(SETTINGS) || "{}") }; } catch (_) { return { name: "" }; } });
@@ -185,6 +197,75 @@ export function useFoundryStore() {
   }, []);
   const bytes = (() => { try { return new Blob([JSON.stringify(projects)]).size; } catch (_) { return 0; } })();
 
-  return { projects, activeId, setActiveId, update, get, create, remove, clearAll, settings, setSettings, bytes };
+  const [sync, setSync] = useState<SyncState>("off");
+  const saved = useRef<Record<string, number>>({});   // project id -> the `updated` last saved
+  const onServer = useRef<Set<string>>(new Set());
+  const ready = useRef(false);
+  const savedSettings = useRef("");
+
+  // Signing in: load, merge, then this browser's newer work gets saved.
+  useEffect(() => {
+    ready.current = false; saved.current = {}; onServer.current = new Set(); savedSettings.current = "";
+    if (!userId) { setSync("off"); return; }
+    let dead = false;
+    setSync("loading");
+    (async () => {
+      const { data, error } = await table().select("id,data,deleted").eq("user_id", userId);
+      if (dead) return;
+      if (error) { setSync(missingTable(String(error.message)) ? "no-table" : "error"); return; }
+      const rows = (data || []) as { id: string; data: Project & Settings; deleted: boolean }[];
+      const st = rows.find((r) => r.id === SETTINGS_ROW);
+      if (st && !st.deleted) { savedSettings.current = JSON.stringify(st.data); setSettings((cur) => ({ ...cur, ...(st.data as Settings) })); }
+      const remote = new Map(rows.filter((r) => r.id !== SETTINGS_ROW).map((r) => [r.id, r]));
+      const hasRemote = [...remote.values()].some((r) => !r.deleted);
+      const merged: Project[] = [];
+      // A blank project made while loading is not worth keeping next to real ones.
+      const local = ref.current.filter((p) => !(hasRemote && !p.onboarded && !p.draft.desc.trim() && !remote.has(p.id)));
+      const ids = new Set([...local.map((p) => p.id), ...remote.keys()]);
+      ids.forEach((id) => {
+        const l = local.find((p) => p.id === id);
+        const r = remote.get(id);
+        if (r) onServer.current.add(id);
+        if (r?.deleted) { if (l) saved.current[id] = -1; return; }
+        if (r && (!l || (r.data.updated || 0) >= (l.updated || 0))) { merged.push(r.data); saved.current[id] = r.data.updated; }
+        else if (l) merged.push(l);
+      });
+      merged.sort((a, z) => z.updated - a.updated);
+      ref.current = merged;
+      setProjects(merged);
+      setActiveId((a) => (merged.some((p) => p.id === a) ? a : merged[0]?.id || ""));
+      ready.current = true;
+      setSync("saved");
+    })();
+    return () => { dead = true; };
+  }, [userId]);
+
+  // Every change, saved about a second and a half later.
+  useEffect(() => {
+    if (!userId || !ready.current) return;
+    const t = window.setTimeout(async () => {
+      const dirty = projects.filter((p) => saved.current[p.id] !== p.updated);
+      const gone = [...onServer.current].filter((id) => !projects.some((p) => p.id === id));
+      const st = JSON.stringify(settings);
+      if (!dirty.length && !gone.length && st === savedSettings.current) return;
+      setSync("saving");
+      const now = new Date().toISOString();
+      const rows = [
+        ...dirty.map((p) => ({ user_id: userId, id: p.id, data: p, updated_at: now, deleted: false })),
+        ...(st !== savedSettings.current ? [{ user_id: userId, id: SETTINGS_ROW, data: settings, updated_at: now, deleted: false }] : []),
+      ];
+      const a = rows.length ? await table().upsert(rows) : { error: null };
+      const b = gone.length ? await table().update({ deleted: true, updated_at: now }).eq("user_id", userId).in("id", gone) : { error: null };
+      const err = a.error || b.error;
+      if (err) { setSync(missingTable(String(err.message)) ? "no-table" : "error"); return; }
+      dirty.forEach((p) => { saved.current[p.id] = p.updated; onServer.current.add(p.id); });
+      gone.forEach((id) => onServer.current.delete(id));
+      savedSettings.current = st;
+      setSync("saved");
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [projects, settings, userId, sync === "loading"]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { projects, activeId, setActiveId, update, get, create, remove, clearAll, settings, setSettings, bytes, sync };
 }
 export type Store = ReturnType<typeof useFoundryStore>;
