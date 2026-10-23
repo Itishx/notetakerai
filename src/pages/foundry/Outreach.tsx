@@ -62,7 +62,7 @@ function PersonCard({ x, p, up, go }: { x: Person; p: PageProps["p"]; up: PagePr
           {x.opener && (
             <div className={`fx-opener${openerLive ? " live" : ""}`}>
               <p><b>This message mentions one of your own posts:</b> "{x.opener}". {openerLive ? "That post is out, so the line works as it is." : "That post is written but not out yet. Post it first, or the line \"I wrote about this\" won't be true."}</p>
-              <button className="fx-link" onClick={() => go("content")}>{openerPosts.length ? "See the post in Be seen" : "Open Be seen"}</button>
+              <button className="fx-link" onClick={() => { try { if (openerTopic) sessionStorage.setItem("foundry-focus-topic", openerTopic.id); } catch (_) { /* private */ } go("content"); }}>{openerPosts.length ? "See the post in Be seen" : "Open Be seen"}</button>
             </div>
           )}
           {editing ? <textarea rows={6} value={x.message} onChange={(e) => setPerson(up, x.id, { message: e.target.value })} /> : <p>{x.message}</p>}

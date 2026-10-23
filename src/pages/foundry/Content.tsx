@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import "./components/brandmap.css";
 import type { Topic, TopicSource } from "./store";
 import type { PageProps } from "./types";
 import { approvePost, setPost, setTopic } from "./actions";
@@ -74,6 +75,13 @@ export default function Content({ p, up, busy, run }: PageProps) {
   const live = p.posts.filter((x) => x.status !== "skipped");
   const last = p.posts.reduce((m, x) => Math.max(m, x.at), 0) || null;
   const topicOf = (id: string) => topics.find((t) => t.id === id);
+  /* Arriving from Reach people: show just the posts that message mentions,
+     highlighted, until "Show all posts". */
+  const [focus, setFocus] = useState<string>(() => { try { const f = sessionStorage.getItem("foundry-focus-topic") || ""; sessionStorage.removeItem("foundry-focus-topic"); return f; } catch (_) { return ""; } });
+  const focusTopic = focus ? topicOf(focus) : undefined;
+  const postsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (focusTopic) window.setTimeout(() => postsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = focusTopic ? p.posts.filter((x) => x.topicId === focus) : p.posts;
 
   return (
     <div className="fx-page">
@@ -95,15 +103,22 @@ export default function Content({ p, up, busy, run }: PageProps) {
         {live.length ? <WeekStrip items={live.map((x) => ({ day: x.day, time: x.time, label: PLATFORM_LABEL[x.platform], status: x.status }))} /> : <Empty title="Nothing planned">Once posts are written, they show up on the day to post them.</Empty>}
       </Section>
 
+      <div ref={postsRef} />
       <Section title="Posts" hint="Shown the way each platform shows them. Approve copies the text and opens the platform with it filled in where it can. Nothing is posted for you yet.">
         {busy.content && !p.posts.length && <Busy text={busy.content} />}
-        {p.posts.length ? (
-          <ItemTable showKind={false} empty={null} rows={[...p.posts].sort((a, z) => (a.status === "waiting" ? 0 : 1) - (z.status === "waiting" ? 0 : 1) || a.day - z.day).map((x): TableRow => ({
+        {focusTopic && (
+          <div className="fx-focus">
+            <p><b>The post your message mentions</b> · "{focusTopic.title}". {shown.some((x) => x.status === "approved") ? "It is out." : "Approve it and post it, then send the message."}</p>
+            <button className="fx-link" onClick={() => setFocus("")}>Show all posts</button>
+          </div>
+        )}
+        {shown.length ? (
+          <div className={focusTopic ? "fx-focused" : ""}><ItemTable showKind={false} empty={null} rows={[...shown].sort((a, z) => (a.status === "waiting" ? 0 : 1) - (z.status === "waiting" ? 0 : 1) || a.day - z.day).map((x): TableRow => ({
             id: x.id, kind: "Post", site: PLATFORM_LABEL[x.platform], when: `${DAYS[x.day]} at ${x.time}`,
             title: x.title || topicOf(x.topicId)?.title, text: x.text, status: x.status, opened: x.opened,
             approve: () => approvePost(up, x), skip: () => setPost(up, x.id, { status: "skipped" }), undo: () => setPost(up, x.id, { status: "waiting" }),
             edit: (text) => setPost(up, x.id, { text }),
-          }))} />
+          }))} /></div>
         ) : !busy.content && <Empty title="No posts yet" action={<button className="fx-btn" onClick={() => run.content()}>Write this week's posts</button>}>Braino writes one post for each of X, LinkedIn, Reddit, Instagram and Threads.</Empty>}
       </Section>
       <p className="fx-small">Content only writes public posts. A message to one person lives in Reach people.<Hint>Keeping them apart keeps each engine honest: posts are for everyone, messages are for one person.</Hint></p>

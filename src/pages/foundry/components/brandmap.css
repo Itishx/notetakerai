@@ -56,3 +56,8 @@
 .fx-opener.live { border-left-color: var(--fx-r); background: color-mix(in srgb, var(--fx-r) 8%, transparent); }
 .fx-opener p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--a-ink-soft); }
 .fx-opener b { color: var(--a-ink); font-weight: 600; }
+.fx-focus { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--fx-c); background: color-mix(in srgb, var(--fx-c) 8%, transparent); }
+.fx-focus p { margin: 0; font-size: 14px; color: var(--a-ink-soft); }
+.fx-focus b { color: var(--a-ink); }
+.fx-focused { border-radius: 14px; box-shadow: 0 0 0 2px var(--fx-c); animation: fxFocusPulse 1.2s ease 2; }
+@keyframes fxFocusPulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--fx-c) 30%, transparent); } }
