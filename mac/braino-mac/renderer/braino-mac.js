@@ -16639,9 +16639,10 @@ function heraIslandShow(on) {
     heraIslandPlace();
     heraIsland.classList.remove("thinking", "open");
     heraIsland.classList.add("from", "on");      // starts as his exact shape…
-    walker?.classList.add("hera-morphing", "hera-morph"); // …while he melts into it
+    walker?.classList.add("hera-morphing", "hera-morph"); // …he becomes that shape
+    if (!heraAnim) heraAnim = requestAnimationFrame(heraAnimate);
     void heraIsland.offsetWidth;
-    requestAnimationFrame(() => heraIsland.classList.remove("from")); // …and narrows to the pill
+    heraMorphTimer = window.setTimeout(() => heraIsland.classList.remove("from"), 140); // …then squeezes into the pill
     return;
   }
   heraIsland.classList.remove("open", "thinking");
@@ -16658,12 +16659,16 @@ function heraIslandPaint() {
   if (!heraIsland) return;
   heraIsland.style.setProperty("--hi-lv", heraLevel.toFixed(3));
   heraIsland.style.setProperty("--hi-lv-s", (1 + heraLevel * 0.9).toFixed(3));
-  const t = performance.now() / 140;
+  const t = performance.now() / 120;
   heraDots.forEach((d, i) => {
-    const wave = 0.55 + 0.45 * Math.sin(t + i * 0.9);
-    d.style.setProperty("--d", (1 + heraLevel * 5 * wave).toFixed(2));
+    const wave = 0.5 + 0.5 * Math.sin(t + i * 1.1);
+    // Up to ~6x wide (3px -> 18px) at full voice; centre dots move most.
+    const centre = 1 - Math.abs(i - (heraDots.length - 1) / 2) / heraDots.length;
+    d.style.setProperty("--d", (1 + heraLevel * 5.5 * wave * (0.6 + centre)).toFixed(2));
   });
 }
+let heraAnim = 0;
+function heraAnimate() { heraIslandPaint(); heraAnim = heraIsland?.classList.contains("on") ? requestAnimationFrame(heraAnimate) : 0; }
 window.brainoMac.onHeraLevel?.((payload) => {
   const v = Math.max(0, Math.min(1, Number(payload?.v) || 0));
   heraLevel = heraLevel * 0.55 + v * 0.45; // smooth, so it breathes rather than flickers

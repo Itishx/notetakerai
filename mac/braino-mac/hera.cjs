@@ -31,6 +31,8 @@ async function warmMic() {
   stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
   try {
     ctx = new AudioContext();
+    // A window nobody clicked starts its audio paused, and a paused meter reads silence.
+    try { await ctx.resume(); } catch (_) {}
     analyser = ctx.createAnalyser(); analyser.fftSize = 512;
     ctx.createMediaStreamSource(stream).connect(analyser);
   } catch (_) { analyser = null; }
@@ -46,6 +48,7 @@ function coolMic() {
 window.heraStart = async () => {
   chunks = [];
   await warmMic();
+  try { if (ctx && ctx.state !== "running") await ctx.resume(); } catch (_) {}
   if (analyser) {
     const buf = new Uint8Array(analyser.fftSize);
     clearInterval(levelTimer);
@@ -85,7 +88,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     if (win && !win.isDestroyed()) return win;
     const ses = session.fromPartition(PARTITION);
     ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === "media"));
-    win = new BrowserWindow({ show: false, width: 200, height: 100, webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, backgroundThrottling: false } });
+    win = new BrowserWindow({ show: false, width: 200, height: 100, webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, backgroundThrottling: false, autoplayPolicy: "no-user-gesture-required" } });
     win.on("closed", () => { win = null; recording = false; });
     // The recorder page reports its level through the console: cheap, and it needs no bridge.
     win.webContents.on("console-message", (...args) => {
