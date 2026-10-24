@@ -4263,7 +4263,7 @@ function startSwiftHotkeyHelper() {
          hands-free session. Option+another key cancels and types nothing. */
       if (trimmed === "option-hold-start" || trimmed === "option-hold-end" || trimmed === "option-hold-cancel") {
         if (SKIT.enabled) return;
-        if (!(parakeetEnabled() && (parakeet.ready || sarvamActive()))) {
+        if (!(heraCloudEnabled() || (parakeetEnabled() && (parakeet.ready || sarvamActive())))) {
           // Cloud fallback: the renderer recorder toggles on start and end.
           if (trimmed !== "option-hold-cancel") sendToRenderer("braino-mac:dictation-toggle", { source: "hold Option" });
           return;
@@ -4300,8 +4300,10 @@ function startSwiftHotkeyHelper() {
         }
         // The cloud path is the default because it is the accurate one today.
         // On-device is opt-in until it matches that quality: BRAINO_PARAKEET=1.
-        if (parakeetEnabled() && parakeet.ready) {
-          logMac("hotkey.double_option", { skill: "yap-mode", engine: "parakeet" });
+        // 2026-10-25: the cloud recorder (instant, raw mic, whole-clip transcription) is
+        // the default for double Option too; startLocalDictation picks it first.
+        if (heraCloudEnabled() || (parakeetEnabled() && parakeet.ready)) {
+          logMac("hotkey.double_option", { skill: "yap-mode", engine: heraCloudEnabled() ? "cloud" : "parakeet" });
           if (localDictationActive || localDictationStarting) {
             void stopLocalDictation("double Option");
           } else {

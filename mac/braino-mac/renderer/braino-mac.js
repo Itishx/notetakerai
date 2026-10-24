@@ -3963,7 +3963,8 @@ function updateNotchFace() {
     : null;
 
   const dictationCapturing = dictationMode && !dictationStopping;
-  const yapOwnsNotch = visible && (dictationMode || dictationStopping);
+  // 2026-10-25: dictation never takes over the notch; the island below it is the whole UI.
+  const yapOwnsNotch = false;
   const answerOwnsNotch = visible
     && Boolean(nfAnswerMode)
     && notchFace.classList.contains("nf-answer-open");
@@ -13687,7 +13688,7 @@ window.brainoMac.onDictationUi?.((payload) => {
     if (realtimeActive) window.setTimeout(() => void heraVoiceStart("after_dictation"), 1500);
   }
   logRenderer("dictation.ui.local", { active, engine: String(payload?.engine || "parakeet") });
-  setStatus(active ? "listening" : "", "");
+  // The notch stays exactly as it is while dictating; only the island shows.
   heraIslandShow(active);
   updateNotchFace();
 });
@@ -16583,15 +16584,14 @@ const heraDots = heraIsland ? [...heraIsland.querySelectorAll(".hi-dots i")] : [
 let heraLevel = 0;
 let heraBoxTimer = 0;
 function heraIslandPlace() {
-  const pill = document.querySelector("#notch-face .nf-pill");
-  const r = pill ? pill.getBoundingClientRect() : null;
-  const right = r && r.width ? r.right : window.innerWidth / 2 + 95;
-  heraIsland?.style.setProperty("--hi-left", `${Math.round(right + 8)}px`);
+  // Centred just under the physical notch, so it is visible on any wallpaper
+  // (beside the notch it was black on a black menu bar, and invisible).
+  heraIsland?.style.setProperty("--hi-left", "50%");
 }
 function heraIslandShow(on) {
   if (!heraIsland) return;
   if (on) { heraIslandPlace(); heraIsland.classList.remove("thinking"); }
-  else heraIsland.classList.remove("open");
+  else heraIsland.classList.remove("open", "thinking");
   heraIsland.classList.toggle("on", Boolean(on));
   if (!on) { heraLevel = 0; heraIslandPaint(); }
 }
