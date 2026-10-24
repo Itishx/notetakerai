@@ -219,6 +219,11 @@ const followUp = (state, now) => Function("Date", "s", `
   ${lift("function sharesAWordWithQuestion(answer, question) {")}
   let rtLastHeardText = s.rtLastHeardText || "";
   const isSelfEcho = () => false; // echo is covered by its own tests
+  let rtSpeechStartedAt = s.rtSpeechStartedAt || 0;
+  const mediaMaybePlaying = () => false;
+  ${liftLine("const FOLLOW_UP_IMMEDIATE_MS =")}
+  ${liftLine("const SPOKEN_SENTENCE =")}
+  ${lift("function startedRightAfterHim() {")}
   ${lift("function followsHisReply(text) {")}
   return { namedFollowUpWindowOpen, saidToBraino, followsHisReply };
 `)({ now: () => now }, {

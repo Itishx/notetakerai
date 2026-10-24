@@ -108,3 +108,22 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
 - [x] Listed in **Everything New with Braino**
 - [x] Public copy is simple and human
 - [x] Release date and status are accurate
+
+## Fluent back-and-forth (2026-10-25)
+
+**The problem:** in a natural conversation he kept missing the next sentence and needed "Braino" again. The log showed three gates dropping real replies:
+
+- **Follow-up gate:** after his reply, a sentence had to look like an order, a question or contain "you". Plain replies like "That was uncalled for." (dropped four times, 8 to 30 seconds after he spoke) and "I got very drunk" failed.
+- **Busy gate:** while he talked or worked, anything without his name was binned ("I'm gonna stop the task", "What do you have to say to that").
+- **Main's second opinion:** a follow-up the voice side had already accepted was judged again by Laya with no context and dropped as "not for him".
+
+**What changed:**
+
+- A sentence you *start* within 12 seconds of his voice ending is your turn, whatever its shape, as long as it is a real sentence (3+ words with ordinary small words like "I", "that", "was"). Fragments off a screen ("Hamburger menu.", "Push, push, always push.") still stay out.
+- For 90 seconds after you last *spoke* to him (typing doesn't count), what you say while he works is kept. While he is talking, it needs to be aimed at him ("listen", "you", "wait", "I'm saying") and must not be his own voice.
+- "Stop the task", "I'm gonna stop", "listen…" count as interruptions anywhere in the sentence.
+- The voice side passes its verdict (`addressed`) with the job, so main no longer drops a follow-up it already accepted.
+
+**Kept as before:** his own voice is refused (`isSelfEcho`), nothing gets in while media plays, noise is filtered, saying "Braino" always works, and interrupting him still works.
+
+**Files:** `renderer/braino-mac.js` (`startedRightAfterHim`, `inActiveExchange`, `heardOverHimInExchange`, `SPOKEN_SENTENCE`, `namedAcceptedAt`), `main.cjs` (`macHeardAddressed` honours `options.addressed`). Tests: `tests/mac-voice-fluent-followup.test.mjs`.

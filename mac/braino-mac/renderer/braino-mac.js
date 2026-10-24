@@ -497,6 +497,7 @@ const NAMED_FOLLOW_UP_MS = 45000;
 const NAMED_EXCHANGE_MAX_MS = 3 * 60 * 1000;
 /* The last thing you said that he accepted. */
 let lastUserTurnAt = 0;
+let lastSpokenTurnAt = 0;
 /* The on-device listener heard his name. Its spelling of "Braino" is better
    than the cloud's, so an utterance it caught counts as addressed even when
    the transcript wrote the name as something else. */
@@ -5360,6 +5361,11 @@ function voiceAddressesBraino(text) {
  * wake light. */
 const NAMED_WINDOW_MS = 12000;
 let namedModeOn = false;
+/* When the name gate last let a sentence through as said to him. Sent with
+   the job so main does not run its own "was it for him?" again and drop what
+   this side already accepted (2026-10-25: "I am saying that was uncalled for"
+   got past here, then Laya in main dropped it as not for him). */
+let namedAcceptedAt = 0;
 let namedAddressedAt = 0;
 
 function namedWindowOpen() {
@@ -5431,7 +5437,7 @@ function namedBusyOnly() {
   return Boolean(speaking || processing || voiceTurnInFlight);
 }
 /* One word is enough to stop him. */
-const BUSY_INTERRUPT = /^(?:stop|wait|cancel|pause|enough|no|nope|shut up|quiet|hold on|hang on)\b/i;
+const BUSY_INTERRUPT = /^(?:stop|wait|cancel|pause|enough|no|nope|shut up|quiet|hold on|hang on|listen)\b|\b(?:stop|cancel|kill|end)\s+(?:the|this|that|it|your)\s*(?:task|job|thing|now)?\b|\bi'?m (?:gonna|going to) stop\b/i;
 
 /* What an answer to his waiting question sounds like: short (a name, a yes,
    "the second one"), or plainly said to him. A long sentence that is neither
@@ -5474,8 +5480,51 @@ function duckSpeech(on, why = "") {
 /* One word that only means something to him: "stop" right after he started
    the song was dropped as room noise (2026-09-26), and he had to be told
    again with his name. */
+/* Fluent turn-taking (2026-10-25). In a real conversation the next sentence
+   starts within a few seconds of the other person stopping, and most of them
+   are plain statements: "That was uncalled for." (four times, 8 to 30s after
+   his reply), "I got very drunk", "But it's Sunday today". The shape rules
+   below were written to keep a lecture or a room out over a 45s window, and
+   they dropped exactly these. A sentence you START within this long of his
+   voice ending (or while he is still talking) is your turn, whatever its
+   shape. His own voice is still refused by isSelfEcho, media by
+   mediaMaybePlaying, noise by looksLikeNoise downstream. */
+const FOLLOW_UP_IMMEDIATE_MS = 12000;
+/* A sentence a person says has the small words in it ("That WAS uncalled
+   for", "I got very drunk"); a fragment off a screen or a lecture slide
+   ("Push, push, always push.", "link newsletters signup") does not. */
+const SPOKEN_SENTENCE = /\b(?:i|i'm|i've|i'd|i'll|me|my|we|our|you|your|you're|that|that's|this|it|it's|is|was|are|were|am|be|been|do|did|does|don't|didn't|doesn't|not|can't|won't|so|because|but|just|really)\b/i;
+function startedRightAfterHim() {
+  const endedTs = Number(lastSpokenLine?.endedTs) || 0;
+  if (!endedTs || !namedFollowUpWindowOpen()) return false;
+  const startedAt = rtSpeechStartedAt || Date.now();
+  return startedAt >= endedTs - 1500 && startedAt - endedTs <= FOLLOW_UP_IMMEDIATE_MS;
+}
+/* You are mid-conversation with him: you said something he took in the last
+   ninety seconds. While he works or talks in that time, what you say next is
+   for him, the way a person keeps listening while they do what you asked. */
+const ACTIVE_EXCHANGE_MS = 90000;
+function inActiveExchange() {
+  if (!lastSpokenTurnAt || Date.now() - lastSpokenTurnAt > ACTIVE_EXCHANGE_MS) return false;
+  return !(typeof mediaAudioPlaying !== "undefined" && mediaMaybePlaying());
+}
+/* While he is talking, his own words come back through the mic: only a
+   sentence that is not his and is plainly aimed at him counts then. */
+const TALKING_OVER_HIM = /\b(?:you|your|you're|listen|wait|stop|no|hold on|i'?m saying|i said|i mean|what do you|are you)\b/i;
+function heardOverHimInExchange(text) {
+  if (!inActiveExchange() || isSelfEcho(text)) return false;
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  if (words < 2) return false;
+  if (!speaking) return true;
+  return words >= 3 && (TALKING_OVER_HIM.test(String(text || "")) || saidToBraino(text));
+}
+
 function followsHisReply(text) {
   if (!namedFollowUpWindowOpen()) return false;
+  // Three words: "Hamburger menu." and "stay straight" are what the room
+  // sounds like in two (that log is a test); a real reply rarely is.
+  if (!isSelfEcho(text) && String(text || "").trim().split(/\s+/).filter(Boolean).length >= 3 && SPOKEN_SENTENCE.test(String(text || "")) && startedRightAfterHim()
+    && !(typeof mediaAudioPlaying !== "undefined" && mediaMaybePlaying())) return true;
   /* His own voice off the speakers is never your reply to him (4 Oct: "play
      default only in the next 20 minutes" came in through this window). The
      mic stays open while he talks now, so this matters more. */
@@ -6418,6 +6467,7 @@ function shouldAcceptVoiceTranscript(text) {
       if (!isBareWakeWord(text)) namedHeardOnDeviceAt = 0;
       namedWake("name");
     } else if (namedBusyOnly() && !saidToBraino(text) && !BUSY_INTERRUPT.test(String(text || "").trim()) && !answersHisQuestion(text) && !(hasPendingDelegateFollowup() && answersPendingQuestion(text))
+      && !heardOverHimInExchange(text)
       /* A plain new order while he works ("Open Chrome.", "Open the file.")
          is a new job, not room talk: it was dropped 2 times in one run. */
       && !(isLikelyMacActionTranscript(text) && stats.wordCount >= 2 && stats.wordCount <= 12 && /^(?:open|close|quit|play|pause|stop|switch|go to|search|show|send|call|turn|set|mute|maximi[sz]e|minimi[sz]e)\b/i.test(stats.normalized))) {
@@ -6453,6 +6503,7 @@ function shouldAcceptVoiceTranscript(text) {
       }
       namedWake("follow-up");
     }
+    namedAcceptedAt = Date.now();
   }
 
   const addressed = voiceAddressesBraino(text);
@@ -6551,7 +6602,7 @@ function shouldAcceptVoiceTranscript(text) {
     return true;
   }
   const plainOrder = isLikelyMacActionTranscript(text) && stats.wordCount >= 2 && stats.wordCount <= 12 && /^(?:open|close|quit|play|pause|stop|switch|go to|search|show|send|call|turn|set|mute|maximi[sz]e|minimi[sz]e)\b/i.test(stats.normalized);
-  if ((speaking || processing || voiceTurnInFlight) && !addressed && !(plainOrder && !speaking)) {
+  if ((speaking || processing || voiceTurnInFlight) && !addressed && !(plainOrder && !speaking) && !heardOverHimInExchange(text)) {
     /* This was the deck's quietest bug: a bare `return false` with no log. Every
        command spoken over him vanished with no record that it had existed, so
        the log showed a silent user and the user saw an agent ignoring them. */
@@ -7472,6 +7523,7 @@ async function runDelegate(prompt, options = {}) {
   // Queue the command in main before doing any response-surface presentation.
   // Electron IPC is now ahead of Notch rendering in the event queue.
   const delegatePromise = window.brainoMac.delegate(nfShelfWrapPrompt(text), {
+    addressed: Boolean(options.keepRealtime && namedModeOn && Date.now() - namedAcceptedAt < 15000),
     forceBrain: Boolean(options.forceBrain),
     reason: options.reason || "",
     // Typed is always to him: main must never drop it as room talk.
@@ -9660,6 +9712,8 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
   if (transcript) namedSpeechAwake = false;
   /* Your half of the exchange. His reply to it opens the follow-up window. */
   if (accepted && !dictationMode) { lastUserTurnAt = Date.now(); rtLastHeardText = transcript; }
+  // Spoken, not typed: only a voice conversation keeps the mic's door open.
+  if (accepted && !dictationMode && !opts.typed) lastSpokenTurnAt = Date.now();
   logRenderer("realtime.transcript.flush", {
     reason,
     transcriptChars: transcript.length,

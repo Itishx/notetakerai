@@ -23037,7 +23037,10 @@ async function runDelegate(prompt, options = {}) {
   macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
   /* Typed in the app chat is said to him by definition. Laya scored "hi" as
      room talk and it was dropped without a word (2026-10-18). */
-  macHeardAddressed = Boolean(options.typed) || /\bbrain(?:o|elle|a)\b/i.test(String(prompt || ""));
+  /* addressed: the voice side's name gate already judged this as said to him
+     (a follow-up in a conversation). Judging it again here with no context
+     dropped real replies as "not for him" (2026-10-25). */
+  macHeardAddressed = Boolean(options.typed) || Boolean(options.addressed) || /\bbrain(?:o|elle|a)\b/i.test(String(prompt || ""));
   {
     const pasted = parseHandoff(prompt);
     if (pasted) return runHandoff(pasted, "pasted");
