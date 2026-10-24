@@ -20741,6 +20741,12 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
       taskBoard.hold(runId, "paused", "you asked for something else", snapshot);
     } else if (result?.ok === false) {
       taskBoard.hold(runId, "blocked", result?.say || "", snapshot);
+    } else if (/\?\s*["')\]]*\s*$/.test(String(result?.say || ""))) {
+      /* It ended on a question but nothing holds it (the ask limit lets the
+         question be said and drops the hold). A question is not done: kept
+         waiting, so the answer finds its way back through the board instead
+         of starting a new job with three words and no context (2026-10-25). */
+      taskBoard.hold(runId, "waiting", result.say, { ...snapshot, askedConsent: String(state?.lastQuestion || result.say) });
     } else {
       taskBoard.finish(runId, result?.say || "");
       result.say = withStillOpen(result.say, runId);
@@ -20892,6 +20898,16 @@ async function runMacHilLoopInner(command, resume = null, opts = {}) {
   /* Their answer, handed to the model on the next turn and then forgotten, the
      way the browser engine does it. */
   let pendingReply = resume?.userReply ? String(resume.userReply) : null;
+  /* Their answer is shown on the next turn and then gone, the browser way.
+     That is fine until a step fails: "delete both of them" was used once, the
+     click went stale, and two turns later he asked "which one?" again, then
+     again, until the ask limit ended the job mid-question (2026-10-25). What
+     they answered holds for the whole job, so it is pinned with the findings
+     the model sees every turn. */
+  if (pendingReply) {
+    const asked = String(resume?.askedConsent || resume?.state?.lastQuestion || "").trim();
+    macHilPin(state, `They already answered${asked ? ` "${asked.slice(0, 140)}"` : " your question"}: "${pendingReply.split("\n")[0].slice(0, 200)}". This holds for the whole job; act on it and do not ask it again.`);
+  }
   const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   /* 20 seconds, then he says where he is and asks (2026-09-26). "Switch all my
@@ -21223,6 +21239,7 @@ async function runMacHilLoopInner(command, resume = null, opts = {}) {
         askedConsent: String(d.question || ""),
         createdAt: Date.now(),
       };
+      state.lastQuestion = String(d.question || "");
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: d.question } });
       return { ok: true, say: d.question, source: "hil_loop" };
     }

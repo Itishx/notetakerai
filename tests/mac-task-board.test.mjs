@@ -234,3 +234,19 @@ test("a lesson that only opens something is never kept for a command that asks t
   assert.match(main, /function skillOnlyOpensForADoCommand\(said, steps\)/);
   assert.match(main, /why: "opens_for_a_do_command"/);
 });
+
+/* Swiggy run, 2026-10-25: "delete both" was forgotten after one turn, he asked
+   three times, the ask limit dropped the job mid-question, and "The gourmet
+   delivery" became a new job with no context. */
+test("an answer is pinned for the whole job, not one turn", () => {
+  assert.match(main, /macHilPin\(state, `They already answered/);
+  assert.match(main, /This holds for the whole job; act on it and do not ask it again\./);
+});
+
+test("a job that ends on a question stays waiting, and the answer finds it", () => {
+  assert.match(main, /taskBoard\.hold\(runId, "waiting", result\.say, \{ \.\.\.snapshot, askedConsent:/);
+  const { b } = board();
+  b.start("swiggy", "delete my Swiggy email");
+  b.hold("swiggy", "waiting", "Which Swiggy email should I delete: the Gourmet delivery, the on-time delivery, or the feast-ival offer?", { runId: "swiggy" });
+  assert.equal(b.about("The gourmet delivery")?.runId, "swiggy");
+});
