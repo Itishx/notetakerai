@@ -3,6 +3,7 @@ import { Group } from "./components/group";
 import "./components/brandmap.css";
 import { copy, DAY } from "./lib";
 import { followUp, learnObjection, replyTo } from "./engines";
+import { takeFocus } from "./focus";
 import { log, PERSON_PLATFORMS, PERSON_PLATFORM_LABEL, STAGES, STAGE_LABEL, whereOf, type Person, type PersonPlatform, type Stage } from "./store";
 import { followUpDue, type PageProps } from "./types";
 import { approvePerson, moveStage, setPerson } from "./actions";
@@ -126,7 +127,7 @@ export default function Outreach({ p, up, busy, run, go }: PageProps) {
     return () => window.clearTimeout(t);
   }, [focus.person]);
   const [find, setFind] = useState("");
-  const [plat, setPlat] = useState<PersonPlatform | "all">("all");
+  const [plat, setPlat] = useState<PersonPlatform | "all">(() => { const f = takeFocus("platform"); return PERSON_PLATFORMS.includes(f as PersonPlatform) ? (f as PersonPlatform) : "all"; });
   const drafting = useRef(false);
   const due = followUpDue(p).filter((x) => !x.followUp);
   // Messaged 3 or more days ago with no reply: draft a follow-up, one at a time.

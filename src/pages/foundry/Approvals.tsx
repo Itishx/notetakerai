@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { takeFocus } from "./focus";
 import { whereOf } from "./store";
 import "./components/brandmap.css";
 import type { PageProps } from "./types";
@@ -16,7 +17,7 @@ export default function Approvals({ p, up, go }: PageProps) {
   /* Simplified (2026-10-23): Itish found three rows of filters confusing.
      One switch, To do or Done, then everything grouped under plain headings,
      sorted by where it goes. */
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(() => takeFocus("approvals") === "done");
 
   const posts: TableRow[] = p.posts.map((x): TableRow => ({
     id: x.id, kind: "Post", site: PLATFORM_LABEL[x.platform], title: x.title || undefined, text: x.text, when: `${DAYS[x.day]} ${x.time}`,

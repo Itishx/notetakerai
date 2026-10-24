@@ -19,9 +19,11 @@ const FOLD_DARK = [16, 44, 72, 128, 156, 184];
 const foldPath = (x: number, dir: number) =>
   `M ${x} 2 Q ${x + 7 * dir} 20 ${x} 37 Q ${x - 7 * dir} 54 ${x} 72`;
 
-export const NOTCH_FACE_MARKUP = `
-  <div class="nf-sonar"><i></i><i></i><i></i></div>
-  <div class="nf-pill">
+export const NOTCH_SONAR_MARKUP = `<div class="nf-sonar"><i></i><i></i><i></i></div>`;
+
+/* Everything inside .nf-pill, so a page can add its own surface in the pill
+   (Braino Foundry's answer sheet) and still keep the art verbatim. */
+export const NOTCH_PILL_INNER = `
     <svg class="nf-folds" viewBox="0 0 200 74" preserveAspectRatio="none">
       ${FOLD_DARK.map((x) => `<path d="${foldPath(x, x < 100 ? 1 : -1)}" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55"/>`).join("")}
       ${FOLD_DARK.map((x) => `<path d="${foldPath(x + 2.4, x < 100 ? 1 : -1)}" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5"/>`).join("")}
@@ -43,7 +45,9 @@ export const NOTCH_FACE_MARKUP = `
     <div class="nf-cap nf-cap-l"></div>
     <div class="nf-status"><span class="nf-status-inner"></span></div>
     <div class="nf-privacy"></div>
-  </div>
+`;
+
+export const NOTCH_SHINE_MARKUP = `
   <svg class="nf-shine" viewBox="0 0 190 55" aria-hidden="true">
     <defs>
       <linearGradient id="nf-shine-grad" x1="0" y1="0" x2="1" y2="1">
@@ -56,6 +60,12 @@ export const NOTCH_FACE_MARKUP = `
     <path class="nf-shine-glow" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
     <path class="nf-shine-core" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
   </svg>
+`;
+
+export const NOTCH_FACE_MARKUP = `
+  ${NOTCH_SONAR_MARKUP}
+  <div class="nf-pill">${NOTCH_PILL_INNER}  </div>
+  ${NOTCH_SHINE_MARKUP}
 `;
 
 /** Set the island's little status ticker ("authenticating" / "authenticated"). */

@@ -205,7 +205,7 @@ When you open Foundry, Braino is there. A black notch sits top centre over the a
 - Buttons jump to the right page; a person's card glows for 1.5 seconds. "Send it" copies the answer and opens the site, then moves them to Talking.
 - Everything happens inside the notch. One steady shape per exchange, first person, short lines. He bobs while engines run and hops when a run finishes or someone replied.
 
-**Voice commands** (hold or tap Space when no field is focused, or tap the mic in the notch)
+**Voice commands** (first version, replaced the same day, see below)
 - "Show me who replied" / "replies": Reach people, filtered to Replied
 - "Show me the posts": Be seen
 - "Approvals": Approvals
@@ -222,3 +222,33 @@ When you open Foundry, Braino is there. A black notch sits top centre over the a
 - After a voice "send it", the browser may block the new tab because it was not a click. The text is still copied.
 
 **Technical shape**: `src/pages/foundry/components/WebNotch.tsx` + `web-notch.css` (the notch), `braino-lines.ts` (pure `brainoLine(project, busy, opts)`), `voiceCommands.ts` (phrase matching, then `ask`), voice through `useBrainoVoice` with `anonymous: true`. Greeting date in localStorage `foundry-braino-greet-<project id>`; Reach people focus via sessionStorage `foundry-focus-person` and `foundry-focus-stage`. Status: live on /foundry/app, 24 Oct 2026.
+
+## Braino on the web, rebuilt: the real notch, Control to talk, he drives the app (24 Oct 2026)
+
+**The simple version.** The notch on Foundry is now the Mac app's own notch, not a lookalike. Hold Control, say what you want in your own words, let go. Braino understands it, opens the right page already filtered, and tells you what he did in his own voice.
+
+**How to use it**
+- Hold **Control**, talk, let go. Or open the notch and tap the mic: tap to talk, tap again to send.
+- Say it however you like: "Braino, show me who you found for this" opens Reach people, every platform, Found, and he says "Here are the 6 people I found."
+- Others that work: "who replied on LinkedIn", "open what I already approved", "show me the posts about pricing", "write a post about cold email", "find more people", "send it", "how did this week go". Any question gets a two sentence answer from the project's memory.
+- Press Control while he is talking and he stops at once.
+
+**What you see**
+- The notch is the Mac's: his eyes in black, blinking every few seconds, lids down after 30 quiet minutes, the coral listening island with sonar while you hold Control, a pulse while engines run, and the Mac's short answer sheet when he talks.
+- Braino himself sits in the sidebar header: his mouth moves while his voice plays, he bobs while he thinks and hops when something lands.
+
+**Honest limitations**
+- Signed in, your words are transcribed by the same OpenAI Realtime session the Mac uses. Signed out, the edge function refuses ("Sign in required"), so the browser's own speech recognition is used instead, which works in Chrome and Safari only.
+- Words appear live from the browser's recogniser while you hold the key; the Realtime transcript, which is more accurate, arrives about half a second after you let go and is the one he acts on.
+- One model call per thing you say, through chat-about-notes. That function has no "fast" switch the browser can pick, so it runs on its default text model and effort. Expect one to three seconds before he answers.
+- His voice streams (he starts on the first chunk). On iPhone Safari it plays once the whole clip has arrived.
+- He still has no hands on the web. He opens pages and gets things ready; you post it yourself. On the Mac (private beta) he does it himself.
+- Control on its own is a turn. A quick tap, or Control with another key (Ctrl+F, Ctrl+C), is ignored.
+
+**Technical shape**
+- Notch: `src/pages/foundry/components/WebNotch.tsx` renders `NOTCH_SONAR_MARKUP`, `NOTCH_PILL_INNER` and `NOTCH_SHINE_MARKUP` from `src/components/NotchFace.tsx` (the verbatim port of `mac/braino-mac/renderer/index.html` #notch-face) with `notch-face.css`, and applies the app's state classes (on, home, awake, dozing, blink, listen, mic-live, speak, busy). The open sheet is the app's `nf-answer-open nf-answer-short` surface, ported into `web-notch.css` from `braino-mac.css`. Blink timing (2.8 to 6.4 s, 260 ms) and the 30 minute awake window are the Mac's numbers.
+- Voice: `src/pages/foundry/useFoundryVoice.ts`. Ears: WebRTC to `openai-realtime-call` (the call the Mac and extension make; text only, gpt-4o-transcribe locked to English), with `turn_detection: null` and a manual `input_audio_buffer.commit` on release; the session stays warm for 2 minutes. Browser SpeechRecognition runs alongside for the live words and as the fallback. Mouth: `fish-audio-tts` streamed through MediaSource. Barge in aborts the fetch and the audio.
+- Understanding: `voiceCommands.ts` `handleVoice` sends what you said, the current page, an app map (pages, platforms, stages, people, topics) and the project memory to `askJson` with its own clean system prompt. It returns one action (open, run_all, run_content, approve, send_reply, week, answer) plus a line. Counts in his lines are computed from the project, not by the model.
+- Opening pages pre-filtered: `src/pages/foundry/focus.ts` (`setFocus`, `takeFocus`) over sessionStorage keys `foundry-focus-person`, `-stage`, `-platform`, `-approvals`, `-topic`. Outreach reads platform and stage, Approvals reads To do or Done, Be seen reads the topic.
+
+**Status**: live on /foundry/app, 24 Oct 2026.

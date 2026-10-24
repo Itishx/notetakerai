@@ -22,7 +22,8 @@ import WebNotch from "./components/WebNotch";
 import { brainoLine, counts, type Go } from "./braino-lines";
 import { approvePerson, moveStage } from "./actions";
 import { handleVoice } from "./voiceCommands";
-import { useBrainoVoice } from "@/hooks/useBrainoVoice";
+import { useFoundryVoice } from "./useFoundryVoice";
+import { setFocus } from "./focus";
 import { copy } from "./lib";
 import "../affective.css";
 import "./foundry.css";
@@ -172,42 +173,47 @@ export default function FoundryRoot() {
     try { seen = Number(localStorage.getItem(k) || 0); localStorage.setItem(k, String(repliedN)); } catch (_) { /* private */ }
     if (repliedN > seen) doHop();
   }, [active?.id, repliedN]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* Voice: one exchange per press. Hold Space (or tap the mic), say it, he
-     answers in his Fish voice, then the mic closes. */
+  /* Voice: push to talk, like the Mac. Hold Control, talk, let go; he acts
+     and answers in his Fish voice. Pressing Control while he talks cuts him
+     off. Control with any other key (Ctrl+F, Ctrl+C) is not a turn. The mic
+     in the notch does the same for touch: tap to talk, tap to send. */
   const voiceRef = useRef<(t: string) => Promise<string>>(async () => "Tell me what you're building first.");
-  const turnDone = useRef(false);
-  const [said, setSaid] = useState("");
-  const onTranscript = useCallback(async (t: string) => {
-    const r = await voiceRef.current(t).catch(() => "I couldn't answer that just now.");
-    turnDone.current = true;
-    setSaid(r);
-    return r;
-  }, []);
-  const voice = useBrainoVoice({ anonymous: true, onTranscript });
-  useEffect(() => {
-    if (voice.active && voice.status === "listening" && turnDone.current) { turnDone.current = false; voice.stop(); }
-  }, [voice.status, voice.active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onTranscript = useCallback((t: string) => voiceRef.current(t).catch(() => "I couldn't answer that just now."), []);
+  const voice = useFoundryVoice(onTranscript);
+  const voiceApi = useRef(voice);
+  voiceApi.current = voice;
   const talk = useCallback(() => {
-    if (voice.active) { voice.stop(); return; }
-    turnDone.current = false;
-    setSaid("");
+    if (voice.listening) { void voice.end(); return; }
     setNotchOpen(true);
-    voice.start();
+    voice.begin();
   }, [voice]);
-  const talkRef = useRef(talk);
-  talkRef.current = talk;
+  useEffect(() => { if (voice.heard) setNotchOpen(true); }, [voice.heard]);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(el.tagName))) return;
-      e.preventDefault();
-      talkRef.current();
+    let held = false, other = false, at = 0;
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Control") {
+        if (e.repeat || held) return;
+        held = true; other = false; at = Date.now();
+        // The Mac's listening island first (sonar, ears); the sheet drops only once words arrive.
+        voiceApi.current.begin();
+        return;
+      }
+      if (held && !other) { other = true; voiceApi.current.cancel(); }
     };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
+    const up = (e: KeyboardEvent) => {
+      if (e.key !== "Control" || !held) return;
+      held = false;
+      // A quick tap is not a turn (the Mac's double Control is a different gesture).
+      if (other || Date.now() - at < 250) { if (!other) voiceApi.current.cancel(); return; }
+      void voiceApi.current.end();
+    };
+    const blur = () => { if (held) { held = false; voiceApi.current.cancel(); } };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
   }, []);
-  const closeNotch = () => { if (voice.active) voice.stop(); setNotchOpen(false); setGreet(false); setFinished(false); setSaid(""); };
+  const closeNotch = () => { voice.stop(); setNotchOpen(false); setGreet(false); setFinished(false); };
 
   if (!active || !runner || sync === "loading") return <div className="aff fx" data-theme={theme}><div className="fx-loading">Loading your projects</div></div>;
   const up = (fn: (p: Project) => Project) => update(active.id, fn);
@@ -249,36 +255,30 @@ export default function FoundryRoot() {
       closeNotch();
       return;
     }
-    try {
-      if (g.person) sessionStorage.setItem("foundry-focus-person", g.person);
-      if (g.stage) sessionStorage.setItem("foundry-focus-stage", g.stage);
-    } catch (_) { /* private */ }
+    setFocus({ person: g.person, stage: g.stage });
     setNavKey((k) => k + 1);
     go(g.page);
     closeNotch();
   };
   voiceRef.current = (t: string) => handleVoice(t, {
     p: active,
+    page,
     run: runner,
-    go: (pg, focus) => {
-      try {
-        if (focus?.person) sessionStorage.setItem("foundry-focus-person", focus.person);
-        if (focus?.stage) sessionStorage.setItem("foundry-focus-stage", focus.stage);
-      } catch (_) { /* private */ }
-      setNavKey((k) => k + 1);
-      go(pg);
-    },
-    approve: () => {
-      const x = line.about && active.people.find((y) => y.id === line.about!.person);
+    go: (pg, focus) => { if (focus) setFocus(focus); setNavKey((k) => k + 1); go(pg); },
+    sendReply,
+    approve: (personId) => {
+      const id = personId || line.about?.person;
+      const x = id && active.people.find((y) => y.id === id);
       if (!x) return "";
       if (x.stage === "found" && x.message) { approvePerson(up, x); return `Done. I copied the message and opened ${whereOf(x)}. Paste it there.`; }
       if (sendReply(x.id)) return `Done. I copied the answer and opened ${whereOf(x)}. Paste it there.`;
       return "";
     },
   });
-  const listening = voice.active && (voice.status === "listening" || voice.status === "connecting");
-  const voiceErr = voice.status === "error" ? (/not supported/i.test(voice.error) ? "I can only hear you in Chrome or Safari." : /not-allowed|denied/i.test(voice.error) ? "I need the microphone. Allow it in the address bar." : "I couldn't hear that. Try again.") : "";
-  const notchText = voiceErr || (voice.status === "thinking" ? "Let me think." : voice.status === "speaking" ? voice.brainoText || said : said || line.text);
+  const listening = voice.listening;
+  const said = voice.reply;
+  const notchText = voice.error || (voice.status === "thinking" ? "Let me think." : said || line.text);
+  const mood = voice.status === "speaking" ? "" : voice.status === "thinking" || anyBusy ? "thinking" : hop ? "happy" : "";
   const props = { p: active, up, busy: pb, run: runner, go, me: settings };
   const waiting = waitingCount(active);
   const ql = q.trim().toLowerCase();
@@ -287,11 +287,11 @@ export default function FoundryRoot() {
 
   return (
     <div className="aff fx" data-theme={theme} style={{ ["--wn-offset" as string]: mini ? "36px" : "130px" } as React.CSSProperties}>
-      <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={closeNotch} text={notchText} heard={voice.userText} listening={listening} talking={voice.status === "speaking"} onMic={talk} buttons={said || voiceErr || voice.active ? [] : line.actions.map((a) => ({ label: a.label, onClick: () => act(a.go) }))} dot={waiting > 0 || repliedN > 0} thinking={anyBusy || voice.status === "thinking"} hop={hop} />
+      <WebNotch open={notchOpen} onOpen={() => setNotchOpen(true)} onClose={closeNotch} text={notchText} heard={voice.heard} listening={listening} talking={voice.status === "speaking"} onMic={talk} buttons={said || voice.error || voice.status !== "idle" ? [] : line.actions.map((a) => ({ label: a.label, onClick: () => act(a.go) }))} dot={waiting > 0 || repliedN > 0} thinking={anyBusy || voice.status === "thinking"} hop={hop} />
       <div className={`fx-shell${mini ? " mini" : ""}`}>
         <aside className={`fx-side ${navOpen ? "open" : ""}`}>
           <div className="fx-side-top">
-            <Link to="/foundry" className="fx-word"><BrainoMascot variant="foundry" size={24} /><span>Braino Foundry</span></Link>
+            <Link to="/foundry" className="fx-word"><BrainoMascot variant="foundry" size={24} talking={voice.status === "speaking"} className={`fx-braino ${mood}`} /><span>Braino Foundry</span></Link>
             <button className="fx-icon-b fx-only-d" aria-label="Collapse menu" title="Collapse menu" onClick={() => setMini((m) => !m)}><Icon d={IC.sidebar} size={17} /></button>
             <button className="fx-icon-b fx-only-m" aria-label="Close menu" onClick={() => setNavOpen(false)}><Icon d={IC.close} /></button>
           </div>
