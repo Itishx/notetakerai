@@ -22269,7 +22269,21 @@ function writeSkills(store) { try { fs.writeFileSync(SKILLS_PATH, JSON.stringify
    where things happened to be. All were saved on 2026-09-26. */
 const NOT_A_SKILL = /^(?:no|nope|not|you|i said|i asked|i told|i want you|i meant|why|what|who|how|where|when|is|are|can't|dont|don't|stop|wait|actually|sorry)\b/i;
 const SKILL_MAX_WORDS = 12;
+/* "Organize my desktop" was learned as open_folder and fired in 34ms, so
+   every time he was asked to tidy the Desktop he opened it and said "Opened
+   Desktop." (2026-10-25). A lesson that only opens or shows something is no
+   lesson for a command that asks him to DO something. Checked when saving
+   and when reusing, so a bad lesson already on disk stops firing too. */
+const SKILL_DO_VERB = /\b(?:organi[sz]e|tidy|clean|sort|arrange|move|delete|remove|send|message|text|reply|rename|book|order|buy|write|create|make|summari[sz]e|compare|fix|close|download|upload|share|post|schedule|add|set)\b/i;
+const SKILL_SHOW_TOOLS = new Set([...MAC_OPEN_ONLY_TOOLS_LIST(), "open_folder", "open_app", "open_file", "file_open", "app_open", "open_path", "file_find"]);
+function MAC_OPEN_ONLY_TOOLS_LIST() { return ["open_url", "wait", "chrome_search_google", "open_target", "amazon_search", "google_search", "web_search_open"]; }
+function skillOnlyOpensForADoCommand(said, steps) {
+  const list = steps || [];
+  return SKILL_DO_VERB.test(String(said || "")) && list.length > 0 && list.every((st) => SKILL_SHOW_TOOLS.has(String(st.tool || "")));
+}
+
 function maybeSaveSkill(raw, steps, done) {
+  if (skillOnlyOpensForADoCommand(cleanPrompt(raw), steps)) { logMac("skill.not_saved", { key: textForLog(cleanPrompt(raw)), why: "opens_for_a_do_command" }); return; }
   const said = cleanPrompt(raw);
   /* A skill is a short, clear command. 2026-09-29: an 81-word Hindi ramble
      to someone else in the room, and a 60-word conversation with Claude,
@@ -22824,7 +22838,13 @@ async function routeHilFirst(raw, opts = {}) {
   const byIntent = exact.skill ? null : skillMemory.findSkillByIntent(skillStore, skillMemory.skillKey(raw));
   const found = exact.skill ? exact : byIntent ? { key: byIntent.key, skill: byIntent.skill } : exact;
   const skillKey = found.key;
-  const learned = found.skill;
+  let learned = found.skill;
+  if (learned?.steps?.length && skillOnlyOpensForADoCommand(raw, learned.steps)) {
+    const store = readSkills(); delete store[skillKey]; writeSkills(store);
+    logMac("skill.forgotten", { key: textForLog(skillKey), why: "opens_for_a_do_command" });
+    macTrace("🎓 SKILL", `"${skillKey}" only opened something for a command that asks to do it: forgotten, thinking it through`);
+    learned = null;
+  }
   if (learned?.steps?.length) {
     macHilGeneration += 1;
     if (byIntent) logMac("skill.by_intent", { key: textForLog(skillKey), from: textForLog(byIntent.from), detail: textForLog(byIntent.detail) });

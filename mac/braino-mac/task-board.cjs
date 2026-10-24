@@ -173,9 +173,16 @@ function createTaskBoard({ file = "", now = () => Date.now(), log = () => {} } =
       const hits = [...said].filter((w) => pool.has(w)).length;
       if (hits && (!best || hits > best.hits || (hits === best.hits && t.updatedAt > best.t.updatedAt))) best = { t, hits };
     }
-    if (best && (best.hits >= 2 || pointsAtJob)) return best.t;
+    /* Shared words alone only reach a job that is asking you something right
+       now. "Give my Claude Code agent in Cursor a prompt" shared three words
+       with the day-old robots.txt job, stuck on a Cursor tab, and resumed it:
+       the old prompt went in again and the old failure came back
+       (2026-10-25). An older stuck or paused job needs you to point at it. */
+    const askingNow = (t) => t.status === "waiting" && now() - (t.updatedAt || 0) < 10 * 60 * 1000;
+    if (best && pointsAtJob) return best.t;
+    if (best && best.hits >= 2 && askingNow(best.t)) return best.t;
     if (pointsAtJob) {
-      const waiting = live.filter((t) => t.status !== "running").sort((a, b) => b.updatedAt - a.updatedAt);
+      const waiting = live.filter((t) => t.status !== "running" && now() - (t.updatedAt || 0) < 30 * 60 * 1000).sort((a, b) => b.updatedAt - a.updatedAt);
       if (waiting.length) return waiting[0];
     }
     return null;

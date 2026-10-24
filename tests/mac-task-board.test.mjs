@@ -218,3 +218,19 @@ test("a job typed in the app's chat never speaks its steps", () => {
   assert.match(main, /macTypedJob = Boolean\(runOptions\.typed\);/);
   assert.match(renderer, /narrateQuiet = Boolean\(payload\?\.quiet\);/);
 });
+
+test("an old stuck job is not resumed just because a new command shares its words (2026-10-25)", () => {
+  let t = 1e12;
+  const file = join(mkdtempSync(join(tmpdir(), "board-")), "b.json");
+  const b = createTaskBoard({ file, now: () => t });
+  b.start("old", "HANDOFF.\n1. Open Cursor and ask Claude Code to add a robots.txt");
+  b.hold("old", "blocked", "switch to the Claude Code tab", { runId: "old" });
+  t += 20 * 3600e3;
+  assert.equal(b.about("Braino, can you please give my Claude Code agent in Cursor a prompt"), null);
+  assert.equal(b.about("continue the cursor one")?.runId, "old");
+});
+
+test("a lesson that only opens something is never kept for a command that asks to do it", () => {
+  assert.match(main, /function skillOnlyOpensForADoCommand\(said, steps\)/);
+  assert.match(main, /why: "opens_for_a_do_command"/);
+});
