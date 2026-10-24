@@ -255,7 +255,6 @@
         ${empty ? "" : `<div class="chat-mascot perch" id="chat-mascot" aria-hidden="true"></div>`}
         <textarea id="chat-in" rows="1" placeholder="Ask Braino anything, or tell him what to do" aria-label="Message Braino" spellcheck="true"></textarea>
         <div class="chat-tools">
-          <button type="button" class="chat-sound" id="chat-sound" aria-pressed="${sound}">${sound ? "Sound on" : "Silent"}</button>
           <button type="button" class="chat-clear" id="chat-clear">New chat</button>
           <span class="chat-hint">Enter to send · Shift Enter for a new line</span>
           <button type="submit" class="chat-send" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg></button>
@@ -289,7 +288,12 @@
 
   function fit(ta) { ta.style.height = "auto"; ta.style.height = `${Math.min(180, ta.scrollHeight)}px`; }
 
+  /* Typed to him, answered in writing. Voice only when he is spoken to
+     (2026-10-24): a "Sound on" left switched on read every chat reply out
+     loud, and the toggle is gone so it cannot happen again. */
   async function speak(text) {
+    return;
+    // eslint-disable-next-line no-unreachable
     if (!sound || !text) return;
     const r = await call("tts", text);
     if (!r?.ok || !r.dataUrl) return;
@@ -396,7 +400,7 @@
       if (e.key === "ArrowUp" && !box.value && lastSent) { e.preventDefault(); box.value = lastSent; fit(box); }
     });
     root.querySelector("#chat-box").addEventListener("submit", (e) => { e.preventDefault(); void send(box.value); });
-    root.querySelector("#chat-sound").addEventListener("click", (e) => {
+    root.querySelector("#chat-sound")?.addEventListener("click", (e) => {
       sound = !sound;
       try { localStorage.setItem(SOUND, sound ? "1" : "0"); } catch (_) {}
       e.currentTarget.setAttribute("aria-pressed", String(sound));
