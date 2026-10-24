@@ -22,11 +22,16 @@
     .bar {
       position: absolute; inset: 0;
       display: flex; align-items: center; gap: 14px;
-      padding: 0 18px 0 20px;
-      border-radius: 18px;
-      /* A whisper of shade under the glass: readable on white, still glass on black. */
-      background: linear-gradient(180deg, rgba(20, 22, 30, .30), rgba(20, 22, 30, .42));
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px var(--edge);
+      padding: 0 22px 0 18px;
+      inset: 6px;
+      border-radius: 999px;
+      /* Liquid glass, drawn here (a pill window cannot use macOS's blur): a
+         dark, see-through body that reads on white and on black, a bright rim
+         on top like light on a lens, and a soft drop under it. */
+      background:
+        radial-gradient(120% 140% at 50% -40%, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 55%),
+        linear-gradient(180deg, rgba(28, 30, 40, .62), rgba(16, 17, 24, .74));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .32), inset 0 0 0 1px var(--edge), 0 12px 32px -10px rgba(0, 0, 0, .55);
       animation: rise .22s cubic-bezier(.2, .8, .2, 1) both;
     }
     /* The extension's blue: it breathes while you type, runs round once when you send. */
@@ -37,9 +42,9 @@
     }
     .bar.typing::after { box-shadow: inset 0 0 0 1.5px rgba(var(--glow), .55), 0 0 24px rgba(var(--glow), .18); }
     .bar.sent::after { animation: sent .45s ease forwards; }
-    .orb { flex: none; width: 22px; height: 22px; border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, #ffffff 0 12%, rgba(var(--glow), .95) 45%, rgba(120, 90, 255, .9) 100%);
-      box-shadow: 0 0 14px rgba(var(--glow), .55); animation: breathe 3.2s ease-in-out infinite; }
+    /* Braino himself on the left, bobbing a little, not an orb. */
+    .mascot { flex: none; width: 40px; height: 40px; margin-left: -6px; animation: bob 2.8s ease-in-out infinite; }
+    .mascot svg { width: 100%; height: 100%; overflow: visible; }
     input {
       flex: 1; min-width: 0; border: 0; outline: 0; background: none;
       color: var(--ink); caret-color: rgb(var(--glow));
@@ -51,14 +56,14 @@
     .hint { flex: none; display: flex; gap: 6px; color: var(--ink-soft); font: 500 12px/1 -apple-system, sans-serif; }
     kbd { padding: 3px 6px; border-radius: 6px; background: rgba(255, 255, 255, .14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); font: inherit; color: rgba(255, 255, 255, .78); }
     @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
-    @keyframes breathe { 50% { transform: scale(.9); box-shadow: 0 0 8px rgba(var(--glow), .35); } }
+    @keyframes bob { 50% { transform: translateY(-2px); } }
     @keyframes sent { 0% { box-shadow: inset 0 0 0 1.5px rgba(var(--glow), .9), 0 0 30px rgba(var(--glow), .45); } 100% { box-shadow: inset 0 0 0 1.5px rgba(var(--glow), 0), 0 0 0 rgba(var(--glow), 0); } }
-    @media (prefers-reduced-motion: reduce) { .bar, .orb, .bar.sent::after { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .bar, .mascot, .bar.sent::after { animation: none; } }
   </style>
 </head>
 <body>
   <form class="bar" id="bar" autocomplete="off">
-    <span class="orb" aria-hidden="true"></span>
+    <span class="mascot" id="mascot" aria-hidden="true"></span>
     <input id="say" type="text" placeholder="Ask Braino, or tell him what to do" aria-label="Type to Braino" spellcheck="true" autofocus />
     <span class="hint" aria-hidden="true"><kbd>↵</kbd><kbd>esc</kbd></span>
   </form>

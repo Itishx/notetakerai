@@ -4036,20 +4036,24 @@ function toggleTypeBar(source = "") {
   if (typeBarWindow && !typeBarWindow.isDestroyed() && typeBarWindow.isVisible()) { typeBarWindow.hide(); return; }
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const width = Math.min(680, display.workArea.width - 80);
-  const height = 64;
+  const height = 72;
   const x = Math.round(display.workArea.x + (display.workArea.width - width) / 2);
-  const y = Math.round(display.workArea.y + display.workArea.height * 0.3);
+  // Bottom of the screen, above the Dock (2026-10-25).
+  const y = Math.round(display.workArea.y + display.workArea.height - height - 36);
   if (!typeBarWindow || typeBarWindow.isDestroyed()) {
     typeBarWindow = new BrowserWindow({
       width, height, x, y,
       frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
-      fullscreenable: false, skipTaskbar: true, hasShadow: true, roundedCorners: true, show: false,
-      vibrancy: "hud", visualEffectState: "active", backgroundColor: "#00000000",
+      /* A pill, so no window vibrancy: macOS only blurs a window in its own
+         corner shape. The glass is drawn in the page instead. */
+      fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false,
+      backgroundColor: "#00000000",
       webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
     });
     typeBarWindow.setAlwaysOnTop(true, "screen-saver");
     typeBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    typeBarWindow.on("blur", () => { if (typeBarWindow && !typeBarWindow.isDestroyed()) typeBarWindow.hide(); });
+    /* It stays when you switch screens or click elsewhere (2026-10-25: it
+       vanished on every Space change). Esc, ⌘⌥T again, or sending closes it. */
     typeBarWindow.on("closed", () => { typeBarWindow = null; });
     typeBarWindow.loadFile(path.join(__dirname, "renderer", "type-bar.html"));
     typeBarWindow.once("ready-to-show", () => { typeBarWindow?.show(); typeBarWindow?.focus(); });

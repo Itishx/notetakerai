@@ -13,9 +13,14 @@ const js = read("renderer/type-bar.js");
 
 test("⌘⌥T opens the centre glass bar, not the notch's own field", () => {
   assert.match(main, /const took = globalShortcut\.register\(combo, \(\) => \{\s*toggleTypeBar\(combo\);/);
-  assert.match(main, /vibrancy: "hud"/);
-  assert.match(main, /display\.workArea\.height \* 0\.3/);
-  assert.match(main, /typeBarWindow\.on\("blur"/);
+  // Bottom of the screen, a pill, and it stays when you switch Spaces (2026-10-25).
+  assert.match(main, /display\.workArea\.height - height - 36/);
+  assert.match(main, /setVisibleOnAllWorkspaces\(true, \{ visibleOnFullScreen: true \}\)/);
+  assert.doesNotMatch(main, /typeBarWindow\.on\("blur"/);
+  assert.match(html, /border-radius: 999px/);
+  assert.match(html, /class="mascot"/);
+  assert.doesNotMatch(html, /class="orb"/);
+  assert.match(js, /getWalkerSvgFor\?\.\("braino"\)/);
 });
 
 test("what is typed goes to the notch as a typed turn", () => {

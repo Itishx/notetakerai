@@ -8,6 +8,7 @@
   let last = "";
   try { last = localStorage.getItem("braino-type-bar-last") || ""; } catch (_) {}
 
+  try { document.getElementById("mascot").innerHTML = api.getWalkerSvgFor?.("braino") || api.getWalkerSvg?.() || ""; } catch (_) {}
   const focus = () => { box.focus(); box.select(); };
   window.addEventListener("focus", focus);
   api.onTypeBarShown?.(() => { bar.classList.remove("sent"); box.value = ""; bar.classList.remove("typing"); focus(); });
