@@ -1295,9 +1295,14 @@ function interactionUrlHost(url) {
 
 /* One line said while he works (narrate.cjs). Its own channel, because the
    ordinary speak-line waits until he is not busy, and he is always busy here. */
+/* Was the job running now typed? A typed job's step lines are shown, never
+   spoken. The app's chat sends jobs straight here, so the notch (which does
+   the speaking) could not know; "Sending the WhatsApp" was said out loud to
+   someone typing, twice (2026-10-24). Set per command; a spoken one clears it. */
+let macTypedJob = false;
 function narrate(text) {
   if (!text) return;
-  sendToRenderer("braino-mac:narrate", { text: String(text).slice(0, 140) });
+  sendToRenderer("braino-mac:narrate", { text: String(text).slice(0, 140), quiet: macTypedJob });
   try { macTrace("🗣 NARRATE", String(text).slice(0, 140)); } catch (_) {}
 }
 
@@ -12104,7 +12109,18 @@ end tell`;
       };
     }
   }
+  /* Proof, not a key press. Enter goes to whichever chat is on screen, and a
+     deep link to your own number can leave the last chat showing (2026-10-24:
+     the week plan looked like it went to Malik; the database showed it went to
+     "Itish Pande", the owner). WhatsApp's own database says which chat the
+     newest message from you is in; that is the answer he gives. */
+  const landed = await whatsAppLandedIn(phone);
+  if (landed && !landed.right) {
+    logMac("whatsapp.sent_wrong_chat", { meant: textForLog(resolved.name), landed: textForLog(landed.name) });
+    return { ok: false, say: `That went to ${landed.name}, not ${resolved.name}. WhatsApp had their chat open. Sorry. I have not sent it again.` };
+  }
   logMac("whatsapp.sent", {
+    verified: Boolean(landed?.right),
     recipient: textForLog(resolved.name),
     source: resolved.source,
     messageChars: text.length,
@@ -12114,6 +12130,32 @@ end tell`;
   rememberActed("contact", speakableContactName(resolved.name));
   sendTaskProgress({ status: "done", text: `Sent to ${resolved.name}` });
   return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
+}
+
+/* Where the message just sent actually is: the chat of the newest message
+   from you in the last 20 seconds. null when the database can't be read or
+   nothing has landed yet (then nothing is claimed either way). */
+async function whatsAppLandedIn(phone) {
+  if (!waDbAvailable()) return null;
+  const want = String(phone || "").replace(/\D/g, "").slice(-10);
+  for (let i = 0; i < 6; i += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      const rows = await queryWhatsAppDb("SELECT s.ZPARTNERNAME AS name, s.ZCONTACTJID AS jid FROM ZWAMESSAGE m JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK WHERE m.ZISFROMME = 1 AND m.ZMESSAGEDATE > (strftime('%s','now') - 978307200 - 20) ORDER BY m.ZMESSAGEDATE DESC LIMIT 1;");
+      const row = rows[0];
+      if (row) {
+        const jidDigits = String(row.jid || "").split("@")[0].replace(/\D/g, "");
+        // @lid chats carry no number; the name is all there is to go on.
+        const right = /@lid$/.test(String(row.jid || "")) ? null : jidDigits.endsWith(want);
+        if (right === null) return null;
+        return { right, name: String(row.name || "someone") };
+      }
+    } catch (error) {
+      logMac("whatsapp.verify_failed", { error: String(error?.message || error).slice(0, 120) });
+      return null;
+    }
+  }
+  return null;
 }
 
 async function draftWhatsAppMessage(recipientRaw, message) {
@@ -20883,7 +20925,7 @@ async function runMacHilLoopInner(command, resume = null, opts = {}) {
         activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
         // "Send this link": the tab they are looking at is usually the link.
         activeMacContext?.browserUrl ? `Front tab: ${textForLog(activeMacContext.browserTitle || "", 120)} ${activeMacContext.browserUrl}` : "",
-        macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web. whatsapp_send finds the person itself from a name (\"Manik from Mesa\") or takes a bare number; you do not need to open the chat first." : "",
+        macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web. whatsapp_send finds the person itself from a name (\"Manik from Mesa\") or takes a bare number; you do not need to open the chat first. To the user themself (\"send it to myself\", \"to me\"), pass recipientRaw \"myself\": that is their own chat (\"You\" in WhatsApp). It checks which chat the message really landed in; trust that over the screen." : "",
         "People: their address book is on this Mac. Before asking for anyone's number or email, call contact_lookup with their name, then with just the first name. Ask only when both find nobody.",
         devServers.describeDevServers(macDevServersCache.servers),
         nowPlayingLine,
@@ -26141,6 +26183,7 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
     macChatRunning = macCommandSurface === "chat";
     // Anything sent from the app window was typed to him; it is never room talk.
     const runOptions = macCommandSurface === "chat" ? { ...(options || {}), typed: true } : (options || {});
+    macTypedJob = Boolean(runOptions.typed);
     try { result = await runDelegate(prompt, runOptions); } finally { macChatRunning = false; }
     if (macCommandSurface === "chat" && result && macLastToolUi && macLastToolUi.at >= chatStartedAt) result = { ...result, ui: macLastToolUi.ui };
   } finally {

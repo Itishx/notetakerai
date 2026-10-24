@@ -14818,11 +14818,13 @@ window.brainoMac.onSetupNotch?.((payload) => { if (payload?.text) nfShowTransien
 }
 let narrateNext = "";
 let typedDelegateRun = 0;
+let narrateQuiet = false;
 let narrateTimer = 0;
 window.brainoMac.onNarrate?.((payload) => {
   const text = String(payload?.text || "").trim();
   if (!text || !narrateOn()) return;
   narrateNext = text;
+  narrateQuiet = Boolean(payload?.quiet);
   if (narrateTimer) return;
   const started = Date.now();
   const tryNow = () => {
@@ -14831,7 +14833,7 @@ window.brainoMac.onNarrate?.((payload) => {
     const line = narrateNext;
     narrateNext = ""; narrateTimer = 0;
     if (speaking) return;   // still talking after 6s: this line is stale, drop it
-    const quietRun = typedDelegateRun && typedDelegateRun === delegateGeneration;
+    const quietRun = narrateQuiet || (typedDelegateRun && typedDelegateRun === delegateGeneration);
     logRenderer("narrate.say", { text: line.slice(0, 80), quiet: Boolean(quietRun) });
     void speak(line, { narration: true, silent: Boolean(quietRun) });
   };

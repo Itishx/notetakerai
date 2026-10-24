@@ -205,3 +205,16 @@ test("a long handoff gets time for its steps, and only web pages move to his bro
   assert.match(main, /handoffSteps \* 2 \* 60 \* 1000/);
   assert.match(main, /Mac apps and tools \(WhatsApp, Spotify, files, notes, calendar, Cursor\) work as normal; only websites move\./);
 });
+
+test("every WhatsApp send is checked in WhatsApp's own database, and myself is the user's own chat", () => {
+  assert.match(main, /const landed = await whatsAppLandedIn\(phone\);/);
+  assert.match(main, /That went to \$\{landed\.name\}, not \$\{resolved\.name\}/);
+  assert.match(main, /pass recipientRaw \\"myself\\": that is their own chat/);
+});
+
+test("a job typed in the app's chat never speaks its steps", () => {
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  assert.match(main, /sendToRenderer\("braino-mac:narrate", \{ text: String\(text\)\.slice\(0, 140\), quiet: macTypedJob \}\)/);
+  assert.match(main, /macTypedJob = Boolean\(runOptions\.typed\);/);
+  assert.match(renderer, /narrateQuiet = Boolean\(payload\?\.quiet\);/);
+});
