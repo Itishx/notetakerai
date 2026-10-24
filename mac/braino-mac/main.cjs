@@ -2538,6 +2538,11 @@ function noteLiveTranscript(text) {
    * grows. The log fills with "cleaned 21 words in 629ms" and "clean-up
    * refused" while the only thing anyone wants is the next word on screen. */
   if (liveTranscriptMode) return;
+  /* Only while dictating (Yap). A spoken command to Braino is never inserted
+     at the caret, so polishing it was a wasted model call on every pause, and
+     the formatter sometimes answered the command instead ("I cannot help with
+     that request"), which the gate then logged as "clean-up refused" (2026-10-24). */
+  if (!localDictationActive && !dictationState.active) return;
   const cumulative = spokenNumbersToDigits(String(text || "").trim());
   if (!cumulative) return;
   localFormat.live = cumulative;
