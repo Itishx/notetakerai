@@ -60,8 +60,23 @@ function stepLine(action, plainTool) {
   return ACTION_LINES[type] || "";
 }
 
+/* One short job is worth saying back: "Got it. Finding flights to Goa." A
+   handoff of six read the whole list out, cut off at 140 characters halfway
+   through a flight (2026-10-24). A list is acknowledged like a person would:
+   short, and then the work. */
+const ACK_SHORT = [
+  "Got it, getting it done for you.",
+  "On it, handing it over now.",
+  "Got it, clearing it out for you now.",
+  "On it. I'll tell you when it's done.",
+];
+let ackTurn = 0;
 function ackLine(goal) {
-  const doing = asDoing(goal);
+  const text = String(goal || "").trim();
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const many = words > 12 || /[,;]|\b(?:then|and then|after that)\b/i.test(text) || /\band\b.*\band\b/i.test(text);
+  if (many) return ACK_SHORT[(ackTurn++) % ACK_SHORT.length];
+  const doing = asDoing(text);
   return doing ? `Got it. ${doing}` : "Got it.";
 }
 

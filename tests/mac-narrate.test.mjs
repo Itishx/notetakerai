@@ -69,3 +69,12 @@ test("he talks to you, never about 'the user' (2026-10-17)", () => {
   assert.equal(doing("Open Nexus and tell the user their next class"), "Opening Nexus and tell you your next class.");
   assert.equal(doing("Explain how it would make the user's life better"), "Explaining how it would make your life better.");
 });
+
+test("a list of jobs is acknowledged short, never read back (2026-10-24)", () => {
+  const long = "Check tomorrow's calendar and Mesa timetable, find the cheapest Friday evening Bangalore to Mumbai flight, move the newest Downloads PDF";
+  const said = ackLine(long);
+  assert.ok(said.length < 45, said);
+  assert.doesNotMatch(said, /calendar|Mumbai/);
+  assert.doesNotMatch(said, /[—–]/);
+  assert.equal(ackLine("Find the five cheapest flights to Goa"), "Got it. Finding the five cheapest flights to Goa.");
+});
