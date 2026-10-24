@@ -16614,17 +16614,45 @@ const heraBox = document.getElementById("hera-box");
 const heraDots = heraIsland ? [...heraIsland.querySelectorAll(".hi-dots i")] : [];
 let heraLevel = 0;
 let heraBoxTimer = 0;
+/* Braino becomes the island: the pill starts at his exact box and shrinks
+   into a slim coral bar where he stands; the reverse brings him back. With
+   him hidden or off screen, it appears low in the middle of the screen. */
+let heraMorphTimer = 0;
 function heraIslandPlace() {
-  // Centred just under the physical notch, so it is visible on any wallpaper
-  // (beside the notch it was black on a black menu bar, and invisible).
-  heraIsland?.style.setProperty("--hi-left", "50%");
+  const w = document.getElementById("walker");
+  const r = w ? w.getBoundingClientRect() : null;
+  const seen = r && r.width > 4 && r.height > 4 && getComputedStyle(w).visibility !== "hidden" && getComputedStyle(w).display !== "none"
+    && r.bottom > 0 && r.top < window.innerHeight;
+  const cx = seen ? r.left + r.width / 2 : window.innerWidth / 2;
+  const cy = seen ? r.top + r.height / 2 : window.innerHeight - 96;
+  heraIsland.style.setProperty("--hi-x", `${Math.round(cx)}px`);
+  heraIsland.style.setProperty("--hi-y", `${Math.round(cy)}px`);
+  heraIsland.style.setProperty("--hi-w0", `${Math.round(seen ? r.width : 18)}px`);
+  heraIsland.style.setProperty("--hi-h0", `${Math.round(seen ? r.height : 52)}px`);
+  return seen;
 }
 function heraIslandShow(on) {
   if (!heraIsland) return;
-  if (on) { heraIslandPlace(); heraIsland.classList.remove("thinking"); }
-  else heraIsland.classList.remove("open", "thinking");
-  heraIsland.classList.toggle("on", Boolean(on));
-  if (!on) { heraLevel = 0; heraIslandPaint(); }
+  const walker = document.getElementById("walker");
+  clearTimeout(heraMorphTimer);
+  if (on) {
+    heraIslandPlace();
+    heraIsland.classList.remove("thinking", "open");
+    heraIsland.classList.add("from", "on");      // starts as his exact shape…
+    walker?.classList.add("hera-morphing", "hera-morph"); // …while he melts into it
+    void heraIsland.offsetWidth;
+    requestAnimationFrame(() => heraIsland.classList.remove("from")); // …and narrows to the pill
+    return;
+  }
+  heraIsland.classList.remove("open", "thinking");
+  heraIsland.classList.add("from");               // the pill grows back to his size
+  heraMorphTimer = window.setTimeout(() => {
+    walker?.classList.remove("hera-morph");        // he reappears inside it
+    window.setTimeout(() => walker?.classList.remove("hera-morphing"), 500);
+    heraIsland.classList.remove("on");
+    heraMorphTimer = window.setTimeout(() => heraIsland.classList.remove("from"), 300);
+  }, 260);
+  heraLevel = 0; heraIslandPaint();
 }
 function heraIslandPaint() {
   if (!heraIsland) return;

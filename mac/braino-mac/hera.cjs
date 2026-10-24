@@ -14,6 +14,9 @@
  * Transcribing, tidying and typing are the caller's (they are shared with the
  * rest of the app); this module owns the microphone and nothing else. */
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const PARTITION = "braino-hera"; // in memory only: nothing about a recording is kept on disk
 
 const RECORDER_HTML = `<!doctype html><meta charset="utf-8"><script>
@@ -89,7 +92,12 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
       const msg = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
       if (typeof msg === "string" && msg.startsWith("hera-level:")) onLevel(Number(msg.slice(11)) || 0);
     });
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(RECORDER_HTML)}`);
+    /* From a real file, not a data: URL. Chromium hides navigator.mediaDevices
+       on data: pages (not a secure context), so the recorder could never open
+       the mic and every session fell back to the on-device engine (2026-10-25). */
+    const file = path.join(os.tmpdir(), "braino-hera-recorder.html");
+    fs.writeFileSync(file, RECORDER_HTML);
+    await win.loadFile(file);
     return win;
   }
 

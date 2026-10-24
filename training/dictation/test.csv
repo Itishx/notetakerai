@@ -1,0 +1,442 @@
+id,category,input,output
+121,spoken_punct,hey priya comma new paragraph please make the headline shorter and punchier new paragraph best comma new line itish,"Hey Priya,
+
+Please make the headline shorter and punchier.
+
+Best,
+Itish"
+1106,spoken_punct,what's the status of comma the invoice period,"What's the status of, the invoice."
+1418,spoken_punct,can you proofread comma this paragraph for me period,"Can you proofread, this paragraph for me."
+436,spoken_punct,please review the attached proposal and let me know comma your thoughts period,"Please review the attached proposal and let me know, your thoughts."
+42,spoken_punct,i forgot my comma charger at home period,"I forgot my, charger at home."
+1085,spoken_punct,hey meera comma new paragraph our onboarding flow is too long so let's cut two steps new paragraph thanks comma new line itish,"Hey Meera,
+
+Our onboarding flow is too long, so let's cut two steps.
+
+Thanks,
+Itish"
+1326,spoken_punct,let's circle back comma on this after lunch period,"Let's circle back, on this after lunch."
+1258,spoken_punct,hello vikram comma new paragraph can you remind me what we decided last time new paragraph thanks comma new line itish,"Hello Vikram,
+
+Can you remind me what we decided last time?
+
+Thanks,
+Itish"
+314,spoken_punct,my flight lands at midnight so don't wait up exclamation mark,"My flight lands at midnight, so don't wait up!"
+876,spoken_punct,hi rahul comma new paragraph let's not overthink this one new paragraph regards comma new line itish,"Hi Rahul,
+
+Let's not overthink this one.
+
+Regards,
+Itish"
+636,spoken_punct,i'll be out of office from monday comma to wednesday period,"I'll be out of office from Monday, to Wednesday."
+579,spoken_punct,is there anything else you comma need from me period,"Is there anything else you, need from me."
+693,spoken_punct,hey rohan comma new paragraph why is the build failing on the main branch new paragraph cheers comma new line itish,"Hey Rohan,
+
+Why is the build failing on the main branch?
+
+Cheers,
+Itish"
+404,spoken_punct,let me know if you comma need anything else period,"Let me know if you, need anything else."
+1396,spoken_punct,dear arjun comma new paragraph don't forget to bring your laptop new paragraph thanks comma new line itish,"Dear Arjun,
+
+Don't forget to bring your laptop.
+
+Thanks,
+Itish"
+1251,spoken_punct,hi priya comma new paragraph can you proofread this paragraph for me new paragraph cheers comma new line itish,"Hi Priya,
+
+Can you proofread this paragraph for me?
+
+Cheers,
+Itish"
+206,spoken_punct,hi rahul comma new paragraph please don't share this with anyone outside the team new paragraph thanks comma new line itish,"Hi Rahul,
+
+Please don't share this with anyone outside the team.
+
+Thanks,
+Itish"
+819,spoken_punct,the new pricing page is comma live now period,"The new pricing page is, live now."
+614,spoken_punct,can you share the document with the whole team exclamation mark,Can you share the document with the whole team!
+565,spoken_punct,hello neha comma new paragraph let me think about it and get back to you new paragraph cheers comma new line itish,"Hello Neha,
+
+Let me think about it and get back to you.
+
+Cheers,
+Itish"
+602,spoken_punct,hello ishita comma new paragraph tell rahul that the demo went really well new paragraph cheers comma new line itish,"Hello Ishita,
+
+Tell Rahul that the demo went really well.
+
+Cheers,
+Itish"
+1097,spoken_punct,that sounds comma great let's do it period,"That sounds, great, let's do it."
+841,spoken_punct,dear neha comma new paragraph never mind i found it new paragraph thanks comma new line itish,"Dear Neha,
+
+Never mind, I found it.
+
+Thanks,
+Itish"
+710,spoken_punct,thanks that really helped a lot exclamation mark,"Thanks, that really helped a lot!"
+50,spoken_punct,that's all for today thank you everyone exclamation mark,"That's all for today, thank you everyone!"
+27,spoken_punct,hello neha comma new paragraph i forgot my charger at home new paragraph cheers comma new line itish,"Hello Neha,
+
+I forgot my charger at home.
+
+Cheers,
+Itish"
+1114,spoken_punct,what time does the comma event start period,"What time does the, event start."
+1341,spoken_punct,hey siddharth comma new paragraph let's not overthink this one new paragraph best comma new line itish,"Hey Siddharth,
+
+Let's not overthink this one.
+
+Best,
+Itish"
+1100,spoken_punct,hello meera comma new paragraph the new pricing page is live now new paragraph cheers comma new line itish,"Hello Meera,
+
+The new pricing page is live now.
+
+Cheers,
+Itish"
+566,spoken_punct,i don't think we have enough data yet exclamation mark,I don't think we have enough data yet!
+1229,spoken_punct,where should comma we meet for dinner period,"Where should, we meet for dinner."
+1143,spoken_punct,hey bhaskar comma new paragraph how long will the export take new paragraph thanks comma new line itish,"Hey Bhaskar,
+
+How long will the export take?
+
+Thanks,
+Itish"
+355,spoken_punct,i need a break my brain is fried exclamation mark,"I need a break, my brain is fried!"
+292,spoken_punct,open the comma settings and turn on dark mode period,"Open the, settings and turn on dark mode."
+315,spoken_punct,hi arjun comma new paragraph you're right i should have checked earlier new paragraph thanks comma new line itish,"Hi Arjun,
+
+You're right, I should have checked earlier.
+
+Thanks,
+Itish"
+35,spoken_punct,hello rohan comma new paragraph i'll send you the final draft by tonight new paragraph best comma new line itish,"Hello Rohan,
+
+I'll send you the final draft by tonight.
+
+Best,
+Itish"
+353,spoken_punct,hello ishita comma new paragraph that's a fair point but i disagree new paragraph cheers comma new line itish,"Hello Ishita,
+
+That's a fair point, but I disagree.
+
+Cheers,
+Itish"
+1239,spoken_punct,i'll draft the email and you can review it question mark,I'll draft the email and you can review it?
+1207,spoken_punct,let's try a different approach this time exclamation mark,Let's try a different approach this time!
+649,spoken_punct,hey aditya comma new paragraph you're right i should have checked earlier new paragraph thanks comma new line itish,"Hey Aditya,
+
+You're right, I should have checked earlier.
+
+Thanks,
+Itish"
+882,spoken_punct,could we make the button bigger and a comma bit greener period,"Could we make the button bigger and a, bit greener."
+1302,spoken_punct,hey vikram comma new paragraph we should add punctuation and capitalization automatically new paragraph regards comma new line itish,"Hey Vikram,
+
+We should add punctuation and capitalization automatically.
+
+Regards,
+Itish"
+824,multi_sentence,keep the tone friendly but professional how long will the you know export take,Keep the tone friendly but professional. How long will the export take?
+554,multi_sentence,i mean what's the status of the invoice thanks that really helped a lot,"What's the status of the invoice? Thanks, that really helped a lot."
+103,multi_sentence,so the weather is lovely so let's walk to the office my flight lands at midnight so don't wait up,"The weather is lovely, so let's walk to the office. My flight lands at midnight, so don't wait up."
+1017,multi_sentence,could you explain how the billing works i don't think we have enough data yet,Could you explain how the billing works? I don't think we have enough data yet.
+1006,multi_sentence,we should add punctuation and capitalization automatically i'd like to introduce you to my co founder,We should add punctuation and capitalization automatically. I'd like to introduce you to my co-founder.
+477,multi_sentence,let's circle back on this after lunch please send me the notes from yesterday's meeting,Let's circle back on this after lunch. Please send me the notes from yesterday's meeting.
+281,multi_sentence,i mean write a message to ankit saying i'll be late please make the headline shorter and punchier,Write a message to Ankit saying I'll be late. Please make the headline shorter and punchier.
+1139,multi_sentence,um i need a break my brain is fried can you remind me what we decided last time,"I need a break, my brain is fried. Can you remind me what we decided last time?"
+653,multi_sentence,please make the headline shorter and punchier could you explain how the billing works,Please make the headline shorter and punchier. Could you explain how the billing works?
+814,multi_sentence,let's not overthink this one okay i'm heading out now see you tomorrow,"Let's not overthink this one. Okay, I'm heading out now, see you tomorrow."
+535,multi_sentence,we got our first ten paying paying customers today the new pricing page is live now,We got our first ten paying customers today. The new pricing page is live now.
+83,multi_sentence,could you explain how the billing um works the model keeps hallucinating on long inputs,Could you explain how the billing works? The model keeps hallucinating on long inputs.
+1118,multi_sentence,can you remind me what we decided last time let me know if you need anything else that sounds great let's do it,"Can you remind me what we decided last time? Let me know if you need anything else. That sounds great, let's do it."
+5,multi_sentence,let's keep the first version simple and ship it fast write a message to ankit saying i'll be late,Let's keep the first version simple and ship it fast. Write a message to Ankit saying I'll be late.
+657,multi_sentence,okay so i'm really excited about this opportunity make sure the numbers add up before you send it,I'm really excited about this opportunity. Make sure the numbers add up before you send it.
+65,multi_sentence,could you explain how how the billing works i just finished the first version of the app,Could you explain how the billing works? I just finished the first version of the app.
+1262,multi_sentence,like i need a break my brain is fried honestly i think the second option is better let's keep the first version like simple and ship it fast,"I need a break, my brain is fried. Honestly, I think the second option is better. Let's keep the first version simple and ship it fast."
+449,multi_sentence,uh please add this to the agenda for friday's meeting can you proofread this paragraph for me i love how clean the interface interface looks,Please add this to the agenda for Friday's meeting. Can you proofread this paragraph for me? I love how clean the interface looks.
+64,multi_sentence,hmm can you share the document with the whole team let's keep the first version simple and ship it fast,Can you share the document with the whole team? Let's keep the first version simple and ship it fast.
+624,multi_sentence,i'm working from home today the client loved you know the new design,I'm working from home today. The client loved the new design.
+348,multi_sentence,um who is joining the call today the mic is picking up too much background noise okay i'm heading out now see you tomorrow,"Who is joining the call today? The mic is picking up too much background noise. Okay, I'm heading out now, see you tomorrow."
+793,multi_sentence,right so i'll draft the email and you can review it you know how long will will the export take could you explain how the billing works,I'll draft the email and you can review it. How long will the export take? Could you explain how the billing works?
+290,multi_sentence,hmm i'm working from home today please add this to the agenda for friday's friday's meeting,I'm working from home today. Please add this to the agenda for Friday's meeting.
+1405,multi_sentence,we're we're launching on product hunt next week who is joining the call today,We're launching on Product Hunt next week. Who is joining the call today?
+828,multi_sentence,i'll send you the final draft by tonight it's raining heavily in bangalore today,I'll send you the final draft by tonight. It's raining heavily in Bangalore today.
+1254,multi_sentence,like that sounds great let's do it it's raining heavily in bangalore today,"That sounds great, let's do it. It's raining heavily in Bangalore today."
+821,multi_sentence,hmm sorry i missed your call please add this to the agenda for friday's meeting,"Sorry, I missed your call. Please add this to the agenda for Friday's meeting."
+969,multi_sentence,happy birthday hope you have an amazing day let's not overthink this this one,"Happy birthday, hope you have an amazing day! Let's not overthink this one."
+433,multi_sentence,i mean i'm still waiting on the feedback from the design team please turn off the notifications like during the meeting,I'm still waiting on the feedback from the design team. Please turn off the notifications during the meeting.
+613,multi_sentence,like i'm really excited about this opportunity what time does the event start,I'm really excited about this opportunity. What time does the event start?
+806,multi_sentence,the model keeps hallucinating on long inputs congratulations on you know the new role,The model keeps hallucinating on long inputs. Congratulations on the new role!
+186,multi_sentence,i don't think we have enough data yet can you proofread this paragraph for me,I don't think we have enough data yet. Can you proofread this paragraph for me?
+973,multi_sentence,uh so that sounds great let's do it he said he'd call back like like in an hour how long will the export take,"That sounds great, let's do it. He said he'd call back in an hour. How long will the export take?"
+1170,multi_sentence,right so the weather is lovely so let's walk to the office we're hiring a designer and a backend engineer,"The weather is lovely, so let's walk to the office. We're hiring a designer and a backend engineer."
+1374,multi_sentence,let me think about it and get back to you write a message to ankit saying i'll be late,Let me think about it and get back to you. Write a message to Ankit saying I'll be late.
+541,multi_sentence,the client loved the new design please don't share this with anyone outside the team,The client loved the new design. Please don't share this with anyone outside the team.
+63,multi_sentence,add milk and eggs to my shopping list can you proofread this paragraph for me,Add milk and eggs to my shopping list. Can you proofread this paragraph for me?
+295,multi_sentence,the client loved the new design let me think about it and get back to you,The client loved the new design. Let me think about it and get back to you.
+531,multi_sentence,i'll send you the final draft by you know tonight tonight what time does the event start,I'll send you the final draft by tonight. What time does the event start?
+465,multi_sentence,please don't share this with anyone outside the team let's try a different approach this time keep the tone friendly but professional,Please don't share this with anyone outside the team. Let's try a different approach this time. Keep the tone friendly but professional.
+1271,multi_sentence,you're right i should have checked earlier i'm not sure that's the right approach i've been meaning to ask you something,"You're right, I should have checked earlier. I'm not sure that's the right approach. I've been meaning to ask you something."
+146,multi_sentence,right so i'm um running about ten minutes late never mind i found it,"I'm running about ten minutes late. Never mind, I found it."
+387,multi_sentence,uh so the client loved the new design let me know if you um need anything else,The client loved the new design. Let me know if you need anything else.
+1230,multi_sentence,okay so okay so could we make the button bigger and a bit greener that's a fair point but i disagree,"Could we make the button bigger and a bit greener? That's a fair point, but I disagree."
+13,multi_sentence,like the deadline is tight but we can make it happy birthday hope you have an amazing day,"The deadline is tight, but we can make it. Happy birthday, hope you have an amazing day!"
+998,multi_sentence,the client loved the new design let's not overthink this one,The client loved the new design. Let's not overthink this one.
+1295,multi_sentence,can you share the document with the whole team please turn off the notifications during the meeting,Can you share the document with the whole team? Please turn off the notifications during the meeting.
+972,multi_sentence,please add this to the agenda for friday's meeting i'll draft the email and you can review it that's all for uh today thank you everyone,"Please add this to the agenda for Friday's meeting. I'll draft the email and you can review it. That's all for today, thank you everyone."
+459,multi_sentence,please review the attached proposal and um let me know your thoughts let me think about it and get back to you,Please review the attached proposal and let me know your thoughts. Let me think about it and get back to you.
+1327,multi_sentence,write a message to ankit saying i'll be late honestly i think the second option is better,"Write a message to Ankit saying I'll be late. Honestly, I think the second option is better."
+422,multi_sentence,i'll be out of office from monday to wednesday is the dataset ready for training,I'll be out of office from Monday to Wednesday. Is the dataset ready for training?
+152,multi_sentence,i mean he said he'd call back in an hour open the settings and turn on dark mode,He said he'd call back in an hour. Open the settings and turn on dark mode.
+1196,list_numbered,you know my to do list you know is one call the bank two renew the domain three send the invoice,"My to-do list:
+1. Call the bank
+2. Renew the domain
+3. Send the invoice"
+1332,list_numbered,my to do list is one write the newsletter two prepare the pitch three book tickets four call the bank five go to the gym,"My to-do list:
+1. Write the newsletter
+2. Prepare the pitch
+3. Book tickets
+4. Call the bank
+5. Go to the gym"
+1380,list_numbered,my to do list is one pay the electricity bill two call the bank three go to the gym,"My to-do list:
+1. Pay the electricity bill
+2. Call the bank
+3. Go to the gym"
+582,list_numbered,so my to do list is one review the the pull request two book you know tickets three renew the domain four update the website,"My to-do list:
+1. Review the pull request
+2. Book tickets
+3. Renew the domain
+4. Update the website"
+1436,list_numbered,you know my to do list is one reply to priya two pay the electricity bill three prepare the pitch four book tickets,"My to-do list:
+1. Reply to Priya
+2. Pay the electricity bill
+3. Prepare the pitch
+4. Book tickets"
+742,list_numbered,my to do list is one buy milk two clean the desk three prepare the pitch four send the invoice five pay the electricity bill,"My to-do list:
+1. Buy milk
+2. Clean the desk
+3. Prepare the pitch
+4. Send the invoice
+5. Pay the electricity bill"
+911,list_numbered,my to do list is one update the website two pay the electricity bill three reply to priya four buy milk,"My to-do list:
+1. Update the website
+2. Pay the electricity bill
+3. Reply to Priya
+4. Buy milk"
+1379,list_numbered,you know my to do list is one send the invoice two update the website three pay the electricity bill,"My to-do list:
+1. Send the invoice
+2. Update the website
+3. Pay the electricity bill"
+111,list_numbered,my to do list is one write the newsletter two update the website three buy milk four renew the domain five review the pull request,"My to-do list:
+1. Write the newsletter
+2. Update the website
+3. Buy milk
+4. Renew the domain
+5. Review the pull request"
+517,amount_correction,uh so the price is one thousand five hundred rupees no no seven thousand five hundred rupees,"The price is ₹7,500."
+1219,amount_correction,pay the vendor seven hundred i i mean five thousand,"Pay the vendor ₹5,000."
+235,amount_correction,uh so the budget is twelve thousand hmm no five hundred,The budget is ₹500.
+1345,amount_correction,so send arjun ten thousand or or actually seven thousand uh five hundred,"Send Arjun ₹7,500."
+1325,amount_correction,the budget is ten thousand wait make it five thousand,"The budget is ₹5,000."
+483,amount_correction,right so pay the vendor seven hundred wait make it eight hundred,Pay the vendor ₹800.
+1028,amount_correction,the price is is ten thousand rupees wait make it sixty thousand,"The price is ₹60,000."
+1016,amount_correction,pay the vendor one thousand five hundred no one thousand two hundred,"Pay the vendor ₹1,200."
+298,amount_correction,right so pay the vendor twenty five thousand no no make it two thousand five hundred,"Pay the vendor ₹2,500."
+1145,amount_correction,the price is sixty thousand rupees sorry i mean ten thousand rupees,"The price is ₹10,000."
+749,amount_correction,uh so the budget is twelve thousand no no you know make it eight hundred,The budget is ₹800.
+360,amount_correction,um we charge four thousand five hundred per month actually make it twenty five thousand,"We charge ₹25,000 per month."
+1003,amount_correction,uh pay the vendor seven hundred wait make it one thousand two hundred,"Pay the vendor ₹1,200."
+1284,amount_correction,um send divya five hundred wait no one thousand you know two hundred,"Send Divya ₹1,200."
+843,amount_correction,right so send karan seven thousand five hundred wait no seven hundred,Send Karan ₹700.
+889,amount_correction,okay so send rohan five thousand or or actually one thousand two hundred,"Send Rohan ₹1,200."
+591,amount_correction,send ishita five hundred you know no no no make it forty thousand,"Send Ishita ₹40,000."
+1191,amount_correction,the budget is two thousand five hundred wait no one thousand two hundred,"The budget is ₹1,200."
+1072,amount_correction,you know the budget is twenty five thousand wait no five hundred,The budget is ₹500.
+865,amount_correction,pay the vendor sixty thousand actually twenty five thousand,"Pay the vendor ₹25,000."
+1285,amount_correction,send priya one thousand two hundred no no make it twelve thousand,"Send Priya ₹12,000."
+123,amount_correction,uh send shashank seven hundred actually like make it four thousand five hundred hundred,"Send Shashank ₹4,500."
+94,phone,um my number like is six two nine three nine six eight eight zero one,My number is 62939 68801.
+937,phone,my number is seven seven seven two zero two three nine seven nine two,My number is 77202 39792.
+617,phone,whatsapp me at nine eight five five six nine six eight eight two,WhatsApp me at 98556 96882.
+20,phone,so my number uh is seven two two four six zero nine seven one one,My number is 72246 09711.
+619,phone,uh call me on six four three three two nine six seven three six,Call me on 64332 96736.
+1068,phone,uh so whatsapp whatsapp me at seven eight three seven four nine nine nine eight five,WhatsApp me at 78374 99985.
+1346,metrics,traffic jumped ninety five point five percent to twenty nine crore,Traffic jumped 95.5% to 29 crore.
+599,metrics,um signups dropped eighteen percent to thirty uh two thousand,Signups dropped 18% to 32 thousand.
+1303,metrics,revenue jumped forty five percent to seven lakh,Revenue jumped 45% to 7 lakh.
+790,metrics,hmm traffic jumped fifty four percent to thirty seven thousand,Traffic jumped 54% to 37 thousand.
+437,metrics,right so revenue dropped sixty three percent to twenty six lakh,Revenue dropped 63% to 26 lakh.
+879,metrics,okay so traffic grew seventy five like percent to thirty seven lakh,Traffic grew 75% to 37 lakh.
+901,metrics,okay so traffic grew thirty one percent to twenty one lakh,Traffic grew 31% to 21 lakh.
+963,metrics,revenue dropped sixty two percent to fourteen thousand,Revenue dropped 62% to 14 thousand.
+412,metrics,i mean signups jumped two percent uh to thirty six crore,Signups jumped 2% to 36 crore.
+101,metrics,churn dropped sixty six percent to eight crore,Churn dropped 66% to 8 crore.
+664,metrics,retention grew five five percent to twenty thousand,Retention grew 5% to 20 thousand.
+581,metrics,churn grew fifty five point five percent to six lakh,Churn grew 55.5% to 6 lakh.
+336,metrics,signups grew five percent to eleven thousand,Signups grew 5% to 11 thousand.
+389,metrics,i mean downloads dropped eighty eight percent to thirty five lakh,Downloads dropped 88% to 35 lakh.
+288,metrics,uh conversion jumped sixty nine percent to twenty like one crore,Conversion jumped 69% to 21 crore.
+343,metrics,you know downloads uh grew sixty percent to nine thousand,Downloads grew 60% to 9 thousand.
+1222,metrics,retention grew sixty five point five percent to fifteen thousand,Retention grew 65.5% to 15 thousand.
+594,metrics,churn grew forty seven percent to twenty five lakh,Churn grew 47% to 25 lakh.
+1130,day_correction,like move the meeting to thursday sorry i mean sunday,Move the meeting to Sunday.
+87,day_correction,the deadline is thursday like wait no monday,The deadline is Monday.
+516,day_correction,okay so i'm free on thursday scratch that wednesday,I'm free on Wednesday.
+447,day_correction,you know move the meeting to sunday sunday or actually friday,Move the meeting to Friday.
+1409,day_correction,i'm free on friday no maybe wednesday,I'm free on Wednesday.
+1422,day_correction,send the report by thursday scratch that wednesday,Send the report by Wednesday.
+980,day_correction,the deadline is tuesday wait no sunday,The deadline is Sunday.
+1055,day_correction,hmm i'm free on tuesday actually sunday,I'm free on Sunday.
+173,day_correction,move the meeting to monday scratch that saturday,Move the meeting to Saturday.
+102,day_correction,i'm free on sunday no no um make it friday,I'm free on Friday.
+1320,day_correction,i mean the launch is on sunday wait make it monday,The launch is on Monday.
+907,day_correction,the deadline is tuesday i mean monday,The deadline is Monday.
+982,day_correction,hmm let's do it on monday or actually friday,Let's do it on Friday.
+192,day_correction,uh the launch is on tuesday no no make it monday,The launch is on Monday.
+132,day_correction,so i'm free on wednesday actually sunday,I'm free on Sunday.
+801,day_correction,uh send send the report by thursday wait make um it tuesday,Send the report by Tuesday.
+1308,day_correction,the the deadline is sunday wait um no friday,The deadline is Friday.
+1273,day_correction,um send the you know report by monday no let's say saturday,Send the report by Saturday.
+17,day_correction,okay so the launch is um on tuesday wait no monday,The launch is on Monday.
+30,day_correction,move the meeting meeting to thursday actually uh make it sunday,Move the meeting to Sunday.
+220,time_correction,push the review to four am i mean seven forty five a m tomorrow,Push the review to 7:45 AM tomorrow.
+131,time_correction,uh so let's have the call at ten thirty pm i mean two tomorrow,Let's have the call at 2 PM tomorrow.
+1094,time_correction,you know let's have the call at eight fifteen pm hmm no one thirty pm with the team,Let's have the call at 1:30 PM with the team.
+1383,time_correction,okay so dinner is at three a m actually ten with the team,Dinner is at 10 AM with the team.
+1213,time_correction,set the standup you know for eleven am actually eight eight fifteen a m tomorrow,Set the standup for 8:15 AM tomorrow.
+929,time_correction,remind me to call mom at eleven thirty a m sorry i mean one forty five,Remind me to call Mom at 1:45 AM.
+327,time_correction,the demo is at two thirty p m wait no nine nine thirty with the team,The demo is at 9:30 PM with the team.
+400,time_correction,dinner is at ten thirty a m scratch that one forty five tomorrow,Dinner is at 1:45 AM tomorrow.
+912,time_correction,hmm schedule the interview for six a m or actually four with the team,Schedule the interview for 4 AM with the team.
+673,time_correction,right so schedule the interview for four thirty a m hmm no six uh if that works,Schedule the interview for 6 AM if that works.
+1307,time_correction,okay so i want to meet at eight thirty am no let's say seven thirty with the team,I want to meet at 7:30 AM with the team.
+106,time_correction,let's have the call at eleven a m uh no let's say one tomorrow,Let's have the call at 1 AM tomorrow.
+266,time_correction,the demo is at two pm wait make it five forty five with like the team,The demo is at 5:45 PM with the team.
+329,time_correction,um remind me to uh call mom at seven fifteen pm or actually five thirty if that works,Remind me to call Mom at 5:30 PM if that works.
+395,time_correction,the flight leaves at eleven a m no maybe six am if that works,The flight leaves at 6 AM if that works.
+1270,time_correction,um book the conference room for four pm or actually twelve forty five tomorrow,Book the conference room for 12:45 PM tomorrow.
+473,time_correction,i want to meet at two am actually one fifteen a m tomorrow,I want to meet at 1:15 AM tomorrow.
+232,time_correction,can we catch up at ten am no let's say twelve fifteen am with the team,Can we catch up at 12:15 AM with the team?
+1305,time_correction,i'll be there by two thirty a m um hmm no four fifteen am with the team,I'll be there by 4:15 AM with the team.
+198,time_correction,push the review to five thirty pm pm actually make it four thirty,Push the review to 4:30 PM.
+538,time_correction,set the standup for three p m no maybe one pm if that works,Set the standup for 1 PM if that works.
+263,time_correction,so push the review to two p m hmm no twelve tomorrow,Push the review to 12 PM tomorrow.
+961,time_correction,uh i'll be there by three a like m scratch that twelve tomorrow,I'll be there by 12 AM tomorrow.
+863,time_correction,book the conference room for two thirty am no let's say eight thirty if that works,Book the conference room for 8:30 AM if that works.
+859,time_correction,the flight leaves at three thirty am no no make you know it nine fifteen with the team,The flight leaves at 9:15 AM with the team.
+303,time_correction,schedule the interview for twelve fifteen p m i mean five p m,Schedule the interview for 5 PM.
+1296,time_correction,push the review to eight thirty am no let's say nine forty five like tomorrow,Push the review to 9:45 AM tomorrow.
+1148,time_correction,i'll be you know there by four a m i mean four thirty,I'll be there by 4:30 AM.
+1338,time_correction,you know the flight leaves at eight a m no let's say eleven tomorrow,The flight leaves at 11 AM tomorrow.
+31,time_correction,the demo is at eleven fifteen am no maybe eight,The demo is at 8 AM.
+789,time_correction,remind me to call mom at twelve p m uh hmm no four thirty if that works,Remind me to call Mom at 4:30 PM if that works.
+405,time_correction,you know let's grab lunch at three am actually make it seven like am tomorrow,Let's grab lunch at 7 AM tomorrow.
+282,time_correction,i mean push the review to nine forty five am no no no make it nine,Push the review to 9 AM.
+1120,time_correction,can we catch up at two pm scratch that five fifteen fifteen tomorrow,Can we catch up at 5:15 PM tomorrow?
+932,time_correction,can we catch up at three fifteen am wait make it eight tomorrow,Can we catch up at 8 AM tomorrow?
+753,time_correction,wake me up at seven fifteen pm wait no three p m tomorrow,Wake me up at 3 PM tomorrow.
+1304,time_correction,the flight leaves at four p m actually two fifteen tomorrow,The flight leaves at 2:15 PM tomorrow.
+1087,time_correction,like let's grab lunch at one a uh m hmm no four thirty a m tomorrow,Let's grab lunch at 4:30 AM tomorrow.
+543,time_correction,dinner is at six forty um five pm hmm no two thirty,Dinner is at 2:30 PM.
+148,time_correction,so dinner is at like eleven forty five a m sorry i mean ten if that works,Dinner is at 10 AM if that works.
+1224,time_correction,i want to meet at one a m no maybe three,I want to meet at 3 AM.
+113,time_correction,so so dinner is at five pm or like actually seven,Dinner is at 7 PM.
+1056,time_correction,i'll be there by five p m sorry i mean eight with the team,I'll be there by 8 PM with the team.
+1190,time_correction,i mean i'll be there by six a m hmm no one with the team,I'll be there by 1 AM with the team.
+371,time_correction,the demo is at eleven thirty pm scratch that twelve forty five pm tomorrow,The demo is at 12:45 PM tomorrow.
+1267,time_correction,i want to meet at six fifteen p m scratch that three thirty pm if that works,I want to meet at 3:30 PM if that works.
+960,time_correction,right so the flight leaves at six pm no no make it one thirty uh p m,The flight leaves at 1:30 PM.
+758,time_correction,like i want to meet at ten thirty pm wait no ten thirty tomorrow,I want to meet at 10:30 PM tomorrow.
+361,time_correction,book the conference room for six fifteen pm actually make it ten like thirty if that works,Book the conference room for 10:30 PM if that works.
+518,time_correction,uh can we catch up at four p m you know no no no make it three if that works,Can we catch up at 3 PM if that works?
+610,time_correction,remind me to call mom at at two pm wait make it five thirty with the team,Remind me to call Mom at 5:30 PM with the team.
+1382,time_correction,so let's grab lunch at nine nine a m sorry i mean five uh thirty with the team,Let's grab lunch at 5:30 AM with the team.
+658,date_time,the meeting is on may sixteenth at twelve p m,The meeting is on May 16 at 12 PM.
+791,date_time,um my birthday is on september sixteenth,My birthday is on September 16.
+1107,date_time,submit it before before uh march thirteenth,Submit it before March 13.
+155,date_time,hmm we ship on march twenty seventh,We ship on March 27.
+773,date_time,the hackathon is on july thirteenth at four p m,The hackathon is on July 13 at 4 PM.
+1288,date_time,we ship on march uh twenty first,We ship on March 21.
+249,date_time,hmm we ship on february ninth,We ship on February 9.
+752,date_time,like my birthday is on october eighteenth,My birthday is on October 18.
+714,date_time,hmm my birthday is on may twenty seventh,My birthday is on May 27.
+268,date_time,i mean my birthday is on april twenty third,My birthday is on April 23.
+1220,date_time,my birthday is on january twentieth,My birthday is on January 20.
+183,date_time,the hackathon is on on november seventeenth at two p m,The hackathon is on November 17 at 2 PM.
+767,date_time,submit it before march like twenty second,Submit it before March 22.
+1081,date_time,the meeting is on july july first at five thirty pm,The meeting is on July 1 at 5:30 PM.
+765,date_time,i mean we ship on february twenty sixth,We ship on February 26.
+887,date_time,submit it before september seventh,Submit it before September 7.
+124,date_time,hmm submit it like before august fifteenth,Submit it before August 15.
+855,date_time,we ship on august sixteenth,We ship on August 16.
+1047,date_time,we ship ship on may first,We ship on May 1.
+243,date_time,uh my birthday is on september seventh,My birthday is on September 7.
+324,list_bullets,i need to buy tomatoes bread you know onions and butter,"I need to buy tomatoes, bread, onions, and butter."
+1217,list_bullets,i mean i need to buy eggs bread onions and paneer,"I need to buy eggs, bread, onions, and paneer."
+458,list_bullets,i mean grocery list bullet butter bullet coffee bullet bananas bullet oats bullet rice bullet bread,"Grocery list:
+- Butter
+- Coffee
+- Bananas
+- Oats
+- Rice
+- Bread"
+987,list_bullets,uh so i need to buy bread milk tomatoes paneer oats and coffee,"I need to buy bread, milk, tomatoes, paneer, oats, and coffee."
+43,list_bullets,i need to buy paneer onions and bananas,"I need to buy paneer, onions, and bananas."
+364,list_bullets,grocery list bullet onions you know bullet eggs bullet butter bullet curd bullet bread,"Grocery list:
+- Onions
+- Eggs
+- Butter
+- Curd
+- Bread"
+575,list_bullets,uh so grocery list bullet rice bullet milk bullet bullet oats bullet butter bullet bread,"Grocery list:
+- Rice
+- Milk
+- Oats
+- Butter
+- Bread"
+338,list_bullets,i need to buy tomatoes coffee and bananas,"I need to buy tomatoes, coffee, and bananas."
+1156,sentence,uh add milk and like eggs to my shopping list,Add milk and eggs to my shopping list.
+540,sentence,write a message to ankit saying i'll be late,Write a message to Ankit saying I'll be late.
+176,sentence,i'll follow up with them on on monday,I'll follow up with them on Monday.
+271,sentence,congratulations on the new role,Congratulations on the new role!
+858,sentence,okay so is there anything else you need from me,Is there anything else you need from me?
+1419,sentence,why is the build failing on the main branch,Why is the build failing on the main branch?
+240,sentence,sorry i missed your call,"Sorry, I missed your call."
+954,sentence,i've been meaning to ask you something,I've been meaning to ask you something.
+1272,sentence,can you share the document with the whole team team,Can you share the document with the whole team?
+639,sentence,do you have time for a quick call tomorrow,Do you have time for a quick call tomorrow?
+277,sentence,could we you know make the button bigger and a bit greener,Could we make the button bigger and a bit greener?
+439,sentence,can you share the document with the whole team,Can you share the document with the whole team?
+1357,sentence,i've been like meaning to ask you something,I've been meaning to ask you something.
+337,sentence,can you remind me what we decided last uh time,Can you remind me what we decided last time?
+939,sentence,thanks that really helped a um um lot,"Thanks, that really helped a lot."
+381,sentence,you know we're hiring a designer and a backend engineer,We're hiring a designer and a backend engineer.
+251,sentence,right so is there anything else you need from me,Is there anything else you need from me?
+1042,sentence,uh so honestly i think the second option is like better,"Honestly, I think the second option is better."
+472,sentence,i'll take care of it don't worry,"I'll take care of it, don't worry."
+696,sentence,let me know if you need anything else,Let me know if you need anything else.
+179,sentence,never mind i found it,"Never mind, I found it."
+761,sentence,i mean i um just finished the first version of the app,I just finished the first version of the app.
+576,sentence,you know where should we meet for dinner,Where should we meet for dinner?
+75,sentence,the deadline is tight but we can make it,"The deadline is tight, but we can make it."
+601,sentence,you know we should talk to like more users before we build anything else,We should talk to more users before we build anything else.
+487,sentence,um thanks that really helped a lot,"Thanks, that really helped a lot."
+1177,email,you you can reach me at pooja dot singh at braino dot co dot in,You can reach me at pooja.singh@braino.co.in.
+259,email,send it to rohan dot k at yahoo dot io io,Send it to rohan.k@yahoo.io.
+706,email,you can reach me at sneha underscore singh at braino dot in,You can reach me at sneha_singh@braino.in.
+520,email,send it to karan dot k you know at yahoo dot in,Send it to karan.k@yahoo.in.
+229,email,send it to aditya at outlook dot in,Send it to aditya@outlook.in.
+455,email,so you can reach me at arjun dot singh at braino dot com,You can reach me at arjun.singh@braino.com.
+57,email,like send it to pooja at mesa dot io,Send it to pooja@mesa.io.
+216,email,you can reach me at vikram at gmail dot co dot in,You can reach me at vikram@gmail.co.in.
+367,email,okay so you can reach me at rohan dot pande at braino dot io,You can reach me at rohan.pande@braino.io.
+284,email,you can can reach me at sneha dot um k at mesa dot co dot in,You can reach me at sneha.k@mesa.co.in.
+392,email,uh so send it to sneha at mesa dot like in,Send it to sneha@mesa.in.
+1365,email,you can reach me at meera underscore singh at gmail dot in,You can reach me at meera_singh@gmail.in.
+787,email,you can reach me at ishita underscore k at mesa dot co dot in,You can reach me at ishita_k@mesa.co.in.
+1233,email,my email is like vikram at gmail dot co dot in,My email is vikram@gmail.co.in.

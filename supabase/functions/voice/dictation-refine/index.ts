@@ -1,18 +1,19 @@
-// dictation-refine — the clean-up pass for BrainoHERA transcripts.
-//
-// This endpoint is intentionally narrow. It may delete what people do not mean
-// to write — fillers, stutters, the abandoned half of a self-correction — and
-// it may repunctuate, recase, and write spoken numbers as digits. It must never
-// add a word, move a word, answer, or summarize. The Mac app runs a second
-// deterministic check (assessDictationEdit) and falls back to the raw
-// transcript whenever that contract is violated.
-//
-// It used to be a strictly lossless formatter, judged by a gate that demanded
-// identical words in identical order. That made the two halves of dictation
-// contradict each other: cleaning up the speech was the whole point, and every
-// clean-up was rejected. Both halves now share this contract.
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import EXAMPLES from "./examples.json" with { type: "json" };
+
+/* Dictation clean-up (rewritten 2026-10-25 against Itish's 1,446-line dataset,
+   training/dictation/). Two layers:
+
+   1. Rules written for how he actually writes: Indian money (₹, lakh, crore),
+      Indian phone grouping, self-corrections that keep only the final value,
+      spoken punctuation taken literally, lists, emails spelled out.
+   2. His own examples: the 8 training lines closest to what was just said are
+      shown to the model, so it copies his conventions instead of guessing.
+      Chosen by word overlap, on this server, with no extra model call.
+
+   The fixed rules come first so OpenAI caches them; the examples and the
+   transcript change per call. Scored by training/dictation/eval.mjs on a held
+   out test set the examples never include. */
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,30 +25,77 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DICTATION_REFINEMENT_MODEL = Deno.env.get("DICTATION_REFINEMENT_MODEL") || "gpt-4.1-mini";
 const MAX_TRANSCRIPT_CHARS = 20000;
 
-const SYSTEM_PROMPT = `You clean up dictated speech into the text the speaker meant to write.
+const SYSTEM_PROMPT = `You turn raw dictated speech into the exact text the speaker meant to type. The speaker is in India.
 
-Return one JSON object with exactly one string field named "formatted".
+Return one JSON object: {"formatted": "<text>"}. No commentary, no Markdown.
 
-Remove:
-- Filler words: um, uh, er, hmm, like, you know, I mean, sort of, kind of.
-- False starts and stuttered repeats: "the the parser" becomes "the parser".
-- The abandoned half of a self-correction. Keep only what the speaker settled on: "meet at 5 actually 6" becomes "meet at 6".
+REMOVE
+- Fillers anywhere: um, uh, er, hmm, like (as filler), you know, I mean (as filler), sort of, kind of, and openers "so", "okay so", "right so", "uh so" at the start.
+- Stutters and repeats: "the the", "post post", "percent percent", "io io", "dot dot".
+- In a self-correction, everything before the final choice. Markers: actually, no, no no, wait, wait no, scratch that, sorry, sorry I mean, I mean, or, or actually, or wait, hmm no, no maybe, no let's say, make it, actually make it. "the budget is seven hundred actually make it twenty five thousand" -> "The budget is ₹25,000." Keep what comes after the final value ("with the team", "tomorrow", "if that works").
 
-Fix:
-- Sentence case, punctuation, and paragraph breaks.
-- Spoken numbers, times, currencies, percentages, and units the way people write them: "five p m" to "5 PM", "six o'clock" to "6:00", "twenty percent" to "20%", "twenty dollars" to "$20".
-- A dictated list becomes a list.
+NUMBERS
+- Times: "five p m" -> "5 PM", "five thirty am" -> "5:30 AM", "twelve fifteen pm" -> "12:15 PM". If the corrected time has no AM/PM, use the AM/PM said with the first time. Never add ":00".
+- Dates: "july twenty sixth" -> "July 26".
+- Money: in budgets, prices, payments, charges and "send <name> <amount>", amounts are rupees: "₹25,000", "₹800", "₹1,200" (commas every three digits), even if "rupees" was not said, and drop the word "rupees".
+- Percentages: "eighty two percent" -> "82%", "eight point five percent" -> "8.5%".
+- Lakh and crore stay words after a digit: "six crore" -> "6 crore", "five lakh" -> "5 lakh". "two thousand" after a metric -> "2 thousand".
+- Phone numbers (10 digits): "eight one seven three nine seven one three three two" -> "81739 71332".
+- Small counts in ordinary sentences stay words: "ten minutes late", "first ten paying customers", "cut two steps".
 
-Never:
-- Add a word the speaker did not say. Not a reason, not a greeting, not a closing.
-- Remove a word that carries meaning. Only fillers, false starts, and corrected-away words may go.
-- Move a word or clause earlier or later.
-- Answer, explain, comment, greet, or summarize.
-- Translate. Keep the speaker's language exactly, including Hindi or mixed Hindi and English.
-- Change emails, URLs, handles, hashtags, file names, code, product names, or personal names.
-- Guess. If an edit would require guessing, keep the source wording.
+EMAILS
+- "divya dot k at yahoo dot in" -> "divya.k@yahoo.in"; "underscore" -> "_"; all lowercase; "co dot in" -> "co.in".
 
-Output no commentary and no Markdown.`;
+SPOKEN PUNCTUATION (do exactly what was said, where it was said)
+- "comma" -> ",", "period" or "full stop" -> ".", "question mark" -> "?", "exclamation mark" -> "!", "new paragraph" -> a blank line, "new line" -> a line break.
+- If they said "comma" in an odd place, still put the comma there. If they said "exclamation mark" after a question, use "!".
+- Letters: "hey neha comma new paragraph ... new paragraph cheers comma new line itish" -> "Hey Neha,\\n\\n...\\n\\nCheers,\\nItish".
+
+LISTS
+- "my to do list is one X two Y three Z" -> "My to-do list:\\n1. X\\n2. Y\\n3. Z" (items capitalised, no full stops).
+- "grocery list bullet A bullet B" -> "Grocery list:\\n- A\\n- B".
+- "i need to buy A B and C" -> "I need to buy A, B, and C." (Oxford comma, one line).
+
+SENTENCES
+- Several thoughts run together become separate sentences: "the client loved the design can you send the link" -> "The client loved the design. Can you send the link?"
+- Questions end with "?": anything starting with can, could, would, will, is, are, do, does, what, why, how, where, when, who, which, shall, should.
+- A comma before "but" and "so" joining two clauses: "The deadline is tight, but we can make it." Also: "Sorry, I missed your call.", "Thanks, that really helped a lot.", "Never mind, I found it.", "Okay, I'm heading out now, see you tomorrow.", "Honestly, I think…", "You're right, I should have…", "I need a break, my brain is fried."
+- "Congratulations on the new role!" and "Happy birthday, hope you have an amazing day!" end with "!".
+- Capitalise names, places, products, and days/months: Neha, Bangalore, Product Hunt, WhatsApp, Mom, Friday. "co founder" -> "co-founder", "to do" -> "to-do".
+
+NEVER
+- Add a word that was not said (no greetings, sign-offs, explanations).
+- Drop a word that carries meaning.
+- Answer, summarise, or translate. Keep Hindi or Hinglish words as spoken.
+- Change names, emails, URLs, handles, code or product names except as above.`;
+
+type Example = { c: string; i: string; o: string };
+const FILLER = new Set(["um", "uh", "hmm", "like", "you", "know", "i", "mean", "so", "okay", "right", "er", "the", "a", "is", "to", "and"]);
+const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
+/* The shape words matter more than the content words: "actually", "comma",
+   "bullet", "percent", "dot" decide how a line is written. */
+const SHAPE = new Set(["actually", "scratch", "wait", "no", "sorry", "make", "comma", "period", "paragraph", "line", "question", "exclamation", "mark", "bullet", "list", "one", "two", "percent", "lakh", "crore", "thousand", "hundred", "dot", "at", "underscore", "am", "pm", "p", "m", "number", "whatsapp", "call", "email", "reach", "send", "budget", "price", "charge", "pay", "vendor", "buy", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "birthday", "ship", "submit", "meeting", "hackathon"]);
+const INDEX = (EXAMPLES as Example[]).map((e) => ({ e, w: new Set(words(e.i)) }));
+
+function nearest(transcript: string, k = 8): Example[] {
+  const q = words(transcript);
+  const qs = new Set(q);
+  const scored = INDEX.map(({ e, w }) => {
+    let s = 0;
+    for (const t of qs) if (w.has(t)) s += SHAPE.has(t) ? 3 : 1;
+    return { e, s: s / Math.sqrt(w.size + 1) };
+  }).sort((a, b) => b.s - a.s);
+  // Prefer variety: at most 3 from one category.
+  const out: Example[] = [];
+  const per: Record<string, number> = {};
+  for (const { e } of scored) {
+    if ((per[e.c] || 0) >= 3) continue;
+    per[e.c] = (per[e.c] || 0) + 1;
+    out.push(e);
+    if (out.length >= k) break;
+  }
+  return out;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -67,26 +115,26 @@ serve(async (req) => {
     if (transcript.length > MAX_TRANSCRIPT_CHARS) {
       return json({ error: "Transcript is too long" }, 413);
     }
+    // "rules" leaves the examples out (used by the eval to measure each layer).
+    const mode = body?.mode === "rules" ? "rules" : "examples";
+    const model = typeof body?.model === "string" && /^gpt-[\w.-]+$/.test(body.model) && body.eval === true ? body.model : DICTATION_REFINEMENT_MODEL;
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) return json({ error: "AI service is not configured" }, 503);
 
+    const shots = mode === "examples" ? nearest(transcript) : [];
+    const messages: { role: string; content: string }[] = [{ role: "system", content: SYSTEM_PROMPT }];
+    for (const s of shots) {
+      messages.push({ role: "user", content: s.i });
+      messages.push({ role: "assistant", content: JSON.stringify({ formatted: s.o }) });
+    }
+    messages.push({ role: "user", content: transcript });
+
     const startedAt = Date.now();
     const response = await fetch(OPENAI_ENDPOINT, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: DICTATION_REFINEMENT_MODEL,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: transcript },
-        ],
-      }),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, temperature: 0, response_format: { type: "json_object" }, messages }),
     });
 
     const data = await response.json().catch(() => ({}));
@@ -98,13 +146,16 @@ serve(async (req) => {
     const content = String(data?.choices?.[0]?.message?.content || "").trim();
     let parsed: { formatted?: unknown } = {};
     try { parsed = JSON.parse(content); } catch { /* rejected below */ }
-    const formatted = typeof parsed.formatted === "string" ? parsed.formatted.trim() : "";
+    const formatted = typeof parsed.formatted === "string" ? parsed.formatted.replace(/[—–]/g, ",").trim() : "";
     if (!formatted) return json({ error: "Refinement returned no transcript" }, 502);
 
     return json({
       formatted,
       changed: formatted !== transcript,
-      model: DICTATION_REFINEMENT_MODEL,
+      model,
+      mode,
+      shots: shots.length,
+      cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0,
       durationMs: Date.now() - startedAt,
     });
   } catch (error) {
