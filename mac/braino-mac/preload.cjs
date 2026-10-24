@@ -494,6 +494,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:wa-card", handler);
     return () => ipcRenderer.removeListener("braino-mac:wa-card", handler);
   },
+  typeBarSend: (text) => ipcRenderer.invoke("braino-mac:type-bar-send", text),
+  typeBarClose: () => ipcRenderer.invoke("braino-mac:type-bar-close"),
+  onTypeBarShown: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on("braino-mac:type-bar-shown", handler);
+    return () => ipcRenderer.removeListener("braino-mac:type-bar-shown", handler);
+  },
   onRunInput: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:run-input", handler);

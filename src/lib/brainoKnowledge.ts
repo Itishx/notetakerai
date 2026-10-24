@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-type-bar",
+    title: "Type to Braino",
+    category: "Feature",
+    date: "2026-10-25",
+    dateLabel: "October 25, 2026",
+    description:
+      "Press ⌘⌥T anywhere and a line of glass appears in the middle of your screen. Type, hit Enter, and the answer shows in the notch. Typed means quiet: he only talks when he's talked to.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "092",
+  },
+  {
     slug: "mac-task-board",
     title: "Task Board: Every Job Kept",
     category: "Technical",

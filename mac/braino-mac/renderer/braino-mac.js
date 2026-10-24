@@ -9904,7 +9904,8 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
         return;
       }
       if (await shouldUseRealtimeDirectChat(turnText)) {
-        const handled = await answerViaRealtimeChat(turnText);
+        // Typed (the ⌘⌥T bar, the app): shown in the notch, never spoken.
+        const handled = await answerViaRealtimeChat(turnText, { silent: Boolean(opts.typed) });
         if (handled) return;
         logRenderer("realtime.chat.fallback_to_delegate", {
           transcriptChars: turnText.length,

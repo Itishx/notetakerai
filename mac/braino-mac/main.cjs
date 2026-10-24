@@ -4027,6 +4027,54 @@ async function runIdleScreenShortcut(shortcut) {
   }
 }
 
+/* Type to Braino (2026-10-25): ⌘⌥T opens one line of glass in the middle of
+   the screen, like the Chrome extension's Space bar. Enter hands the words to
+   the notch as a typed turn, so the answer shows there and he does not speak:
+   he talks only when he is talked to. Esc or clicking away closes it. */
+let typeBarWindow = null;
+function toggleTypeBar(source = "") {
+  if (typeBarWindow && !typeBarWindow.isDestroyed() && typeBarWindow.isVisible()) { typeBarWindow.hide(); return; }
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const width = Math.min(680, display.workArea.width - 80);
+  const height = 64;
+  const x = Math.round(display.workArea.x + (display.workArea.width - width) / 2);
+  const y = Math.round(display.workArea.y + display.workArea.height * 0.3);
+  if (!typeBarWindow || typeBarWindow.isDestroyed()) {
+    typeBarWindow = new BrowserWindow({
+      width, height, x, y,
+      frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
+      fullscreenable: false, skipTaskbar: true, hasShadow: true, roundedCorners: true, show: false,
+      vibrancy: "hud", visualEffectState: "active", backgroundColor: "#00000000",
+      webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+    });
+    typeBarWindow.setAlwaysOnTop(true, "screen-saver");
+    typeBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    typeBarWindow.on("blur", () => { if (typeBarWindow && !typeBarWindow.isDestroyed()) typeBarWindow.hide(); });
+    typeBarWindow.on("closed", () => { typeBarWindow = null; });
+    typeBarWindow.loadFile(path.join(__dirname, "renderer", "type-bar.html"));
+    typeBarWindow.once("ready-to-show", () => { typeBarWindow?.show(); typeBarWindow?.focus(); });
+  } else {
+    typeBarWindow.setBounds({ x, y, width, height });
+    typeBarWindow.show();
+    typeBarWindow.focus();
+    typeBarWindow.webContents.send("braino-mac:type-bar-shown");
+  }
+  logMac("type_bar.opened", { source });
+}
+ipcMain.handle("braino-mac:type-bar-send", async (_event, text) => {
+  const said = String(text || "").trim().slice(0, 4000);
+  if (typeBarWindow && !typeBarWindow.isDestroyed()) typeBarWindow.hide();
+  if (!said) return { ok: false };
+  logMac("type_bar.sent", { chars: said.length });
+  ensureDockWindowVisible("type-bar");
+  sendToRenderer("braino-mac:run-input", { text: said, source: "type_bar" });
+  return { ok: true };
+});
+ipcMain.handle("braino-mac:type-bar-close", async () => {
+  if (typeBarWindow && !typeBarWindow.isDestroyed()) typeBarWindow.hide();
+  return { ok: true };
+});
+
 function registerHotkeys() {
   const registered = {
     controlSpace: globalShortcut.register("CommandOrControl+Space", () => {
@@ -4043,8 +4091,7 @@ function registerHotkeys() {
          and a silent false is exactly how this shipped broken the first time. */
       for (const combo of ["CommandOrControl+Alt+T", "CommandOrControl+Shift+Space", "CommandOrControl+Alt+K"]) {
         const took = globalShortcut.register(combo, () => {
-          sendToRenderer("braino-mac:type-toggle", { source: combo });
-          ensureDockWindowVisible("type-hotkey");
+          toggleTypeBar(combo);
         });
         if (took) { logMac("hotkeys.typing", { combo }); return combo; }
         logMac("hotkeys.typing.taken", { combo });
