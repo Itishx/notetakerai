@@ -21,6 +21,10 @@ final class BrainoControlTap {
   private var optionHoldActive = false
   private var optionHoldToken = 0
   private let optionHoldThreshold: Double = 0.22
+  // Two-finger holds (2026-10-25): Fn+Control = talk to Braino, Control+Option
+  // = dictate. Held for as long as you speak; letting go ends it.
+  private var chordHeld = ""
+  private let bareOptionHoldEnabled = false
   private var commandIsDown = false
   private var commandTapPoisoned = false
   private var lastCommandTap: TimeInterval = 0
@@ -100,8 +104,29 @@ final class BrainoControlTap {
       return
     }
 
+    // Two-finger holds. Decided before the single-key logic, and while one is
+    // held the single-key gestures stand down (no bare-Option hold, no taps).
+    do {
+      let f = event.flags
+      let ctrl = f.contains(.maskControl), opt = f.contains(.maskAlternate), fn = f.contains(.maskSecondaryFn)
+      let extra = f.contains(.maskCommand) || f.contains(.maskShift)
+      let want: String = extra ? "" : (ctrl && fn && !opt ? "talk" : (ctrl && opt && !fn ? "dictate" : ""))
+      if want != chordHeld {
+        if !chordHeld.isEmpty { printLine("\(chordHeld)-hold-end") }
+        if !want.isEmpty {
+          printLine("\(want)-hold-start")
+          // These keys are now a chord, not taps.
+          optionTapPoisoned = true; commandTapPoisoned = true; shiftTapPoisoned = true
+          lastControlDown = 0
+          if optionHoldActive { optionHoldActive = false; printLine("option-hold-cancel") }
+          optionHoldToken += 1
+        }
+        chordHeld = want
+      }
+    }
+
     let isControl = event.flags.contains(.maskControl)
-    if isControl && !controlIsDown {
+    if isControl && !controlIsDown && chordHeld.isEmpty {
       let now = ProcessInfo.processInfo.systemUptime
       if now - lastControlDown < 0.52 {
         printLine("double-control")
@@ -145,7 +170,8 @@ final class BrainoControlTap {
       // Still down, alone, after the threshold: that is a hold.
       optionHoldToken += 1
       let token = optionHoldToken
-      if !optionTapPoisoned {
+      // Bare-Option hold is retired (2026-10-25): dictation is Control+Option now.
+      if bareOptionHoldEnabled && !optionTapPoisoned {
         DispatchQueue.main.asyncAfter(deadline: .now() + optionHoldThreshold) { [weak self] in
           guard let self = self, token == self.optionHoldToken, self.optionIsDown, !self.optionTapPoisoned, !self.optionHoldActive else { return }
           self.optionHoldActive = true
@@ -201,6 +227,8 @@ final class BrainoControlTap {
   private func handleKeyDown(_ event: CGEvent) {
     if commandIsDown { commandTapPoisoned = true }
     if optionIsDown { optionTapPoisoned = true }
+    // A real key while a two-finger hold is down: it was a shortcut, not speech.
+    if !chordHeld.isEmpty { printLine("\(chordHeld)-hold-cancel"); chordHeld = "" }
     // Option+key is a shortcut or a special character, not dictation.
     if optionHoldActive { optionHoldActive = false; printLine("option-hold-cancel") }
     if shiftIsDown { shiftTapPoisoned = true }

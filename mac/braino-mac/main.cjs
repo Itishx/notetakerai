@@ -4250,7 +4250,7 @@ function startSwiftHotkeyHelper() {
 
   swiftHotkey.stdout.on("data", (chunk) => {
     String(chunk || "").split(/\r?\n/).forEach((line) => {
-      const trimmed = line.trim();
+      let trimmed = line.trim();
       if (!trimmed) return;
       if (trimmed === "double-control") {
         sendToRenderer("braino-mac:voice-toggle", { source: "double Control" });
@@ -4261,6 +4261,17 @@ function startSwiftHotkeyHelper() {
          speak, let go and the words are typed where the cursor is. No live
          words on screen, only the small orb. Double Option still toggles a
          hands-free session. Option+another key cancels and types nothing. */
+      /* Two-finger holds (2026-10-25): Fn+Control talks to Braino for as long
+         as it is held, and letting go tells him you have finished. Control+
+         Option dictates the same way. */
+      if (trimmed === "talk-hold-start" || trimmed === "talk-hold-end" || trimmed === "talk-hold-cancel") {
+        const phase = trimmed.split("-").pop();
+        logMac("hotkey.talk_hold", { phase });
+        sendToRenderer("braino-mac:voice-ptt", { phase });
+        if (phase === "start") ensureDockWindowVisible("voice-hotkey");
+        return;
+      }
+      if (trimmed.startsWith("dictate-hold-")) trimmed = trimmed.replace("dictate-hold-", "option-hold-");
       if (trimmed === "option-hold-start" || trimmed === "option-hold-end" || trimmed === "option-hold-cancel") {
         if (SKIT.enabled) return;
         if (!(heraCloudEnabled() || (parakeetEnabled() && (parakeet.ready || sarvamActive())))) {

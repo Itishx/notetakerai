@@ -423,6 +423,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:speech-transcript", handler);
     return () => ipcRenderer.removeListener("braino-mac:speech-transcript", handler);
   },
+  // Hold Fn+Control to talk: { phase: "start" | "end" | "cancel" }.
+  onVoicePtt: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:voice-ptt", handler);
+    return () => ipcRenderer.removeListener("braino-mac:voice-ptt", handler);
+  },
   onVoiceToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:voice-toggle", handler);

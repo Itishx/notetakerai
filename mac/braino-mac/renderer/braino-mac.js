@@ -6394,6 +6394,8 @@ const FOREIGN_TRANSCRIPT_RE = /[¿¡]|[\u00C0-\u024F\u1E00-\u1EFF]|[\u0370-\u03F
 const ASKS_ABOUT_MEDIA = /^(?:(?:and|so|ok(?:ay)?|wait|hey)[,\s]+)?(?:which|what|who)(?:'s|\s+is|\s+was|\s+did)?\b.*\b(?:song|track|music|tune|artist|singer|band|album|playing|played|play)\b/i;
 
 function shouldAcceptVoiceTranscript(text) {
+  // Holding Fn+Control is the same as saying his name: it was for him.
+  if (pttHeld || Date.now() - pttReleasedAt < 4000) return true;
   /* Never while he waits for an answer: "Which Riya?" is answered with a
      contact name, which is made only of list words. */
   const awaitingAnswer = hasPendingDelegateFollowup() || namedAnswerWindowOpen();
@@ -12570,6 +12572,9 @@ window.brainoMac.onAppOverlay?.((patch) => {
   if (typeof patch.cleanEar === "boolean") {
     try { localStorage.setItem("brainoCleanEar", patch.cleanEar ? "1" : "0"); } catch (_) {}
   }
+  if (typeof patch.pttTalk === "boolean") {
+    try { localStorage.setItem("brainoPttTalk", patch.pttTalk ? "1" : "0"); } catch (_) {}
+  }
   if (typeof patch.warmVoice === "boolean") {
     try { localStorage.setItem("brainoWarmVoice", patch.warmVoice ? "1" : "0"); } catch (_) {}
     if (patch.warmVoice) scheduleVoiceStandby(500); else if (voiceStandby) dropVoiceStandby(voiceStandby, "switched_off");
@@ -13036,6 +13041,32 @@ window.brainoMac.onPitchStop?.(() => {
 });
 
 window.brainoMac.onPitchDemo?.((payload) => { void runPitchDemo(payload); });
+
+/* ── Hold Fn+Control to talk (2026-10-25, the Clicky way) ───────────────
+   Press: he starts listening (the session wakes if it was asleep). Everything
+   said while the keys are down is for him, name or not. Let go: that is the
+   end of what you said, so the turn is closed and he answers at once instead
+   of waiting for a pause. A real key pressed during the hold cancels it. */
+let pttHeld = false;
+let pttReleasedAt = 0;
+function pttTalkOn() { try { return localStorage.getItem("brainoPttTalk") !== "0"; } catch (_) { return true; } }
+window.brainoMac.onVoicePtt?.((payload) => {
+  const phase = String(payload?.phase || "");
+  if (!pttTalkOn()) return;
+  if (phase === "start") {
+    pttHeld = true;
+    logRenderer("voice.ptt", { phase, live: Boolean(realtimeActive) });
+    if (!realtimeActive && !realtimeConnecting) { startVoiceWakeShimmer(); toggleVoice(); }
+    return;
+  }
+  if (!pttHeld) return;
+  pttHeld = false;
+  pttReleasedAt = Date.now();
+  logRenderer("voice.ptt", { phase });
+  if (phase === "cancel") return;
+  // A beat for the last word to arrive, then close the turn so he replies now.
+  window.setTimeout(() => { void flushRealtimeTranscript("ptt_release", undefined, { preAccepted: true }); }, 350);
+});
 
 window.brainoMac.onVoiceToggle(() => {
   /* Waking the voice takes a few seconds no matter what, and most of that is
