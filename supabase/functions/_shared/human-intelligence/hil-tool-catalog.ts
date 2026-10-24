@@ -101,6 +101,9 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   // something already went wrong, so it must not need a confirmation gate.
   { name: "file_action_undo", params: [], gloss: "Reverse the last file move, rename, delete, or desktop organize", stateful: true, zeroNetwork: true, handler: "undoLastFileAction", },
   { name: "file_find", params: ["query", "kind", "shouldOpen"], gloss: "Find files on the Mac and optionally open the top hit", zeroNetwork: true, },
+  { name: "file_move", params: ["query", "kind", "destination", "latest", "from"], gloss: "Move a file into a folder in one step. destination can create one: \"a new folder called This Week on the Desktop\". For the newest file of a kind (\"the latest PDF in Downloads\") pass latest:true, kind, from. Undoable", zeroNetwork: true, },
+  { name: "folder_create", params: ["name", "parent"], gloss: "Make a new folder (parent: desktop, documents, downloads; default Desktop)", zeroNetwork: true, },
+  { name: "file_latest", params: ["kind", "from"], gloss: "Name the newest file of a kind (pdf, image, video, document) in a folder (default Downloads)", zeroNetwork: true, },
   { name: "front_window_summary", params: [], gloss: "Say which app, window title and URL is currently in front", zeroNetwork: true, memoSafe: true, handler: "frontWindowSummary", },
   /* Through the API, not by clicking the site. Notion's editor is a canvas with
      no accessible body, so driving it by hand means fighting a page that cannot

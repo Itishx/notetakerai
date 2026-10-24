@@ -167,6 +167,14 @@ contextBridge.exposeInMainWorld("brainoMac", {
   mesaOpenDeveloper: () => ipcRenderer.invoke("braino-mac:mesa-open-developer"),
   setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),
   setupPermissions: () => ipcRenderer.invoke("braino-mac:setup-permissions"),
+  /* His voice, wherever he is drawn: the notch says when sound is playing,
+     the app's chat mascot moves its mouth for exactly that long. */
+  reportSpeaking: (on) => ipcRenderer.send("braino-mac:speaking", Boolean(on)),
+  onSpeaking: (callback) => {
+    const handler = (_event, on) => callback(Boolean(on));
+    ipcRenderer.on("braino-mac:speaking-state", handler);
+    return () => ipcRenderer.removeListener("braino-mac:speaking-state", handler);
+  },
   onNarrate: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:narrate", handler);

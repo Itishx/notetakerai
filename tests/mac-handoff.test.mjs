@@ -33,7 +33,9 @@ test("'do what I copied' reads the clipboard", () => {
 
 test("handoffs go straight to the loop with room to finish, and the lesson is shared", () => {
   assert.match(main, /runMacHilLoop\(handoffCommand\(h\), null, \{ noPlan: true, handoff: true \}\)/);
-  assert.match(main, /\(opts\.handoff \|\| \/\^HANDOFF\\\.\/\.test\(String\(command \|\| ""\)\)\) \? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS/);
+  // Room scales with the steps (2026-10-24), never under the old six minutes.
+  assert.match(main, /\(opts\.handoff \|\| \/\^HANDOFF\\\.\/\.test\(String\(command \|\| ""\)\)\) \? handoffBudget : MAC_HIL_SOFT_TIME_MS/);
+  assert.match(main, /const handoffBudget = Math\.max\(MAC_HANDOFF_TIME_MS, /);
   assert.match(lessons, /12\. A handed off checklist/);
   assert.doesNotMatch(lessons, /[–—]/);
 });

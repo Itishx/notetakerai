@@ -66,9 +66,32 @@ function editDistance(a, b) {
  * came back as "who's that?" while both were sitting in the address book. A
  * later word scores below a first word, so a real first name always wins. */
 
+/* "Manik from Mesa" is Manik UG mesa RJ (2026-10-24).
+ *
+ * The send looked for all three words and "from" is in nobody's name, so a
+ * contact the address book tool found in ten milliseconds came back as "no
+ * number for Manik from Mesa", three times. People join a name to where they
+ * know someone from with little words; those words are not the name. Only
+ * dropped when something is left, so a contact really called "Main" is safe. */
+const NAME_FILLER = new Set(["from", "at", "of", "in", "the", "my", "se", "wala", "wali", "vala", "vali", "ka", "ki", "ke", "and"]);
+function spokenNameQuery(query) {
+  const q = cleanContactName(query);
+  const kept = q.split(" ").filter((w) => w && !NAME_FILLER.has(w));
+  return kept.length && kept.length < q.split(" ").length ? kept.join(" ") : q;
+}
+
+/* "8299758524", "+91 82997 58524": already a number, so nothing to look up.
+   Returns the digits, or "" when it is a name. */
+function phoneFromRecipient(value) {
+  const raw = String(value || "").trim();
+  if (!raw || /[a-z]/i.test(raw)) return "";
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15 ? digits : "";
+}
+
 /* How well a spoken name fits a saved contact, 0 when it does not. */
 function scoreContactName(query, contactName) {
-  const q = cleanContactName(query);
+  const q = spokenNameQuery(query);
   const name = cleanContactName(contactName);
   if (!q || !name) return 0;
   if (name === q) return 100;
@@ -137,7 +160,7 @@ const CONTACT_MATCH_MIN_SCORE = 60;
 /* The best contact for a spoken name, preferring people you call.
    Returns { contact, score } or { ambiguous: [contacts] } or null. */
 function findContactBySound(query, contacts, history = {}) {
-  const q = cleanContactName(query);
+  const q = spokenNameQuery(query);
   if (q.length < 2) return null;
   const scored = [];
   for (const entry of Object.values(contacts || {})) {
@@ -206,7 +229,7 @@ function parseCorrectedName(raw) {
  * the order of the choices, never the choice. */
 const SAME_NAME_MARGIN = 12;
 function sameNameContacts(query, contacts) {
-  const q = cleanContactName(query);
+  const q = spokenNameQuery(query);
   if (q.length < 2) return [];
   const qWords = q.split(" ");
   const rows = [];
@@ -271,6 +294,8 @@ function contactChoiceQuestion(query, choices) {
 }
 
 module.exports = {
+  spokenNameQuery,
+  phoneFromRecipient,
   sameNameContacts,
   pickContactChoice,
   contactChoiceQuestion,

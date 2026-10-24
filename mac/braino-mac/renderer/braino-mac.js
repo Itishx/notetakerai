@@ -7446,6 +7446,11 @@ async function runDelegate(prompt, options = {}) {
   if (await runBrainoGrowVoiceCommand(text)) return;
   if (await runMacTeamInput(text, options)) return;
   const runId = ++delegateGeneration;
+  /* Typed in the chat: the job's step lines are shown, not spoken. Only the
+     final reply knew it was typed, so "Sending the WhatsApp" was said out loud
+     to someone typing (2026-10-24). Tied to this run, so the next spoken
+     command speaks again. */
+  typedDelegateRun = options.typed ? runId : 0;
   logRenderer("delegate.start", {
     runId,
     promptChars: text.length,
@@ -14799,7 +14804,20 @@ window.brainoMac.onSetupNotch?.((payload) => { if (payload?.text) nfShowTransien
    it never cuts off a line he is already saying (it waits for it, newest line
    wins), and the final answer simply supersedes it, the same way any new
    speak() does. Barge-in stops it like any other speech. */
+/* Tell the app's chat when sound is coming out, so its Braino's mouth moves
+   with the voice. Polled rather than hooked: `speaking` is set in many places,
+   and missing one would leave his mouth open or shut. Ten checks a second,
+   one message only when it changes. */
+{
+  let saidSpeaking = false;
+  window.setInterval(() => {
+    if (speaking === saidSpeaking) return;
+    saidSpeaking = speaking;
+    try { window.brainoMac?.reportSpeaking?.(speaking); } catch (_) {}
+  }, 100);
+}
 let narrateNext = "";
+let typedDelegateRun = 0;
 let narrateTimer = 0;
 window.brainoMac.onNarrate?.((payload) => {
   const text = String(payload?.text || "").trim();
@@ -14813,8 +14831,9 @@ window.brainoMac.onNarrate?.((payload) => {
     const line = narrateNext;
     narrateNext = ""; narrateTimer = 0;
     if (speaking) return;   // still talking after 6s: this line is stale, drop it
-    logRenderer("narrate.say", { text: line.slice(0, 80) });
-    void speak(line, { narration: true });
+    const quietRun = typedDelegateRun && typedDelegateRun === delegateGeneration;
+    logRenderer("narrate.say", { text: line.slice(0, 80), quiet: Boolean(quietRun) });
+    void speak(line, { narration: true, silent: Boolean(quietRun) });
   };
   tryNow();
 });

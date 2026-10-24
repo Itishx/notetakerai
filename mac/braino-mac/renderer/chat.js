@@ -45,6 +45,10 @@
      (mouth moving while his words write in), happy (a hop), sad (a droop). */
   let mood = "idle", moodUntil = 0, mascotHost = null, waveUntil = 0;
   const setMood = (m, ms = 0) => { mood = m; moodUntil = ms ? Date.now() + ms : 0; };
+  /* His voice is played by the notch. While it plays, the mouth here moves,
+     whatever the mood: he talked with his mouth shut before (2026-10-24). */
+  let voiceTalking = false;
+  try { api.onSpeaking?.((on) => { voiceTalking = on; }); } catch (_) {}
   function mountMascot(host) {
     if (!host) return;
     let svg = "";
@@ -62,7 +66,7 @@
     const q = (sel) => r.querySelector(sel);
     if (moodUntil && Date.now() > moodUntil) { mood = "idle"; moodUntil = 0; }
     const t = (now - t0) / 1000;
-    const think = mood === "think", talk = mood === "talk", happy = mood === "happy", sad = mood === "sad";
+    const think = mood === "think" && !voiceTalking, talk = mood === "talk" || voiceTalking, happy = mood === "happy", sad = mood === "sad";
     let y = Math.sin(t * (think ? 4.2 : 1.7)) * (think ? 1.6 : 0.8);
     let rot = think ? Math.sin(t * 2.1) * 4 : sad ? -7 : 0;
     if (happy) { const k = ((moodUntil - Date.now()) / 700); y -= Math.max(0, Math.sin((1 - k) * Math.PI * 2)) * 9; }

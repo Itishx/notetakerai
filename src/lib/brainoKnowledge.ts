@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-task-board",
+    title: "Task Board: Every Job Kept",
+    category: "Technical",
+    date: "2026-10-24",
+    dateLabel: "October 24, 2026",
+    description:
+      "Braino keeps every job you give him on a board, so a new sentence never wipes the old one. Say \"instead\" or \"continue the Cursor one\" and he goes back to the right job. Ask \"what are you stuck on?\" and he tells you.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "091",
+  },
+  {
     slug: "import-chrome-logins",
     title: "Import Chrome Logins",
     category: "Feature",

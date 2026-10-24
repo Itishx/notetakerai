@@ -260,7 +260,7 @@ function ownBrowserEnabled() {
 /* The job running in his browser right now, if any. Set when a do-it-for-me job
    starts, kept while its questions are answered, dropped by the next job. */
 let macOwnJob = null;
-const OWN_BROWSER_NOTE = "This job runs in Braino's own browser window, not the user's Chrome: navigate to the site, then read and act there. It is signed in wherever the user imported their Chrome logins, or signed in there before. If a site needs a login, ask the user to say \"show me\" and sign in once; never type a password. Anything that pays, books or sends still asks first.";
+const OWN_BROWSER_NOTE = "Web pages in this job open in Braino's own browser window, not the user's Chrome: navigate to the site, then read and act there. Mac apps and tools (WhatsApp, Spotify, files, notes, calendar, Cursor) work as normal; only websites move. It is signed in wherever the user imported their Chrome logins, or signed in there before. If a site needs a login, ask the user to say \"show me\" and sign in once; never type a password. Anything that pays, books or sends still asks first.";
 function macOwnJobActive() { return Boolean(macOwnJob && Date.now() - macOwnJob.at < 15 * 60 * 1000); }
 const {
   macVerifyAssert,
@@ -300,6 +300,8 @@ const {
   contactPhone,
   speakableContactName,
   parseCorrectedName,
+  spokenNameQuery,
+  phoneFromRecipient,
 } = require(path.join(__dirname, "contact-match.cjs"));
 const {
   parseContextualReference,
@@ -5224,9 +5226,11 @@ async function handlePendingMacWorkflow(raw) {
   if (pending.type === "hil_answer") {
     clearPendingMacWorkflow();
     const answer = String(raw || "").trim();
-    const held = pendingHilRun;
+    /* The board keeps the held run for a day, so an answer after five
+       minutes carries on the same job instead of starting it over. */
+    const held = pendingHilRun || taskBoard.open().find((t) => t.held && t.command === pending.data?.command)?.held || null;
     pendingHilRun = null;
-    const fresh = held && Date.now() - Number(held.createdAt || 0) <= MAC_WORKFLOW_CONFIRM_MS;
+    const fresh = Boolean(held);
     const approved = macHilAnswerApproves(answer);
     logMac("hil.loop.answered", { answer: textForLog(answer), resumed: Boolean(fresh), approved });
 
@@ -11749,6 +11753,28 @@ function parseWhatsAppIntent(raw) {
    WhatsApp's own database on this Mac. Newer chats are keyed by a private id
    with no phone number in it, so the chat is matched by its name, which is the
    name WhatsApp shows from your address book. Nothing is read but the counts. */
+/* The chat to search for: the saved chat name that fits what was said
+   ("Mesa Forge" for "mesa forge group"), "" when WhatsApp's database cannot be
+   read (search blind, as before), and null when it was read and nothing fits. */
+async function whatsAppChatNameFor(said) {
+  if (!waDbAvailable()) return "";
+  try {
+    const rows = await queryWhatsAppDb("SELECT DISTINCT s.ZPARTNERNAME AS name FROM ZWACHATSESSION s WHERE s.ZPARTNERNAME IS NOT NULL AND s.ZPARTNERNAME != '';");
+    const chats = {};
+    for (const r of rows) if (r?.name) chats[cleanContactName(r.name)] = { name: r.name, phone: "chat" };
+    const query = spokenNameQuery(String(said || "").replace(/\b(?:group|chat|whats\s*app)\b/gi, " "));
+    let hit = findContactBySound(query, chats);
+    const shorter = query.split(" ").slice(0, -1).join(" ");
+    if (!hit && shorter.replace(/\s/g, "").length >= 4) hit = findContactBySound(shorter, chats);
+    if (hit?.contact?.name) return hit.contact.name;
+    if (hit?.ambiguous?.length) return hit.ambiguous[0].name;
+    return null;
+  } catch (error) {
+    logMac("whatsapp.chat_names.failed", { error });
+    return "";
+  }
+}
+
 async function waChatCounts(names) {
   const out = {};
   if (!waDbAvailable() || !names?.length) return out;
@@ -11780,7 +11806,28 @@ function askWhichContact(query, choices, job) {
   return { ok: true, asks: true, say, source: "contact_pick" };
 }
 
+/* "Send it to myself": the owner's own card in Contacts. Nobody is saved as
+   "myself", so this was a guaranteed "who's that?" (2026-10-24). */
+let myCardCache = null;
+async function myOwnCard() {
+  if (myCardCache) return myCardCache;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Contacts"\nset p to my card\nreturn (name of p) & linefeed & (value of first phone of p)\nend tell'], { timeout: 6000 });
+    const [name = "", phone = ""] = String(stdout || "").trim().split(/\r?\n/);
+    if (phone.trim()) myCardCache = { name: name.trim() || "you", phone: phone.trim() };
+  } catch (error) {
+    logMac("contacts.my_card_failed", { error: String(error?.message || error).slice(0, 120) });
+  }
+  return myCardCache;
+}
+const MEANS_MYSELF = /^(?:me|myself|my ?self|self|my own (?:number|chat|whatsapp)|my number|mujhe|khud(?: ko)?|apne aap(?: ko)?)$/i;
+
 async function resolveWhatsAppRecipient(recipientRaw) {
+  if (MEANS_MYSELF.test(String(recipientRaw || "").trim())) {
+    const me = await myOwnCard();
+    if (me) { logMac("whatsapp.contact.resolved", { query: "myself", source: "my_card" }); return { ok: true, name: me.name, phone: me.phone, source: "my_card" }; }
+    return { ok: false, error: "relation", say: "I don't know your own number yet. Fill in your card in Contacts (Card › Make This My Card) and I'll use it." };
+  }
   // "Text my mom": the person, then the usual lookup by their name.
   if (relationKey(recipientRaw)) {
     const relation = await resolveRelation(recipientRaw);
@@ -11789,6 +11836,14 @@ async function resolveWhatsAppRecipient(recipientRaw) {
   }
   const key = String(recipientRaw || "").toLowerCase().trim();
   if (!key) return { ok: false, error: "empty recipient" };
+  /* "8299758524" was looked up as a person called 8299758524, three times,
+     with the right number in hand (2026-10-24). A number is the answer. */
+  const bareNumber = phoneFromRecipient(recipientRaw);
+  if (bareNumber) {
+    const owner = contactsCache ? Object.values(contactsCache).find((c) => String(contactPhone(c)).replace(/\D/g, "").slice(-10) === bareNumber.slice(-10)) : null;
+    logMac("whatsapp.contact.resolved", { query: "number", name: textForLog(owner?.name || ""), source: "number" });
+    return { ok: true, name: owner?.name || recipientRaw, phone: bareNumber, source: "number" };
+  }
   const contacts = loadWhatsAppContacts();
   const alias = contacts[key];
   if (alias?.phone) return { ok: true, name: alias.name || recipientRaw, phone: alias.phone, source: "alias" };
@@ -11849,7 +11904,20 @@ async function resolveWhatsAppRecipient(recipientRaw) {
     }
   }
 
-  const lookupName = alias?.name || recipientRaw;
+  /* "Abhishek Gaur Mesa" for Abhishek Gaur: a last word saying where you
+     know someone from. The address book tool already forgave it; the send
+     did not. */
+  const asked = spokenNameQuery(alias?.name || recipientRaw);
+  const askedShorter = asked.split(" ").slice(0, -1).join(" ");
+  if (contactsCache && askedShorter.replace(/\s/g, "").length >= 4) {
+    const shorter = findContactBySound(askedShorter, contactsCache, loadContactHistory());
+    if (shorter?.contact && contactPhone(shorter.contact)) {
+      logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(shorter.contact.name), source: "surname_slip" });
+      return { ok: true, name: shorter.contact.name, phone: contactPhone(shorter.contact), source: "surname_slip" };
+    }
+  }
+
+  const lookupName = asked;
   // Contacts must be running or the query throws -600; launch it hidden first.
   try {
     await execFileP("/usr/bin/open", ["-gja", "Contacts"], { timeout: 4000 });
@@ -11919,6 +11987,7 @@ function whatsAppChatTarget(raw, target) {
 }
 
 async function openWhatsAppChat(name) {
+  name = String(name || "").trim();
   sendTaskProgress({ status: "thinking", text: `Opening the ${name} chat` });
   const resolved = await resolveWhatsAppRecipient(name).catch(() => ({ ok: false }));
   const phone = resolved?.ok ? normalizeWhatsAppPhone(resolved.phone) : "";
@@ -11927,7 +11996,17 @@ async function openWhatsAppChat(name) {
     logMac("whatsapp.open_chat", { how: "deeplink", name: textForLog(name) });
     return { ok: true, say: `Opened your chat with ${resolved.name || name}.`, source: "whatsapp_open_chat" };
   }
-  // A group, or someone with no number saved: WhatsApp's own search.
+  /* A group, or someone with no number saved: WhatsApp's own search, but
+     only for a chat that exists. "Manik from Mesa" was typed into the search,
+     matched nothing, and the loop was told "Opened the chat" (2026-10-24), so
+     it went on to send into a chat that never opened. The chat list in
+     WhatsApp's own database says which name to type, or that there is none. */
+  const searchName = await whatsAppChatNameFor(name);
+  if (searchName === null) {
+    logMac("whatsapp.open_chat", { how: "none", name: textForLog(name) });
+    return { ok: false, say: `There's no WhatsApp chat or contact called ${name}. Ask who they mean, or look them up in contacts by first name.`, source: "whatsapp_open_chat" };
+  }
+  name = searchName || name;
   const wasRunning = await isMacApplicationRunning("WhatsApp");
   await execFileP("open", ["-a", "WhatsApp"]).catch(() => {});
   const ready = await waitForWhatsAppReady(wasRunning ? 6000 : 20000);
@@ -11956,9 +12035,11 @@ async function sendWhatsAppMessage(recipientRaw, message, chosen = null) {
       const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0];
       return { ok: false, say: `Which ${recipientRaw}, ${list}? Say it again with the full name.` };
     }
+    /* A fact for the loop, not a line for him to read out: "say remember
+       8299758524's number is" was spoken back to the person (2026-10-24). */
     return {
       ok: false,
-      say: `I could not find a number for ${recipientRaw}. Say "Braino, remember ${recipientRaw}'s number is" and the number, and I will keep it.`,
+      say: `I checked your contacts and nobody matches ${recipientRaw}. What's their number, or the name they're saved under?`,
     };
   }
   const phone = normalizeWhatsAppPhone(resolved.phone);
@@ -16470,8 +16551,40 @@ async function resolveDestinationFolder(destinationText) {
   return { ok: true, folderPath: folders[0], created: false };
 }
 
+/* The newest file of a kind in a folder: "the most recent PDF in my
+   Downloads". A name search cannot answer that, and it is how people point at
+   the thing they just downloaded. */
+async function newestFileIn(folderText, kind) {
+  const folder = knownFolderPathForName(String(folderText || "downloads")) || extractKnownFolderReference(String(folderText || "")) || path.join(os.homedir(), "Downloads");
+  const exts = FILE_KIND_EXTENSIONS[String(kind || "").toLowerCase()] || null;
+  const names = await fs.promises.readdir(folder).catch(() => []);
+  let best = null;
+  for (const name of names) {
+    if (name.startsWith(".")) continue;
+    if (exts && !exts.includes(path.extname(name).toLowerCase())) continue;
+    const full = path.join(folder, name);
+    const st = await fs.promises.stat(full).catch(() => null);
+    if (!st || !st.isFile()) continue;
+    if (!best || st.mtimeMs > best.at) best = { path: full, at: st.mtimeMs };
+  }
+  return best?.path || "";
+}
+
+/* The loop's hands for files. It could find a file and not move one, so
+   "move the latest PDF into a new folder called This Week" had no verb in a
+   handoff (2026-10-24). Same move, same undo record, as the voice command. */
+async function moveFileForHil(a = {}) {
+  const kind = String(a.kind || "").toLowerCase();
+  let sourcePath = "";
+  if (a.latest === true || /^(?:latest|newest|most recent|last)$/i.test(String(a.query || "").trim())) {
+    sourcePath = await newestFileIn(a.from || "downloads", kind);
+    if (!sourcePath) return { ok: false, say: `There is no ${kind || "file"} in ${a.from || "Downloads"}.` };
+  }
+  return moveMacFile({ query: String(a.query || ""), kind, destination: String(a.destination || a.to || ""), sourcePath });
+}
+
 async function moveMacFile(intent) {
-  const files = await findFiles(intent.query, { kind: intent.kind, requireNameMatch: true });
+  const files = intent.sourcePath ? [intent.sourcePath] : await findFiles(intent.query, { kind: intent.kind, requireNameMatch: true });
   if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
   const sourcePath = files[0];
   if (isDangerousFileOperationPath(sourcePath)) return { ok: false, say: `I will not move ${path.basename(sourcePath)} from voice.` };
@@ -17344,6 +17457,10 @@ async function runMacConversation(prompt) {
         ...notchWhatsAppLines(),
         ...mesaContextLines(),
         ...desktopHygieneLines(),
+        /* Open jobs AND the ones just finished: "have you completed all the
+           tasks?" after he had, got an answer with nothing behind it, because
+           only open jobs were here (2026-10-24). Hands' record, not a guess. */
+        ...(taskBoard.all().some((t) => Date.now() - (t.updatedAt || 0) < 3 * 3600 * 1000) ? [`Braino's own job record (what his hands really did; answer from this if asked what he did, whether he finished, what he is doing, stuck on, or what is left, and never claim more or less than it says):\n${taskBoard.report()}`] : []),
         "This is normal conversation unless the user asks for a concrete Mac action.",
         "Keep replies short, warm, alive, and natural for spoken voice.",
       ].join("\n"),
@@ -19698,6 +19815,12 @@ const MAC_HIL_TOOLS = {
      path except open_folder, file_find and repeat_last, which are new here. */
   open_folder: (a) => openNamedFolder(String(a.folder || a.name || "")),
   file_find: (a) => findFileForHil(String(a.query || ""), String(a.kind || ""), a.shouldOpen === true),
+  file_move: (a) => moveFileForHil(a),
+  folder_create: (a) => createMacFolder({ name: String(a.name || ""), parentDir: a.parent ? (knownFolderPathForName(String(a.parent)) || extractKnownFolderReference(String(a.parent)) || undefined) : undefined }),
+  file_latest: async (a) => {
+    const found = await newestFileIn(a.from || "downloads", a.kind);
+    return found ? { ok: true, say: `Newest ${a.kind || "file"} in ${a.from || "Downloads"}: ${path.basename(found)}` } : { ok: false, say: `No ${a.kind || "file"} in ${a.from || "Downloads"}.` };
+  },
   repeat_last: () => (lastDelegateSay ? { ok: true, say: lastDelegateSay } : { ok: true, say: "I haven't said anything worth repeating yet." }),
   time_query: (a) => answerTimeQuery({ time: a.date === true ? false : a.time !== false }),
   /* "Stop the recording" means whatever is recording. HIL picked the screen
@@ -20322,6 +20445,12 @@ async function macExecuteHilAction(action, elements) {
    Held here rather than restarted, which is the whole point: see the note in
    handlePendingMacWorkflow. */
 let pendingHilRun = null;
+/* Every job he is holding, not just the one waiting on a question. See
+   task-board.cjs for why a single slot lost three of four jobs (2026-10-24). */
+const { createTaskBoard, asksAboutJobs, clearsJobs } = require(path.join(__dirname, "task-board.cjs"));
+const taskBoard = createTaskBoard({ file: path.join(AUTH_STORE_DIR, "task-board.json"), log: (event, data) => logMac(event, data) });
+let macLoopStarts = 0;
+let macLastLoop = null;
 
 /* Did the cascade fail to UNDERSTAND, or fail to DO?
  *
@@ -20431,7 +20560,19 @@ async function macRunChain(steps, command, state, generation, turnObs = null) {
     if (result?.asks) return { asked: result.say };
     let verified = { ok: true };
     if (result?.ok && st.assert) verified = macVerifyAssert(st.assert, await macBuildObservation());
-    const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
+    /* A send makes its own button vanish. "Send message never appeared" after
+       typing a prompt into Claude Code and pressing Enter was counted as a
+       failure, the third in a row, and he stopped saying "nothing was sent"
+       while Claude was already doing the task (2026-10-24). When the hands
+       say the typing or the key press worked, a missing element afterwards is
+       a reason to look, not a failure. */
+    const softCheck = !verified.ok && result?.ok !== false && ["type", "pressKey"].includes(String(stepObj.action?.type || ""));
+    if (softCheck) {
+      logMac("hil.loop.assert_soft", { runId, step, why: verified.why });
+      state.facts.push(`Your typing went through, but your check "${verified.why}" did not hold. After a message is sent its send button often disappears; look at the screen before deciding it failed.`);
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+    }
+    const settled = verified.ok || softCheck ? result : { ...result, ok: false, error: verified.why };
     macTrail({ kind: "result", ok: settled?.ok !== false });
     state.steps.push({ intent: String(st.intent || ""), action: `${a.type}`, ok: settled?.ok !== false ? true : false, why: settled?.ok === false ? String(settled?.error || settled?.say || "failed") : null });
     if (state.steps.length > 14) state.steps = state.steps.slice(-14);
@@ -20479,7 +20620,55 @@ function macShortAnswer(text) {
   return out.trim() || body.slice(0, 240);
 }
 
+/* The person a question asks a number for: "What is Manik from Mesa's phone
+   number?" → "Manik from Mesa". "" when it is not that kind of question. */
+function numberAskedFor(question) {
+  const q = String(question || "");
+  const m = q.match(/((?:[\p{L}][\p{L}'.-]*\s+){0,5}?[\p{L}][\p{L}.-]*)'s\s+(?:whats\s*app\s+|phone\s+|mobile\s+|contact\s+)?(?:number|no\b)/iu)
+    || q.match(/\b(?:number|phone number|whats\s*app number)\s+(?:for|of)\s+((?:[\p{L}][\p{L}'.-]*\s*){1,5}?)(?=[?.,!]|$|\s+(?:so|and|before|to)\b)/iu);
+  let name = m ? m[1].trim() : "";
+  // Only the name: "What is", "I need", "Can you share" are the question.
+  for (let i = 0; i < 4; i += 1) name = name.replace(/^(?:what|whats|is|i|need|can|could|you|please|share|send|give|me|tell|the|do|have)\s+/i, "");
+  return /^(?:your|my|their|his|her|the|this|that|its)$/i.test(name) ? "" : name;
+}
+
+/* The loop, with the board kept in step: whatever way a run ends, the job's
+   place on the board says so. A run that stopped for a question, a block, or
+   because something else was asked keeps everything needed to carry on. */
 async function runMacHilLoop(command, resume = null, opts = {}) {
+  const mark = macLoopStarts;
+  const result = await runMacHilLoopInner(command, resume, opts);
+  if (macLoopStarts === mark || !macLastLoop) return result;
+  const { runId, state } = macLastLoop;
+  const snapshot = { runId, command: macLastLoop.command, state, lastStep: null, said: "", stepsUsed: 0, createdAt: Date.now() };
+  try {
+    if (pendingHilRun?.runId === runId) {
+      taskBoard.hold(runId, pendingHilRun.keepGoing ? "paused" : "waiting", result?.say || "", { ...pendingHilRun });
+    } else if (result?.superseded) {
+      taskBoard.hold(runId, "paused", "you asked for something else", snapshot);
+    } else if (result?.ok === false) {
+      taskBoard.hold(runId, "blocked", result?.say || "", snapshot);
+    } else {
+      taskBoard.finish(runId, result?.say || "");
+      result.say = withStillOpen(result.say, runId);
+    }
+  } catch (error) {
+    logMac("task.board_failed", { error: String(error?.message || error).slice(0, 120) });
+  }
+  return result;
+}
+
+/* A job just finished and another is still on the board: one short line, once
+   per job, inside a moment they started. Never a ping on its own. */
+function withStillOpen(say, finishedRunId) {
+  const other = taskBoard.open().filter((t) => t.runId !== finishedRunId && t.status !== "running" && !t.mentionedAt)[0];
+  if (!other || !say) return say;
+  other.mentionedAt = Date.now();
+  const why = other.status === "waiting" ? `waiting on you: ${other.waitingOn}` : other.status === "blocked" ? `stuck: ${other.waitingOn}` : "paused";
+  return `${say} Still open: ${other.title.replace(/[.!?]+$/, "")}, ${why.replace(/[.!?]+$/, "")}.`;
+}
+
+async function runMacHilLoopInner(command, resume = null, opts = {}) {
   /* Book, order, find the cheapest: his own browser. Everything else, and an
      answer to his own question about the same job, stays where it is. */
   if (!resume && !(macOwnJob && macOwnJob.command === String(command || ""))) {
@@ -20628,6 +20817,9 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   macTrail({ kind: "start", command: String(command || "").slice(0, 120), resumed: Boolean(resume) });
   macResetRunSpeed();
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
+  macLoopStarts += 1;
+  macLastLoop = { runId, state, command: String(command || "") };
+  taskBoard.start(runId, command);
 
 
   try {
@@ -20691,7 +20883,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
         activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
         // "Send this link": the tab they are looking at is usually the link.
         activeMacContext?.browserUrl ? `Front tab: ${textForLog(activeMacContext.browserTitle || "", 120)} ${activeMacContext.browserUrl}` : "",
-        macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web." : "",
+        macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web. whatsapp_send finds the person itself from a name (\"Manik from Mesa\") or takes a bare number; you do not need to open the chat first." : "",
+        "People: their address book is on this Mac. Before asking for anyone's number or email, call contact_lookup with their name, then with just the first name. Ask only when both find nobody.",
         devServers.describeDevServers(macDevServersCache.servers),
         nowPlayingLine,
         layaHintLine(command),
@@ -20699,6 +20892,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
         teach.taughtContextLines(readTaughtJobs(), command),
         macOwnJobActive() ? OWN_BROWSER_NOTE : "",
         macRecentExchanges(),
+        (() => { const others = taskBoard.summary({ except: runId }); return others ? `Other jobs you are holding (not this one; mention one only if this job finishes or depends on it):\n${others}` : ""; })(),
       ].filter(Boolean).join("\n"),
       runId,
       state: {
@@ -20895,7 +21089,28 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
       prev.why = turn.verdict.why || null;
     }
 
+    taskBoard.progress(runId, { parts: state.tasks, plan: state.plan, thinking: String(turn?.thinking || "") });
     const d = turn.decision;
+    /* "What is Abhishek Gaur from Mesa's WhatsApp number?" was asked with the
+       address book one tool call away (2026-10-24). A person checks their
+       phone before asking you for a number. Once per name per run, so a name
+       that really is missing still reaches the question. */
+    const askedFor = d.type === "ask" ? numberAskedFor(d.question) : "";
+    if (askedFor && !(state.contactChecks ||= []).includes(askedFor.toLowerCase())) {
+      state.contactChecks.push(askedFor.toLowerCase());
+      const card = await lookupContactDetails(askedFor).catch(() => null);
+      const first = spokenNameQuery(askedFor).split(" ")[0];
+      const byFirst = !card?.ok && first && first.length >= 3 ? await lookupContactDetails(first).catch(() => null) : null;
+      const found = card?.ok ? card : byFirst?.ok ? byFirst : null;
+      logMac("hil.loop.contact_checked", { runId, step, name: textForLog(askedFor), found: Boolean(found) });
+      macTrace("📇 CONTACTS", found ? `checked before asking: ${found.say}` : `checked before asking: no ${askedFor}`);
+      state.facts.push(found
+        ? `You were about to ask for ${askedFor}'s number. The address book has: ${found.say}. Use it (whatsapp_send takes this name or the number directly). Ask only if none of these is the right person.`
+        : `You checked the address book for ${askedFor}${first && first !== askedFor ? ` and for "${first}"` : ""}: nobody. Now ask.`);
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+      lastStep = null;
+      if (found) continue;
+    }
     if (d.type === "ask") {
       /* Hold the run, the same way the gate does.
          Only the gate was held, so a clarifying question threw everything away
@@ -21101,6 +21316,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
       error: result?.ok === false ? textForLog(String(result?.error || result?.say || ""), 140) : "",
       handsMs: Date.now() - actStarted,
     });
+    taskBoard.progress(runId, { step: { what: String(stepObj.intent || stepObj.action?.tool || stepObj.action?.type || ""), ok: result?.ok !== false, error: result?.ok === false ? String(result?.error || result?.say || "") : "" } });
     /* The step asked you (which Riya?). Its answer finishes the job through
        the pending question, so the run ends here and says only the question. */
     if (result?.asks) return { ok: true, say: result.say, source: "hil_loop" };
@@ -21153,12 +21369,23 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     failedInARow = settled?.ok === false ? failedInARow + 1 : 0;
-    const overTime = Date.now() - runStartedAt > ((opts.handoff || /^HANDOFF\./.test(String(command || ""))) ? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS) && !resume;
+    /* Six minutes was one number for a two-step and a six-step handoff alike;
+       a routine with a flight search in it ran out of time by step four.
+       Two minutes a step, never under the old six. */
+    const handoffSteps = (String(command || "").split("(Full text they gave")[0].match(/^\s*\d+[.)]\s/gm) || []).length;
+    const handoffBudget = Math.max(MAC_HANDOFF_TIME_MS, handoffSteps * 2 * 60 * 1000);
+    const overTime = Date.now() - runStartedAt > ((opts.handoff || /^HANDOFF\./.test(String(command || ""))) ? handoffBudget : MAC_HIL_SOFT_TIME_MS) && !resume;
     if (failedInARow >= MAC_HIL_FAILS_IN_A_ROW || overTime) {
       logMac("hil.loop.honest_stop", { runId, step, why: overTime ? "over_time" : "fails_in_a_row", ms: Date.now() - runStartedAt });
-      const where = String(state.tasks?.find((t) => t.status === "active")?.desc || state.goal || "").trim().replace(/[.!?]+$/, "");
       const why = overTime ? "This is taking longer than it should" : "Three tries in a row did not work";
-      return { ok: false, say: `${why}, so I stopped${where ? ` while ${asDoing(where).replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase())}` : ""}. Nothing was sent or deleted. Want me to keep going?`, source: "hil_loop" };
+      /* Said from what the hands did, never from a guess. "Nothing was sent"
+         was said right after a WhatsApp and a Claude prompt went out, and the
+         "while ..." named the first job of four because nothing ever moved
+         the active part (2026-10-24). */
+      const did = taskBoard.byRun(runId)?.tried?.filter((t) => t.ok).map((t) => t.what) || [];
+      const lastFail = String(lastStep?.intent || "").trim().replace(/[.!?]+$/, "");
+      const soFar = did.length ? ` So far: ${did.slice(-4).map((w) => w.replace(/[.!?]+$/, "")).join("; ")}.` : " Nothing was sent or changed.";
+      return { ok: false, say: `${why}, so I stopped${lastFail ? ` at: ${lastFail.replace(/^./, (c) => c.toLowerCase())}` : ""}.${soFar} Want me to keep going?`, source: "hil_loop" };
     }
     if (fast && settled?.ok !== false && Array.isArray(d.then) && d.then.length) {
       const mainA = stepObj?.action || {};
@@ -22210,6 +22437,61 @@ let hilFirstAsked = false;
 /* Whether the words as heard named him (set by runDelegate, read by the
    not-for-him gate below, which only sees the sentence after cleanPrompt). */
 let macHeardAddressed = false;
+/* Before anything else decides what a sentence is, the board gets a look.
+ *
+ * "What are you stuck on?" is answered from it. "Continue the Cursor task",
+ * "send it to Abhishek instead", "skip Manik" are about a job he is holding,
+ * so that job carries on from where it stopped, with the sentence as what
+ * they said to it. A plain answer to the question the job is waiting on is
+ * left to the answer path, which knows about consent; this only takes what
+ * that path would have thrown away as a new job (2026-10-24). */
+const TELLS_RUNNING_JOB = /\b(?:instead|skip (?:the|that|this|it|step)|don'?t (?:do|bother with|send|play) (?:the|that|it)|also (?:add|send|include|do|make)|make it|change (?:it|that|the)|not (?:that|this) one|actually|rather)\b/i;
+async function routeToTaskBoard(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  if (asksAboutJobs(text)) {
+    const report = taskBoard.report();
+    logMac("task.reported", { open: taskBoard.open().length });
+    macTrace("📋 BOARD", `asked what he is doing:\n${report}`);
+    return { ok: true, say: report, source: "task_board" };
+  }
+  if (clearsJobs(text)) {
+    const n = taskBoard.clearAll();
+    pendingHilRun = null;
+    if (pendingMacWorkflow?.type === "hil_answer") clearPendingMacWorkflow();
+    return { ok: true, say: n ? `Cleared ${n === 1 ? "it" : `all ${n}`}.` : "There was nothing open.", source: "task_board" };
+  }
+  if (parseInterruptIntent(text)) return null;
+  /* A change to the job he is doing right now: "make it Saturday instead",
+     "skip the music", "also send it to Param". Folded into that job, not
+     started as a new one that kills it. The voice path asks HIL about this
+     when a job is running; this is the free backstop for when that misses,
+     and the only route for typed words. */
+  if (macActiveHilRun && macActiveHilRun.generation === macHilGeneration && TELLS_RUNNING_JOB.test(text)) {
+    if (macTellRunningJob(text)) {
+      taskBoard.progress(macActiveHilRun.runId, { thinking: `They said mid-job: ${text}` });
+      return { ok: true, say: "Got it, changing that.", source: "task_board:folded" };
+    }
+  }
+  const newOrder = HIL_ANSWER_NEW_JOB.test(text) && !/\binstead\b/i.test(text);
+  const job = taskBoard.about(text, { newOrder });
+  if (!job || !job.held || job.status === "running") return null;
+  const answersItsQuestion = pendingMacWorkflow?.type === "hil_answer" && pendingHilRun?.runId === job.runId && !hilAnswerReleasedBy(text, pendingMacWorkflow);
+  if (answersItsQuestion) return null;
+  if (pendingMacWorkflow?.type === "hil_answer") clearPendingMacWorkflow();
+  pendingHilRun = null;
+  /* One pair of hands. Whatever is running now is paused (and kept on the
+     board), never left clicking underneath the job being picked back up. */
+  macHilGeneration += 1;
+  logMac("task.resumed", { id: job.id, status: job.status, raw: textForLog(text) });
+  macTrace("📋 BOARD", `"${text}" is about "${job.title}" (${job.status}), carrying it on`);
+  return runMacHilLoop(job.command, {
+    ...job.held,
+    runId: job.runId,
+    userReply: `${text}\n(They said this about this job${job.waitingOn ? `, which was stopped on: ${job.waitingOn}` : ""}. If they changed a step, do it their way. If they want a step skipped, leave it and carry on with the rest of the job's parts. Keep every part they did not mention.)`,
+  });
+}
+
 async function routeHilFirst(raw, opts = {}) {
   const stageAsk = String(raw || "").trim().match(/^(?:set\s+)?(?:the\s+)?decider\s+stage\s+(?:to\s+)?(zero|one|two|three|four|off|0|1|2|3|4)\.?$/i);
   if (stageAsk) {
@@ -22218,6 +22500,10 @@ async function routeHilFirst(raw, opts = {}) {
     return { ok: true, say: n === 0 ? "Decider stage off. Everything works as before." : n >= 4 ? "Decider stage 4. One brain: Laya decides, HIL settles the rest, the quick rules are only hands." : n >= 3 ? "Decider stage 3. Laya decides first, the quick rules only run for real commands." : `Decider stage ${n}. The risky rules now go through HIL.`, source: "decider_stage" };
   }
   hilFirstAsked = false;
+  if (!opts.isAnswer) {
+    const onBoard = await routeToTaskBoard(raw);
+    if (onBoard) return onBoard;
+  }
   if (SEE_ME_RE.test(String(raw || ""))) return lookAtUser(String(raw || ""));
   if (!pendingMacWorkflow && macLooksMisheard(raw)) {
     const heard = await layaKind(raw);
@@ -22665,7 +22951,7 @@ function parseHandoff(text) {
 }
 function handoffCommand(h) {
   const body = h.steps.map((st, i) => `${i + 1}. ${st.replace(HANDOFF_STEP_LINE.source ? /^\s*(?:\d{1,2}[.)]|step\s*\d{1,2}[:.)]?|[-*\u2022])\s+/i : "", "")}`).join("\n");
-  return `HANDOFF. The person handed you these steps. Follow them exactly, in order, in their real browser and Mac. Type any text, address or value exactly as written. Do not re-plan, search for other ways, or skip steps.\n\n${body}\n\n(Full text they gave, for anything the steps leave out:)\n${h.text}`;
+  return `HANDOFF. The person handed you these steps. Follow them exactly, in order, in their real browser and Mac. Type any text, address or value exactly as written. Do not re-plan, search for other ways, or skip steps, unless they change or skip one while you work: what they tell you mid-job wins over this list.\n\n${body}\n\n(Full text they gave, for anything the steps leave out:)\n${h.text}`;
 }
 /* A job started from the Braino app: the app window steps aside so the
    browser is in front. He spent four turns hiding himself (2026-10-15). */
@@ -23166,6 +23452,8 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return { ok: true, say: interrupt.say };
   }
 
+  const boardResult = await routeToTaskBoard(raw);
+  if (boardResult) return boardResult;
   const pendingWorkflowResult = await handlePendingMacWorkflow(raw);
   if (pendingWorkflowResult) return pendingWorkflowResult;
 
@@ -25553,6 +25841,11 @@ function openBrainoApp(page) {
   macTrace("🪟 APP", `opened${page ? ` at ${page}` : ""}`);
   return appWindow;
 }
+/* The notch is the one that speaks; the app's chat mascot has to know, or he
+   talks with his mouth shut (2026-10-24). */
+ipcMain.on("braino-mac:speaking", (_event, on) => {
+  if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:speaking-state", Boolean(on));
+});
 ipcMain.handle("braino-mac:app-open", async (_event, page) => { openBrainoApp(page ? String(page) : ""); return { ok: true }; });
 /* Braino lives in the notch with no Dock icon, so a tester had no way to quit
    him (2026-10-13). General › Quit Braino, or ⌘Q with this window in front. */
