@@ -3130,13 +3130,12 @@ async function finishCloudDictation(reason) {
     stopDictationSkill(reason);
     return;
   }
-  sendTaskProgress({ status: "thinking", text: "Writing it down" });
+  // No notch message: the island has already folded back into Braino.
   const heard = await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   const transcribedMs = Date.now() - started;
   if (!heard.ok || !heard.transcript) {
     heraLog(`STOPPED — the cloud heard nothing (${heard.error || "empty"})`, { reason, recordedMs: audio.ms });
     localDictationActive = false;
-    sendTaskProgress({ status: "done", text: "" });
     stopDictationSkill(reason);
     return;
   }
@@ -3148,7 +3147,6 @@ async function finishCloudDictation(reason) {
   logMac("hera.cloud.done", { recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
-  sendTaskProgress({ status: "done", text: "" });
   lastDictationEndedAt = Date.now();
   stopDictationSkill(reason);
 }
