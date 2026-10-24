@@ -3484,8 +3484,9 @@ function nfSetHeard(text, options = {}) {
     nfHeardShownAt = 0;
   }
   if (dictationMode || dictationStopping) {
+    // Wispr-style (2026-10-25): no live words while dictating, only the island.
     layoutNotchCaption("");
-    updateYapTranscript(nfHeardText);
+    updateYapTranscript("");
   } else {
     // `updateNotchFace` moves this into the central black subtitle surface.
     layoutNotchCaption("");
@@ -7265,6 +7266,9 @@ function pointHitsBrainoUi(x, y) {
   // The notch is touchable now: near it (or with the tray open) the window
   // takes the mouse so hover/click/scroll/drop land on the island.
   if (nfPointInNotchZone(x, y)) return true;
+  // The dictation island and its copy box take the pointer only over themselves.
+  if (heraIsland.classList.contains("on") && rectContains(heraIsland.getBoundingClientRect(), x, y, 10)) return true;
+  if (heraBox.classList.contains("on") && rectContains(heraBox.getBoundingClientRect(), x, y, 6)) return true;
 
   if (bubble.classList.contains("show")) {
     const bubbleRect = bubble.getBoundingClientRect();
@@ -13683,7 +13687,8 @@ window.brainoMac.onDictationUi?.((payload) => {
     if (realtimeActive) window.setTimeout(() => void heraVoiceStart("after_dictation"), 1500);
   }
   logRenderer("dictation.ui.local", { active, engine: String(payload?.engine || "parakeet") });
-  setStatus(active ? "listening" : "", active ? "BrainoHERA" : "");
+  setStatus(active ? "listening" : "", "");
+  heraIslandShow(active);
   updateNotchFace();
 });
 
@@ -13702,12 +13707,7 @@ window.brainoMac.onPermissionNeeded?.((payload) => {
    paste reads as "here it is, take it" rather than a lost session. */
 window.brainoMac.onDictationFallback?.((payload) => {
   const text = String(payload?.text || "").trim();
-  nfSetStatusText("copied");
-  nfSetHeard(text || "", { durationMs: 20000 });
-  nfSetThinkingSticky(payload?.blocked
-    ? "macOS blocked my paste. It's copied: press ⌘V."
-    : "No text box here. It's copied, just paste it.");
-  window.setTimeout(() => nfSetThinkingSticky(""), 6000);
+  heraBoxShow(text, payload?.blocked ? "macOS blocked the paste" : "No text box here");
   logRenderer("dictation.fallback.notch", { chars: text.length, reason: payload?.reason || "" });
 });
 
@@ -16572,3 +16572,64 @@ window.brainoMac?.onSarvamCommand?.((payload) => {
     if (text) sarvamTell({ type: "segment", text });
   }
 });
+
+/* ── Dictation island (2026-10-25) ───────────────────────────────────────
+   Beside the notch, never over it: placed from the pill's real right edge so
+   it reads as the Dynamic Island's split bubble. Your voice drives the pulse
+   (resting) and the dots (open). ✕ cancels and types nothing; ✓ finishes. */
+const heraIsland = document.getElementById("hera-island");
+const heraBox = document.getElementById("hera-box");
+const heraDots = heraIsland ? [...heraIsland.querySelectorAll(".hi-dots i")] : [];
+let heraLevel = 0;
+let heraBoxTimer = 0;
+function heraIslandPlace() {
+  const pill = document.querySelector("#notch-face .nf-pill");
+  const r = pill ? pill.getBoundingClientRect() : null;
+  const right = r && r.width ? r.right : window.innerWidth / 2 + 95;
+  heraIsland?.style.setProperty("--hi-left", `${Math.round(right + 8)}px`);
+}
+function heraIslandShow(on) {
+  if (!heraIsland) return;
+  if (on) { heraIslandPlace(); heraIsland.classList.remove("thinking"); }
+  else heraIsland.classList.remove("open");
+  heraIsland.classList.toggle("on", Boolean(on));
+  if (!on) { heraLevel = 0; heraIslandPaint(); }
+}
+function heraIslandPaint() {
+  if (!heraIsland) return;
+  heraIsland.style.setProperty("--hi-lv", heraLevel.toFixed(3));
+  heraIsland.style.setProperty("--hi-lv-s", (1 + heraLevel * 0.9).toFixed(3));
+  const t = performance.now() / 140;
+  heraDots.forEach((d, i) => {
+    const wave = 0.55 + 0.45 * Math.sin(t + i * 0.9);
+    d.style.setProperty("--d", (1 + heraLevel * 5 * wave).toFixed(2));
+  });
+}
+window.brainoMac.onHeraLevel?.((payload) => {
+  const v = Math.max(0, Math.min(1, Number(payload?.v) || 0));
+  heraLevel = heraLevel * 0.55 + v * 0.45; // smooth, so it breathes rather than flickers
+  heraIslandPaint();
+});
+heraIsland?.addEventListener("mouseenter", () => heraIsland.classList.add("open"));
+heraIsland?.addEventListener("mouseleave", () => heraIsland.classList.remove("open"));
+heraIsland?.querySelector(".hi-x")?.addEventListener("click", () => { window.brainoMac.heraAction?.("cancel"); heraIslandShow(false); });
+heraIsland?.querySelector(".hi-ok")?.addEventListener("click", () => { window.brainoMac.heraAction?.("done"); heraIsland.classList.remove("open"); heraIsland.classList.add("thinking"); });
+window.addEventListener("resize", () => { if (heraIsland?.classList.contains("on")) heraIslandPlace(); });
+
+/* No caret: the words are already on the clipboard; show them in a box. */
+function heraBoxShow(text, label) {
+  if (!heraBox || !text) return;
+  heraBox.querySelector(".hb-head b").textContent = label || "No text box here";
+  heraBox.querySelector(".hb-text").textContent = text;
+  heraBox.classList.add("on");
+  clearTimeout(heraBoxTimer);
+  heraBoxTimer = window.setTimeout(() => heraBox.classList.remove("on"), 12000);
+}
+heraBox?.querySelector(".hb-copy")?.addEventListener("click", async () => {
+  const text = heraBox.querySelector(".hb-text").textContent || "";
+  try { await navigator.clipboard.writeText(text); } catch (_) { window.brainoMac.copyText?.(text); }
+  heraBox.querySelector(".hb-head span").textContent = "Copied again";
+});
+heraBox?.querySelector(".hb-close")?.addEventListener("click", () => heraBox.classList.remove("on"));
+heraBox?.addEventListener("mouseenter", () => clearTimeout(heraBoxTimer));
+heraBox?.addEventListener("mouseleave", () => { heraBoxTimer = window.setTimeout(() => heraBox.classList.remove("on"), 4000); });

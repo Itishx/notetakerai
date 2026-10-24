@@ -45,6 +45,21 @@
 
     <main id="dock-stage" aria-label="Braino Mac dock companion">
       <div id="edge-glow" aria-hidden="true"></div>
+      <!-- Dictation island (2026-10-25): the Dynamic Island split. A small black
+           bubble beside the notch while you dictate; hover and it opens into the
+           pill: cancel, your voice as dots, done. braino-mac.js heraIsland*. -->
+      <div id="hera-island" aria-label="Dictation">
+        <button type="button" class="hi-x" aria-label="Cancel dictation">✕</button>
+        <div class="hi-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <span class="hi-pulse" aria-hidden="true"></span>
+        <button type="button" class="hi-ok" aria-label="Done, type it">✓</button>
+      </div>
+      <!-- No text box to type into: the words, copied, in a box under the island. -->
+      <div id="hera-box" role="status" aria-live="polite">
+        <div class="hb-head"><b>No text box here</b><span>Copied to your clipboard</span></div>
+        <p class="hb-text"></p>
+        <div class="hb-row"><button type="button" class="hb-copy">Copy again</button><button type="button" class="hb-close" aria-label="Close">✕</button></div>
+      </div>
       <div id="notch-face" class="nf-core-only" aria-label="Braino status">
         <div class="nf-sonar"><i></i><i></i><i></i></div>
         <div class="nf-pill">

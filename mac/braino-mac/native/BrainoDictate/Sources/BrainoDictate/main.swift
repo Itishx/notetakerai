@@ -582,6 +582,12 @@ private final class MicPipeline: @unchecked Sendable {
                 let frames = Int(buffer.frameLength)
                 for i in 0..<frames { peak = max(peak, abs(data[0][i])) }
                 if let report = self.flag.note(peak: peak, frames: frames) { log(report) }
+                // How loud, about 20 times a second, for the dictation orb
+                // (2026-10-25). Display only; nothing downstream depends on it.
+                var sum: Float = 0
+                for i in 0..<frames { sum += data[0][i] * data[0][i] }
+                let rms = frames > 0 ? (sum / Float(frames)).squareRoot() : 0
+                emit(["type": "level", "v": String(format: "%.3f", min(1, rms * 6))])
             }
             /* Real time means dropping, not queueing.
              *

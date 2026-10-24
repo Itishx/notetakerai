@@ -15,6 +15,12 @@ final class BrainoControlTap {
   private var optionIsDown = false
   private var optionTapPoisoned = false
   private var lastOptionTap: TimeInterval = 0
+  // Hold Option to talk (2026-10-25, Wispr-style): a bare Option held past
+  // the threshold is a hold; releasing it ends the hold. A hold is never a
+  // tap, so it never counts toward double-Option.
+  private var optionHoldActive = false
+  private var optionHoldToken = 0
+  private let optionHoldThreshold: Double = 0.22
   private var commandIsDown = false
   private var commandTapPoisoned = false
   private var lastCommandTap: TimeInterval = 0
@@ -136,11 +142,27 @@ final class BrainoControlTap {
       optionIsDown = true
       let otherMods: CGEventFlags = [.maskShift, .maskControl, .maskCommand]
       optionTapPoisoned = !event.flags.intersection(otherMods).isEmpty
+      // Still down, alone, after the threshold: that is a hold.
+      optionHoldToken += 1
+      let token = optionHoldToken
+      if !optionTapPoisoned {
+        DispatchQueue.main.asyncAfter(deadline: .now() + optionHoldThreshold) { [weak self] in
+          guard let self = self, token == self.optionHoldToken, self.optionIsDown, !self.optionTapPoisoned, !self.optionHoldActive else { return }
+          self.optionHoldActive = true
+          self.printLine("option-hold-start")
+        }
+      }
     } else if isOption && optionIsDown {
       optionTapPoisoned = true
+      if optionHoldActive { optionHoldActive = false; printLine("option-hold-cancel") }
     } else if !isOption && optionIsDown {
       optionIsDown = false
-      if !optionTapPoisoned {
+      optionHoldToken += 1
+      if optionHoldActive {
+        optionHoldActive = false
+        printLine("option-hold-end")
+        lastOptionTap = 0
+      } else if !optionTapPoisoned {
         let now = ProcessInfo.processInfo.systemUptime
         if now - lastOptionTap < 0.52 {
           printLine("double-option")
@@ -179,6 +201,8 @@ final class BrainoControlTap {
   private func handleKeyDown(_ event: CGEvent) {
     if commandIsDown { commandTapPoisoned = true }
     if optionIsDown { optionTapPoisoned = true }
+    // Option+key is a shortcut or a special character, not dictation.
+    if optionHoldActive { optionHoldActive = false; printLine("option-hold-cancel") }
     if shiftIsDown { shiftTapPoisoned = true }
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0

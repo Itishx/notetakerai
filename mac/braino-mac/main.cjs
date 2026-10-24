@@ -236,7 +236,11 @@ const chromeCookies = require(path.join(__dirname, "chrome-cookies.cjs"));
 const heraModule = require(path.join(__dirname, "hera.cjs"));
 let heraInstance = null;
 function hera() {
-  if (!heraInstance) heraInstance = heraModule.createHera({ BrowserWindow, session: electronSession, log: (e, d) => logMac(e, d) });
+  if (!heraInstance) heraInstance = heraModule.createHera({
+    BrowserWindow, session: electronSession, log: (e, d) => logMac(e, d),
+    // The recorder's loudness, for the dictation orb.
+    onLevel: (v) => { if (dockWindow && !dockWindow.isDestroyed()) { try { dockWindow.webContents.send("braino-mac:hera-level", { v }); } catch (_) {} } },
+  });
   return heraInstance;
 }
 function heraCloudEnabled() {
@@ -2347,6 +2351,13 @@ function handleParakeetLine(line) {
   } catch (_) {
     return;
   }
+  // Voice level for the dictation orb: dock window only, never logged.
+  if (event.type === "level") {
+    if ((localDictationActive || localDictationStarting) && dockWindow && !dockWindow.isDestroyed()) {
+      try { dockWindow.webContents.send("braino-mac:hera-level", { v: Number(event.v) || 0 }); } catch (_) {}
+    }
+    return;
+  }
   if (event.type === "ready") {
     parakeet.ready = true;
     logMac("parakeet.ready", { warmMs: Date.now() - parakeet.startedAt });
@@ -2977,33 +2988,47 @@ async function startLocalDictation() {
   localDictationStarting = true;
   const tookFromVoice = voiceCaptionMode;
   yieldVoiceCaption(liveTranscriptMode ? "live" : "dictation");
-  const started = await startDictationSkill().finally(() => { localDictationStarting = false; });
+  /* Capture starts THIS instant, and finding the focused field runs beside it
+     (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
+     every word said in that time was lost, the "eaten words". */
+  const useCloud = !liveTranscriptMode && heraCloudEnabled();
+  const captureP = useCloud ? hera().start() : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
+  const [started, capture] = await Promise.all([
+    startDictationSkill().finally(() => { localDictationStarting = false; }),
+    captureP.catch((error) => ({ ok: false, error: String(error?.message || error) })),
+  ]);
   if (!started.ok) {
-    /* It was listening for voice mode and dictation never took it: stop it,
-       with the stop's own output swallowed, rather than leave it running with
-       nobody reading it. */
-    if (tookFromVoice) {
+    // No field we may type into (or no permission): drop what was captured.
+    if (useCloud && capture.ok) await hera().stop().catch(() => null);
+    if (capture.parakeet || tookFromVoice) {
       voiceCaptionStopping = true;
       parakeetSend("stop");
     }
     sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
     return started;
   }
-  /* Cloud first: only record while they talk, so a busy Mac can never drop
-     words. The on-device transcriber is the backup when recording fails. */
-  if (!liveTranscriptMode && heraCloudEnabled()) {
-    const rec = await hera().start();
-    if (rec.ok) {
-      heraCloudActive = true;
-      localDictationActive = true;
-      localTurns = [];
-      heraSession += 1;
-      heraLog("LISTENING (cloud) — speak now", { app: dictationState.targetApp });
-      sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "cloud" });
-      logMac("dictation.local.started", { app: dictationState.targetApp, engine: "cloud" });
-      return { ok: true, engine: "cloud", ...dictationStatePayload() };
-    }
-    heraLog(`cloud recording unavailable (${rec.error}), using the on-device transcriber`);
+  if (useCloud && capture.ok) {
+    heraCloudActive = true;
+    localDictationActive = true;
+    localTurns = [];
+    heraSession += 1;
+    heraLog("LISTENING (cloud) — speak now", { app: dictationState.targetApp });
+    sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "cloud" });
+    logMac("dictation.local.started", { app: dictationState.targetApp, engine: "cloud" });
+    return { ok: true, engine: "cloud", ...dictationStatePayload() };
+  }
+  if (useCloud) heraLog(`cloud recording unavailable (${capture.error}), using the on-device transcriber`);
+  if (capture.parakeet && capture.ok) {
+    parakeet.listening = true;
+    localDictationActive = true;
+    localTurns = [];
+    resetLocalFormat();
+    heraSession += 1;
+    parakeetPartials = 0;
+    heraLog("LISTENING — speak now", { app: dictationState.targetApp });
+    sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "parakeet" });
+    logMac("dictation.local.started", { app: dictationState.targetApp });
+    return { ok: true, engine: "parakeet", ...dictationStatePayload() };
   }
   if (!parakeetSend("start")) {
     sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
@@ -3037,6 +3062,12 @@ async function finishLocalDictation(reason) {
 
   const turns = localTurns.slice();
   localTurns = [];
+  // Option+key during a hold was a shortcut, not dictation: insert nothing.
+  if (heraDiscard) {
+    heraDiscard = false;
+    logMac("dictation.hold.discarded", { turns: turns.length, reason });
+    turns.length = 0;
+  }
   if (turns.length) {
     /* The clean-up has been running since the last pause, so this is usually
        already resolved and costs nothing. A stop that lands mid-sentence pays
@@ -4197,6 +4228,18 @@ function registerHotkeys() {
   return registered;
 }
 
+let heraHold = { on: false, at: 0, stopQueued: false };
+let heraDiscard = false;
+/* The orb's ✕ and ✓: cancel types nothing, done types what was said. */
+ipcMain.on("braino-mac:hera-action", (_event, action) => {
+  if (!(localDictationActive || localDictationStarting)) return;
+  heraHold.on = false;
+  if (action === "cancel") heraDiscard = true;
+  logMac("dictation.orb_action", { action });
+  if (localDictationStarting && !localDictationActive) { heraHold.stopQueued = true; return; }
+  void stopLocalDictation(action === "cancel" ? "orb cancel" : "orb done");
+});
+
 function startSwiftHotkeyHelper() {
   if (!fs.existsSync(HOTKEY_HELPER_PATH)) return;
   const hotkeyBin = prebuiltHelper("BrainoControlTap");
@@ -4212,6 +4255,39 @@ function startSwiftHotkeyHelper() {
       if (trimmed === "double-control") {
         sendToRenderer("braino-mac:voice-toggle", { source: "double Control" });
         ensureDockWindowVisible("voice-hotkey");
+        return;
+      }
+      /* Hold Option to talk (2026-10-25, the Wispr Flow model): hold to
+         speak, let go and the words are typed where the cursor is. No live
+         words on screen, only the small orb. Double Option still toggles a
+         hands-free session. Option+another key cancels and types nothing. */
+      if (trimmed === "option-hold-start" || trimmed === "option-hold-end" || trimmed === "option-hold-cancel") {
+        if (SKIT.enabled) return;
+        if (!(parakeetEnabled() && (parakeet.ready || sarvamActive()))) {
+          // Cloud fallback: the renderer recorder toggles on start and end.
+          if (trimmed !== "option-hold-cancel") sendToRenderer("braino-mac:dictation-toggle", { source: "hold Option" });
+          return;
+        }
+        if (trimmed === "option-hold-start") {
+          if (localDictationActive || localDictationStarting) return;
+          heraHold = { on: true, at: Date.now(), stopQueued: false };
+          heraDiscard = false;
+          logMac("hotkey.option_hold", { phase: "start" });
+          sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "parakeet", hold: true });
+          ensureDockWindowVisible("dictation-hotkey");
+          void startLocalDictation().then(() => {
+            // Released while the focused field was still being found.
+            if (heraHold.stopQueued) { heraHold.stopQueued = false; void stopLocalDictation("option release (queued)"); }
+          });
+          return;
+        }
+        if (!heraHold.on) return;
+        heraHold.on = false;
+        if (trimmed === "option-hold-cancel") heraDiscard = true;
+        const heldMs = Date.now() - heraHold.at;
+        logMac("hotkey.option_hold", { phase: trimmed === "option-hold-cancel" ? "cancel" : "end", heldMs });
+        if (localDictationStarting && !localDictationActive) { heraHold.stopQueued = true; return; }
+        void stopLocalDictation(trimmed === "option-hold-cancel" ? "option chord" : "option release");
         return;
       }
       if (trimmed === "double-option") {

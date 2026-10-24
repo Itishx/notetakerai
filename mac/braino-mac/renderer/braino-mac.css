@@ -6938,3 +6938,45 @@ body.aos-notch #status-pill { opacity: 0 !important; visibility: hidden !importa
 #notch-face.nf-aos .nf-thinking-canvas,
 #notch-face.nf-aos .nf-think-chip,
 #notch-face.nf-aos .nf-think-arrow { display: none !important; }
+
+/* ── Dictation island (2026-10-25) ───────────────────────────────────────
+   The Dynamic Island split: a separate black bubble beside the notch while
+   you dictate. Resting, a circle with a pulse that breathes with your voice;
+   hovered, it opens downward into Wispr's pill: ✕, your voice as dots, ✓. */
+#hera-island {
+  position: fixed; top: 3px; left: var(--hi-left, calc(50% + 120px)); z-index: 58;
+  width: 30px; height: 30px; border-radius: 15px; background: #000;
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.08), 0 6px 18px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  opacity: 0; transform: scale(0.4); transform-origin: 50% 0; pointer-events: none;
+  transition: opacity .18s ease, transform .32s cubic-bezier(.2,1.3,.4,1), height .32s cubic-bezier(.2,1.1,.4,1);
+  overflow: hidden;
+}
+#hera-island.on { opacity: 1; transform: scale(1); pointer-events: auto; }
+#hera-island .hi-pulse { width: 10px; height: 10px; border-radius: 50%; background: #ff453a; transform: scale(var(--hi-lv-s, 1)); transition: transform .08s linear; box-shadow: 0 0 calc(var(--hi-lv, 0) * 14px) rgba(255,69,58,.8); }
+#hera-island .hi-x, #hera-island .hi-ok, #hera-island .hi-dots { display: none; }
+#hera-island.open { height: 132px; justify-content: space-between; padding: 6px 0; }
+#hera-island.open .hi-pulse { display: none; }
+#hera-island.open .hi-x, #hera-island.open .hi-ok, #hera-island.open .hi-dots { display: flex; }
+#hera-island .hi-x, #hera-island .hi-ok { width: 22px; height: 22px; border: 0; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; }
+#hera-island .hi-x { background: #5a5650; color: #fff; }
+#hera-island .hi-ok { background: #fff; color: #000; }
+#hera-island .hi-dots { flex-direction: column; align-items: center; gap: 5px; }
+#hera-island .hi-dots i { width: 3px; height: 3px; border-radius: 2px; background: #fff; opacity: .9; transform: scaleY(var(--d, 1)); transition: transform .07s linear; }
+#hera-island.thinking .hi-pulse { background: #fff; animation: hiThink 0.9s ease-in-out infinite; }
+@keyframes hiThink { 50% { opacity: .35; transform: scale(.7); } }
+@media (prefers-reduced-motion: reduce) { #hera-island, #hera-island * { transition: none !important; animation: none !important; } }
+
+#hera-box {
+  position: fixed; top: 44px; left: 50%; transform: translate(-50%, -6px); z-index: 58; width: min(420px, calc(100vw - 32px));
+  background: #000; color: #f6f3ea; border-radius: 18px; padding: 12px 14px; box-shadow: 0 0 0 0.5px rgba(255,255,255,.1), 0 14px 40px rgba(0,0,0,.45);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; opacity: 0; pointer-events: none;
+  transition: opacity .2s ease, transform .3s cubic-bezier(.2,1.2,.4,1);
+}
+#hera-box.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#hera-box .hb-head { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+#hera-box .hb-head span { color: rgba(246,243,234,.6); }
+#hera-box .hb-text { margin: 8px 0 10px; max-height: 120px; overflow: auto; white-space: pre-wrap; user-select: text; font-size: 14px; }
+#hera-box .hb-row { display: flex; justify-content: space-between; }
+#hera-box button { border: 0; border-radius: 999px; padding: 5px 12px; background: rgba(255,255,255,.12); color: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+#hera-box .hb-close { padding: 5px 9px; }

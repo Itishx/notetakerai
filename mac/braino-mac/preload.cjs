@@ -340,6 +340,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
   idleScreenSettings: (patch) => ipcRenderer.invoke("braino-mac:idle-screen-settings", patch || null),
   notchStyle: (style) => ipcRenderer.invoke("braino-mac:notch-style", style || null),
   // Listening engine: "on-device" (default) or "sarvam". See main.cjs parakeetSend.
+  // Dictation orb (2026-10-25): voice level in, ✕/✓ out.
+  onHeraLevel: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:hera-level", handler);
+    return () => ipcRenderer.removeListener("braino-mac:hera-level", handler);
+  },
+  heraAction: (action) => ipcRenderer.send("braino-mac:hera-action", String(action || "")),
   speechEngine: (engine) => ipcRenderer.invoke("braino-mac:speech-engine", engine || null),
   onSarvamCommand: (callback) => {
     const handler = (_event, payload) => callback(payload);
