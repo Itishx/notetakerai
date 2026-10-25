@@ -3026,7 +3026,7 @@ async function startLocalDictation() {
      (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
      every word said in that time was lost, the "eaten words". */
   const useCloud = !liveTranscriptMode && heraCloudEnabled();
-  const captureP = useCloud ? hera().start({ secret: heraStreamSecret() }) /* live text is used only when provably complete (hera.cjs) and long enough; otherwise the full recording */ : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
+  const captureP = useCloud ? hera().start() /* no live stream while it is paused: no realtime cost */ /* live text is used only when provably complete (hera.cjs) and long enough; otherwise the full recording */ : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
   const [started, capture] = await Promise.all([
     startDictationSkill().finally(() => { localDictationStarting = false; }),
     captureP.catch((error) => ({ ok: false, error: String(error?.message || error) })),
