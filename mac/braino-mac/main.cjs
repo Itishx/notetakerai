@@ -3170,11 +3170,11 @@ async function finishCloudDictation(reason) {
   // A stream that caught too little for the time spoken (dropped audio) is not trusted.
   /* Itish's rule (2026-10-25): short dictation (under ~12 s, a sentence or two) never uses live
      text; the full recording is small, accurate and fast. Only longer talk is taken in phases. */
-  const longTalk = (audio.ms || 0) >= 12000;
+  const longTalk = false; // live text paused (2026-10-25): it lost half of a 30 s run (168 vs 391 chars). Phases come back as full-quality uploads per stretch.
   const streamOk = longTalk && audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
   let heard = streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
-    : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
+    : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm", dictation: true }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   // Neither side is trusted blindly: if the live text caught more words than the full upload, keep it.
   if (longTalk && !streamOk && audio.streamText && audio.streamText.length > String(heard.transcript || "").length * 1.2) heard = { ok: true, transcript: audio.streamText, streamed: true };
   const transcribedMs = Date.now() - started;
@@ -17174,6 +17174,7 @@ async function transcribeAudioCommand(payload = {}) {
       fileName: payload.fileName || "braino-mac-command.webm",
       mimeType,
       transcriptOnly: true, // words only: no lecture notes for a command or a dictation
+      dictation: payload.dictation === true, // chunked at pauses + Itish's vocabulary
       // The realtime path pins transcription to English and the fallback never
       // did, which is the whole reason a Hindi comedy clip came back as Urdu and
       // was handed to the router as a command. Same lock, same reason.

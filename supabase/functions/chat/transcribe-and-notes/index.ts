@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
+
+/* Words Itish says that a transcriber would otherwise turn into "Bloom" or "hairajah". */
+const DICTATION_VOCABULARY = "Braino, BrainoHERA, HERA, Braino Mac, Wispr Flow, Itish, Affective, AffectiveOS, Laya, Mesa, Supabase, Claude, Cursor, WhatsApp. Natural spoken English, sometimes with Hindi words.";
 import {
   buildMeetingCaptionTranscript,
   labelMicEntries,
@@ -125,7 +128,8 @@ serve(async (req) => {
           knownSpeakerReferences,
           openAiApiKey: OPENAI_API_KEY,
           clockOffsetMs: clockCursorMs,
-          vocabularyHint: mode === "meeting" ? speakerVocabularyHint(meetingContext) : "",
+          vocabularyHint: mode === "meeting" ? speakerVocabularyHint(meetingContext) : body.dictation === true ? DICTATION_VOCABULARY : "",
+          dictation: body.dictation === true,
         });
         if (result.entries.length) {
           entriesByRole.push(
@@ -388,6 +392,7 @@ async function transcribeSegment({
   language,
   clockOffsetMs,
   vocabularyHint,
+  dictation = false,
 }: {
   segment: AudioSegmentPayload;
   mode: RecordingMode;
@@ -398,6 +403,7 @@ async function transcribeSegment({
   /** The names we already expect to hear. A name the transcriber mangles is a name no later
    *  layer can recover, so this goes in before a single word is decoded. */
   vocabularyHint?: string;
+  dictation?: boolean;
   /** ISO code. Opt-in, and left unset for lectures and meetings, which are
    *  genuinely multilingual. The Mac's spoken-command path sets "en" because
    *  without it the model guesses, and a mic left open in a room playing Hindi
@@ -418,6 +424,9 @@ async function transcribeSegment({
   } else {
     form.append("model", "gpt-4o-transcribe");
     form.append("response_format", "json");
+    /* Dictation: without server-side chunking the model can skip a stretch after a
+       pause in a long recording; cut at pauses first, then nothing is skipped. */
+    if (dictation) form.append("chunking_strategy", "auto");
   }
 
   // Naming the language stops the model inventing one from ambient audio. It is
@@ -428,13 +437,18 @@ async function transcribeSegment({
   // Telling it the guest list up front is what keeps Sowmya from arriving as "so my".
   if (vocabularyHint) form.append("prompt", vocabularyHint);
 
-  const transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  let transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
     },
     body: form,
   });
+  // If chunking is ever refused for this model, dictation still goes through without it.
+  if (!transcribeRes.ok && dictation && transcribeRes.status === 400) {
+    form.delete("chunking_strategy");
+    transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${openAiApiKey}` }, body: form });
+  }
 
   if (!transcribeRes.ok) {
     throw new OpenAiRequestError(transcribeRes.status, await readOpenAiError(transcribeRes, "Transcription failed"));
