@@ -52,9 +52,31 @@ function coolMic() {
 let ws = null, wsReady = false, pending = [], proc = null, srcNode = null;
 let dropped = 0, failedItems = 0, errors = 0, noiseFloor = 0.01;
 let order = [], texts = {}, spokeSinceCommit = false, speechMs = 0, silentMs = 0, streamFailed = false;
+/* Phases (2026-10-25, Itish's design): every ~12-15 words closed by a real
+   pause becomes its own small WAV, sent to the same accurate transcriber while
+   you keep talking. On release only the last stretch is left. */
+let segBuf = [], segReady = [], segIndex = 0, streamWanted = false;
+function wav(int16s) {
+  let n = 0; for (const a of int16s) n += a.length;
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true); v.setUint32(28, 32000, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+  let o = 44; for (const a of int16s) for (let i = 0; i < a.length; i++, o += 2) v.setInt16(o, a[i], true);
+  return b64(new Int16Array(buf));
+}
+function cutSegment() {
+  if (!segBuf.length) return null;
+  let n = 0; for (const a of segBuf) n += a.length;
+  const seg = { index: segIndex++, wav: wav(segBuf), ms: Math.round(n / 16) };
+  segBuf = [];
+  return seg;
+}
+window.heraTake = () => segReady.splice(0);
 function b64(int16) { const u = new Uint8Array(int16.buffer); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
-function send(o) { if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 3000) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); else dropped++; }
-function commit() { if (!spokeSinceCommit) return; spokeSinceCommit = false; speechMs = 0; send({ type: "input_audio_buffer.commit" }); }
+function send(o) { if (!streamWanted) return; if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 3000) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); else dropped++; }
+function commit() { if (!spokeSinceCommit) return; spokeSinceCommit = false; speechMs = 0; send({ type: "input_audio_buffer.commit" }); const seg = cutSegment(); if (seg) segReady.push(seg); }
 /* Capture starts with the mic; the socket attaches when its key arrives,
    and everything said before that is sent first from the buffer. */
 let gotSecret = false;
@@ -97,7 +119,7 @@ function connect(secret, attempt = 0) {
   };
 }
 function startStream() {
-  order = []; texts = {}; pending = []; dropped = 0; failedItems = 0; errors = 0; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
+  segBuf = []; segReady = []; segIndex = 0; order = []; texts = {}; pending = []; dropped = 0; failedItems = 0; errors = 0; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
   if (!ctx) { streamFailed = true; return; }
   srcNode = ctx.createMediaStreamSource(stream);
   proc = ctx.createScriptProcessor(2048, 1, 1);
@@ -108,9 +130,12 @@ function startStream() {
     let sum = 0;
     for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, f[Math.floor(i * ratio)])); out[i] = v < 0 ? v * 0x8000 : v * 0x7fff; sum += v * v; }
     send({ type: "input_audio_buffer.append", audio: b64(out) });
+    const r16 = ctx.sampleRate / 16000, m = Math.floor(f.length / r16), pcm = new Int16Array(m);
+    for (let i = 0; i < m; i++) { const v = Math.max(-1, Math.min(1, f[Math.floor(i * r16)])); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+    segBuf.push(pcm);
     // The raw mic has room noise, so "quiet" is measured against this room's own floor.
     const rms = Math.sqrt(sum / Math.max(1, n));
-    noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : noiseFloor * 0.998 + rms * 0.002;
+    noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : rms < noiseFloor * 1.5 ? noiseFloor * 0.995 + rms * 0.005 : noiseFloor;
     const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.006, noiseFloor * 2.5);
     if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
     // A phase closes only after ~5 s of talk (12-15 words) and a real pause: whole sentences, never 2-3 words.
@@ -118,9 +143,12 @@ function startStream() {
   };
   srcNode.connect(proc); proc.connect(ctx.destination);
 }
+let tailSeg = null;
 async function finishStream() {
   try { proc && proc.disconnect(); srcNode && srcNode.disconnect(); } catch (_) {}
   proc = null; srcNode = null;
+  tailSeg = segIndex > 0 ? cutSegment() : null; // only when phases ran; a short take uses the whole recording
+  if (!streamWanted) return null;
   // The key may still be on its way: give it a moment, the audio is buffered.
   const keyBy = Date.now() + 1500;
   while (!gotSecret && Date.now() < keyBy) await new Promise((r) => setTimeout(r, 30));
@@ -140,8 +168,8 @@ async function finishStream() {
   ws = null;
   return done && text ? text : null;
 }
-window.heraStart = async () => {
-  chunks = [];
+window.heraStart = async (wantStream) => {
+  chunks = []; streamWanted = Boolean(wantStream);
   await warmMic();
   try { if (ctx && ctx.state !== "running") await ctx.resume(); } catch (_) {}
   if (analyser) {
@@ -171,7 +199,7 @@ window.heraStop = () => new Promise((resolve) => {
     const blob = new Blob(chunks, { type: rec.mimeType });
     const buf = new Uint8Array(await blob.arrayBuffer());
     let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    resolve({ audioBase64: btoa(bin), mimeType: rec.mimeType.split(";")[0], ms: Date.now() - startedAt, bytes: buf.length, streamText: streamText || "", streamed: streamText != null });
+    resolve({ audioBase64: btoa(bin), mimeType: rec.mimeType.split(";")[0], ms: Date.now() - startedAt, bytes: buf.length, streamText: streamText || "", streamed: streamText != null, phases: segIndex, tail: tailSeg, untaken: segReady.splice(0) });
     rec = null; chunks = [];
   };
   rec.stop();
@@ -208,7 +236,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     if (recording) return { ok: false, error: "already recording" };
     try {
       const w = await ensure();
-      await w.webContents.executeJavaScript("window.heraStart()", true);
+      await w.webContents.executeJavaScript(`window.heraStart(${options.secret ? "true" : "false"})`, true);
       // The streaming key attaches whenever it arrives; audio waits in a buffer.
       if (options.secret) {
         Promise.resolve(options.secret).then((secret) => {
@@ -236,10 +264,15 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     }
   }
 
+  // Phases closed so far (small WAVs), taken while recording so they transcribe as you talk.
+  async function take() {
+    if (!recording || !win || win.isDestroyed()) return [];
+    try { return (await win.webContents.executeJavaScript("window.heraTake()", true)) || []; } catch (_) { return []; }
+  }
   function isRecording() { return recording; }
   function destroy() { if (win && !win.isDestroyed()) win.destroy(); win = null; recording = false; }
 
-  return { start, stop, isRecording, destroy };
+  return { start, stop, take, isRecording, destroy };
 }
 
 module.exports = { createHera };

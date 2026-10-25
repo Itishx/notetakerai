@@ -3026,7 +3026,7 @@ async function startLocalDictation() {
      (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
      every word said in that time was lost, the "eaten words". */
   const useCloud = !liveTranscriptMode && heraCloudEnabled();
-  const captureP = useCloud ? hera().start() /* no live stream while it is paused: no realtime cost */ /* live text is used only when provably complete (hera.cjs) and long enough; otherwise the full recording */ : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
+  const captureP = useCloud ? hera().start().then((r) => { if (r?.ok) startHeraPhases(); return r; }) : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
   const [started, capture] = await Promise.all([
     startDictationSkill().finally(() => { localDictationStarting = false; }),
     captureP.catch((error) => ({ ok: false, error: String(error?.message || error) })),
@@ -3153,6 +3153,35 @@ async function finishLocalDictation(reason) {
 
 /* Stop, send the whole recording once, tidy it once, type it in. No waiting
    for a live transcriber to catch up. */
+/* Phases: each stretch the recorder closes (~12-15 words, then a real pause)
+   is transcribed while the talking goes on, by the same accurate transcriber. */
+let heraPhaseTimer = 0, heraPhaseJobs = [];
+function transcribeHeraPhase(seg) {
+  return transcribeAudioCommand({ audioBase64: seg.wav, mimeType: "audio/wav", fileName: `braino-hera-${seg.index}.wav`, dictation: true })
+    .then((r) => ({ index: seg.index, ok: Boolean(r?.ok), text: String(r?.transcript || "").trim() }))
+    .catch(() => ({ index: seg.index, ok: false, text: "" }));
+}
+function startHeraPhases() {
+  heraPhaseJobs = [];
+  clearInterval(heraPhaseTimer);
+  heraPhaseTimer = setInterval(async () => {
+    for (const seg of await hera().take()) heraPhaseJobs.push(transcribeHeraPhase(seg));
+  }, 400);
+}
+async function collectHeraPhases(audio) {
+  clearInterval(heraPhaseTimer); heraPhaseTimer = 0;
+  if (!audio?.phases) return null; // a short take: the whole recording is used
+  const jobs = heraPhaseJobs.splice(0);
+  for (const seg of audio.untaken || []) jobs.push(transcribeHeraPhase(seg));
+  if (audio.tail) jobs.push(transcribeHeraPhase(audio.tail));
+  const results = (await Promise.all(jobs)).sort((a, b) => a.index - b.index);
+  // Every phase must be back, in order, with no gap; otherwise the full recording is used.
+  const complete = results.length === audio.phases + (audio.tail ? 1 : 0) && results.every((r, i) => r.index === i && r.ok);
+  const text = results.map((r) => r.text).filter(Boolean).join(" ").trim();
+  logMac("hera.phases", { phases: audio.phases, results: results.length, complete, chars: text.length });
+  return complete && text ? text : null;
+}
+
 async function finishCloudDictation(reason) {
   heraCloudActive = false;
   const started = Date.now();
@@ -3165,6 +3194,7 @@ async function finishCloudDictation(reason) {
     stopDictationSkill(reason);
     return;
   }
+  const phased = await collectHeraPhases(audio);
   // No notch message: the island has already folded back into Braino.
   // Streamed while speaking: only the last stretch was left, so it is ready now.
   // A stream that caught too little for the time spoken (dropped audio) is not trusted.
@@ -3172,7 +3202,9 @@ async function finishCloudDictation(reason) {
      text; the full recording is small, accurate and fast. Only longer talk is taken in phases. */
   const longTalk = false; // live text paused (2026-10-25): it lost half of a 30 s run (168 vs 391 chars). Phases come back as full-quality uploads per stretch.
   const streamOk = longTalk && audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
-  let heard = streamOk
+  let heard = phased && phased.length >= Math.max(12, (audio.ms || 0) / 120)
+    ? { ok: true, transcript: phased, streamed: true }
+    : streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
     : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm", dictation: true }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   // Neither side is trusted blindly: if the live text caught more words than the full upload, keep it.
