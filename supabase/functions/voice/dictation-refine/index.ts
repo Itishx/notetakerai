@@ -69,7 +69,7 @@ SENTENCES
 
 NEVER
 - Add a word that was not said (no greetings, sign-offs, explanations).
-- Drop a word that carries meaning.
+- Drop a word that carries meaning. Drop a sentence, ever: every sentence before and after a list stays, word for word, including swearing and casual lines ("Holy shit, it's almost instantaneous, dude." stays). A list replaces only the words of the items themselves.
 - Answer, summarise, or translate. Keep Hindi or Hinglish words as spoken.
 - Change names, emails, URLs, handles, code or product names except as above.`;
 
