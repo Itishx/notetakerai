@@ -45,6 +45,89 @@ function coolMic() {
     stream = null; ctx = null; analyser = null; coolTimer = 0;
   }, 60000);
 }
+/* Streaming transcription (2026-10-25). Audio goes to OpenAI's realtime
+   transcriber as it is spoken; every pause of ~0.55s commits that stretch, so
+   it is transcribed while you keep talking. On release only the last stretch
+   is left. The MediaRecorder keeps running as the backup. */
+let ws = null, wsReady = false, pending = [], proc = null, srcNode = null;
+let order = [], texts = {}, spokeSinceCommit = false, speechMs = 0, silentMs = 0, streamFailed = false;
+function b64(int16) { const u = new Uint8Array(int16.buffer); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function send(o) { if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 400) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); }
+function commit() { if (!spokeSinceCommit) return; spokeSinceCommit = false; speechMs = 0; send({ type: "input_audio_buffer.commit" }); }
+/* Capture starts with the mic; the socket attaches when its key arrives,
+   and everything said before that is sent first from the buffer. */
+let gotSecret = false;
+window.heraStream = (secret) => {
+  gotSecret = true;
+  if (!secret) { streamFailed = true; return "no-secret"; }
+  connect(secret);
+  return "ok";
+};
+const STREAM_URLS = ["wss://api.openai.com/v1/realtime?intent=transcription", "wss://api.openai.com/v1/realtime"];
+function connect(secret, attempt = 0) {
+  let confirmed = false;
+  try {
+    ws = new WebSocket(STREAM_URLS[attempt], ["realtime", "openai-insecure-api-key." + secret]);
+  } catch (_) { streamFailed = true; return; }
+  // Buffered audio is sent only after the server confirms the session.
+  ws.onopen = () => { wsReady = false; };
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    wsReady = false;
+    if (!confirmed && attempt + 1 < STREAM_URLS.length) { connect(secret, attempt + 1); return; }
+    if (!confirmed) streamFailed = true;
+  };
+  ws.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    if (!confirmed && /session\.(created|updated)$/.test(String(m.type || ""))) {
+      confirmed = true; wsReady = true;
+      for (const o of pending.splice(0)) ws.send(JSON.stringify(o));
+      return;
+    }
+    if (m.type === "input_audio_buffer.committed" && m.item_id && !order.includes(m.item_id)) order.push(m.item_id);
+    else if (m.type === "conversation.item.input_audio_transcription.completed") { texts[m.item_id] = String(m.transcript || ""); if (!order.includes(m.item_id)) order.push(m.item_id); }
+    else if (m.type === "error") { console.log("hera-stream-error:" + String(m.error && m.error.message || "").slice(0, 160)); if (!order.length) streamFailed = true; }
+  };
+}
+function startStream() {
+  order = []; texts = {}; pending = []; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
+  if (!ctx) { streamFailed = true; return; }
+  srcNode = ctx.createMediaStreamSource(stream);
+  proc = ctx.createScriptProcessor(2048, 1, 1);
+  const ratio = ctx.sampleRate / 24000;
+  proc.onaudioprocess = (ev) => {
+    const f = ev.inputBuffer.getChannelData(0);
+    const n = Math.floor(f.length / ratio), out = new Int16Array(n);
+    let sum = 0;
+    for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, f[Math.floor(i * ratio)])); out[i] = v < 0 ? v * 0x8000 : v * 0x7fff; sum += v * v; }
+    send({ type: "input_audio_buffer.append", audio: b64(out) });
+    const ms = f.length / ctx.sampleRate * 1000, loud = Math.sqrt(sum / Math.max(1, n)) > 0.012;
+    if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
+    else { silentMs += ms; if (spokeSinceCommit && speechMs > 400 && silentMs > 550) commit(); }
+  };
+  srcNode.connect(proc); proc.connect(ctx.destination);
+}
+async function finishStream() {
+  try { proc && proc.disconnect(); srcNode && srcNode.disconnect(); } catch (_) {}
+  proc = null; srcNode = null;
+  // The key may still be on its way: give it a moment, the audio is buffered.
+  const keyBy = Date.now() + 1500;
+  while (!gotSecret && Date.now() < keyBy) await new Promise((r) => setTimeout(r, 30));
+  if (!ws || streamFailed) { try { ws && ws.close(); } catch (_) {} ws = null; return null; }
+  commit();
+  // Wait for every committed stretch to come back, briefly.
+  const until = Date.now() + 2500;
+  while (Date.now() < until) {
+    const waiting = order.length === 0 ? (wsReady || pending.length) : order.some((id) => !(id in texts));
+    if (!waiting) break;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  const done = order.length > 0 && order.every((id) => id in texts);
+  const text = order.map((id) => texts[id] || "").join(" ").replace(/\s+/g, " ").trim();
+  try { ws.close(); } catch (_) {}
+  ws = null;
+  return done ? text : (text || null);
+}
 window.heraStart = async () => {
   chunks = [];
   await warmMic();
@@ -58,6 +141,7 @@ window.heraStart = async () => {
       console.log("hera-level:" + Math.min(1, Math.sqrt(sum / buf.length) * 6).toFixed(3));
     }, 60);
   }
+  startStream();
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
   rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
   rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -67,13 +151,15 @@ window.heraStart = async () => {
 };
 window.heraStop = () => new Promise((resolve) => {
   if (!rec) return resolve({ error: "not recording" });
+  const streamTextP = finishStream();
   rec.onstop = async () => {
     clearInterval(levelTimer); levelTimer = 0;
+    const streamText = await streamTextP;
     coolMic();
     const blob = new Blob(chunks, { type: rec.mimeType });
     const buf = new Uint8Array(await blob.arrayBuffer());
     let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    resolve({ audioBase64: btoa(bin), mimeType: rec.mimeType.split(";")[0], ms: Date.now() - startedAt, bytes: buf.length });
+    resolve({ audioBase64: btoa(bin), mimeType: rec.mimeType.split(";")[0], ms: Date.now() - startedAt, bytes: buf.length, streamText: streamText || "", streamed: streamText != null });
     rec = null; chunks = [];
   };
   rec.stop();
@@ -94,6 +180,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     win.webContents.on("console-message", (...args) => {
       const msg = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
       if (typeof msg === "string" && msg.startsWith("hera-level:")) onLevel(Number(msg.slice(11)) || 0);
+      else if (typeof msg === "string" && msg.startsWith("hera-stream-error:")) log("hera.stream.error", { message: msg.slice(18) });
     });
     /* From a real file, not a data: URL. Chromium hides navigator.mediaDevices
        on data: pages (not a secure context), so the recorder could never open
@@ -104,11 +191,17 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     return win;
   }
 
-  async function start() {
+  async function start(options = {}) {
     if (recording) return { ok: false, error: "already recording" };
     try {
       const w = await ensure();
       await w.webContents.executeJavaScript("window.heraStart()", true);
+      // The streaming key attaches whenever it arrives; audio waits in a buffer.
+      if (options.secret) {
+        Promise.resolve(options.secret).then((secret) => {
+          if (win && !win.isDestroyed()) win.webContents.executeJavaScript(`window.heraStream(${JSON.stringify(String(secret || ""))})`, true).catch(() => {});
+        }).catch(() => { if (win && !win.isDestroyed()) win.webContents.executeJavaScript("window.heraStream('')", true).catch(() => {}); });
+      }
       recording = true;
       log("hera.cloud.recording", {});
       return { ok: true };
@@ -123,7 +216,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
     recording = false;
     try {
       const out = await win.webContents.executeJavaScript("window.heraStop()", true);
-      log("hera.cloud.recorded", { ms: out?.ms || 0, bytes: out?.bytes || 0 });
+      log("hera.cloud.recorded", { ms: out?.ms || 0, bytes: out?.bytes || 0, streamed: Boolean(out?.streamed), streamChars: (out?.streamText || "").length });
       return out || { error: "no audio" };
     } catch (error) {
       return { error: String(error?.message || error) };

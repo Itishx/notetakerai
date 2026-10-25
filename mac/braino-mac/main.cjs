@@ -243,6 +243,26 @@ function hera() {
   });
   return heraInstance;
 }
+/* A short-lived key for the realtime transcriber (dictation session: gpt-live-
+   transcribe, English and Hindi), so words are transcribed while you speak.
+   Fetched in the background; on failure the recording is transcribed whole. */
+async function heraStreamSecret() {
+  try {
+    const token = await getBrainoAuthToken().catch(() => "");
+    if (!token) return "";
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "x-braino-realtime-purpose": "dictation" },
+      body: JSON.stringify({ action: "client_secret", purpose: "dictation" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.clientSecret) { logMac("hera.stream.secret_failed", { status: res.status, error: String(data?.error || "").slice(0, 120) }); return ""; }
+    return String(data.clientSecret);
+  } catch (error) {
+    logMac("hera.stream.secret_failed", { error: String(error?.message || error) });
+    return "";
+  }
+}
 function heraCloudEnabled() {
   return String((typeof ENV === "object" && ENV?.BRAINO_HERA_CLOUD) || process.env.BRAINO_HERA_CLOUD || "1").trim() !== "0";
 }
@@ -2992,7 +3012,7 @@ async function startLocalDictation() {
      (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
      every word said in that time was lost, the "eaten words". */
   const useCloud = !liveTranscriptMode && heraCloudEnabled();
-  const captureP = useCloud ? hera().start() : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
+  const captureP = useCloud ? hera().start({ secret: heraStreamSecret() }) : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
   const [started, capture] = await Promise.all([
     startDictationSkill().finally(() => { localDictationStarting = false; }),
     captureP.catch((error) => ({ ok: false, error: String(error?.message || error) })),
@@ -3132,7 +3152,10 @@ async function finishCloudDictation(reason) {
     return;
   }
   // No notch message: the island has already folded back into Braino.
-  const heard = await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
+  // Streamed while speaking: only the last stretch was left, so it is ready now.
+  const heard = audio.streamed && audio.streamText
+    ? { ok: true, transcript: audio.streamText, streamed: true }
+    : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   const transcribedMs = Date.now() - started;
   if (!heard.ok || !heard.transcript) {
     heraLog(`STOPPED — the cloud heard nothing (${heard.error || "empty"})`, { reason, recordedMs: audio.ms });
@@ -3145,7 +3168,7 @@ async function finishCloudDictation(reason) {
   const prepared = cloud?.refined && cloud.text ? cloud.text : "";
   localDictationActive = false;
   const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
-  logMac("hera.cloud.done", { recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
+  logMac("hera.cloud.done", { streamed: Boolean(heard.streamed), recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
   lastDictationEndedAt = Date.now();
