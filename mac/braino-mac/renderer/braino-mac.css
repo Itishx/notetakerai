@@ -6948,7 +6948,7 @@ body.aos-notch #status-pill { opacity: 0 !important; visibility: hidden !importa
 #walker.hera-morph { opacity: 0 !important; pointer-events: none; }
 #hera-island {
   position: fixed; z-index: 59; left: var(--hi-x, 50%); top: var(--hi-y, 80%);
-  width: 28px; height: 104px; border-radius: 14px; background: #d9645b;
+  width: 22px; height: 82px; border-radius: 11px; background: #d9645b; overflow: hidden;
   transform: translate(-50%, -50%); opacity: 0; pointer-events: none;
   display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 4px 0;
   box-shadow: 0 10px 24px rgba(217,100,91,.32), inset 0 0 0 1px rgba(255,255,255,.16);
@@ -6957,11 +6957,15 @@ body.aos-notch #status-pill { opacity: 0 !important; visibility: hidden !importa
 #hera-island.from { width: var(--hi-w0, 64px); height: var(--hi-h0, 78px); border-radius: 44% 44% 40% 40%; padding: 0; }
 #hera-island.on { opacity: 1; pointer-events: auto; }
 #hera-island .hi-pulse { display: none; }
-#hera-island .hi-x, #hera-island .hi-ok { display: flex; flex: none; width: 20px; height: 20px; border: 0; border-radius: 50%; padding: 0; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; cursor: pointer; transition: opacity .2s ease; }
+#hera-island .hi-x, #hera-island .hi-ok { display: flex; flex: none; width: 16px; height: 16px; border: 0; border-radius: 50%; padding: 0; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; cursor: pointer; transition: opacity .2s ease; }
 #hera-island .hi-x { background: rgba(0,0,0,.26); color: #fff; }
 #hera-island .hi-ok { background: #fff; color: #d9645b; }
-#hera-island .hi-dots { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-#hera-island .hi-dots i { display: block; width: 3px; height: 3px; border-radius: 2px; background: #fff; transform: scaleX(var(--d, 1)); transition: transform .06s linear; }
+#hera-island .hi-dots { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+#hera-island .hi-dots i { display: block; width: 3px; height: 3px; border-radius: 2px; background: #fff; transform: scaleX(var(--d, 1)); transition: transform .04s linear; box-shadow: 0 0 4px rgba(255,255,255,.7); }
+/* Shimmer: a soft light band sweeps down the pill while it listens. */
+#hera-island::after { content: ""; position: absolute; inset: -40% 0; background: linear-gradient(180deg, transparent 35%, rgba(255,255,255,.28) 50%, transparent 65%); animation: hiShimmer 1.6s linear infinite; pointer-events: none; }
+#hera-island.from::after { display: none; }
+@keyframes hiShimmer { from { transform: translateY(-60%); } to { transform: translateY(60%); } }
 #hera-island.from .hi-x, #hera-island.from .hi-ok, #hera-island.from .hi-dots { opacity: 0; }
 #hera-island.thinking .hi-dots i { animation: hiThink .9s ease-in-out infinite; }
 #hera-island.thinking .hi-dots i:nth-child(2n) { animation-delay: .15s; }

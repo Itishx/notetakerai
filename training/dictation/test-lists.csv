@@ -1,0 +1,130 @@
+id,category,input,output
+9000,lists_bullet,todays to do list book the cab send the invoice review the pull request and call Mom,"Today's to-do list:
+- Book the cab
+- Send the invoice
+- Review the pull request
+- Call Mom"
+9001,lists_inline,i had eggs and green tea for breakfast,I had eggs and green tea for breakfast.
+9002,lists_inline,can you pick up milk and rice on your way home,Can you pick up milk and rice on your way home?
+9003,lists_inline,i had eggs and oats for breakfast,I had eggs and oats for breakfast.
+9004,lists_bullet,okay so grocery list chocolate spinach and paneer,"Grocery list:
+- Chocolate
+- Spinach
+- Paneer"
+9005,lists_bullet,grocery list rice oats green tea butter mango,"Grocery list:
+- Rice
+- Oats
+- Green tea
+- Butter
+- Mango"
+9006,lists_inline,i had oats and bread for breakfast,I had oats and bread for breakfast.
+9007,lists_bullet,todays to do list fix the login bug pay the electricity bill update the deck,"Today's to-do list:
+- Fix the login bug
+- Pay the electricity bill
+- Update the deck"
+9008,lists_bullet,my shopping list is curd chocolate butter atta oats eggs,"My shopping list:
+- Curd
+- Chocolate
+- Butter
+- Atta
+- Oats
+- Eggs"
+9009,lists_numbered,here's the plan for tomorrow first update the deck then fix the login bug then review the pull request and finally book the cab,"Here's the plan for tomorrow:
+1. Update the deck
+2. Fix the login bug
+3. Review the pull request
+4. Book the cab"
+9010,lists_inline,tell neha to get bananas curd and peanut butter,"Tell Neha to get bananas, curd, and peanut butter."
+9011,lists_numbered,to set it up first pay the electricity bill then post on LinkedIn then review the pull request and finally reply to Neha,"To set it up:
+1. Pay the electricity bill
+2. Post on LinkedIn
+3. Review the pull request
+4. Reply to Neha"
+9012,lists_bullet,okay so i need to buy these things green tea tomatoes spinach and eggs,"I need to buy these things:
+- Green tea
+- Tomatoes
+- Spinach
+- Eggs"
+9013,lists_inline,we're out of dal and butter,We're out of dal and butter.
+9014,lists_numbered,the process is first pay the electricity bill then update the deck and finally clean the inbox,"The process:
+1. Pay the electricity bill
+2. Update the deck
+3. Clean the inbox"
+9015,lists_bullet,i have to go to the grocery store to get the following things bananas curd oats spinach and onions,"I have to go to the grocery store to get the following things:
+- Bananas
+- Curd
+- Oats
+- Spinach
+- Onions"
+9016,lists_numbered,the steps are first reply to Neha second clean the inbox third send the invoice third fix the login bug third call Mom,"The steps are:
+1. Reply to Neha
+2. Clean the inbox
+3. Send the invoice
+4. Fix the login bug
+5. Call Mom"
+9017,lists_bullet,my shopping list is tomatoes strawberries and bananas,"My shopping list:
+- Tomatoes
+- Strawberries
+- Bananas"
+9018,lists_bullet,here's what we need for the party coffee milk paneer oats butter and eggs,"Here's what we need for the party:
+- Coffee
+- Milk
+- Paneer
+- Oats
+- Butter
+- Eggs"
+9019,lists_bullet,i need to buy these things green tea milk tomatoes atta,"I need to buy these things:
+- Green tea
+- Milk
+- Tomatoes
+- Atta"
+9020,lists_inline,tell rohan to get tomatoes peanut butter and onions,"Tell Rohan to get tomatoes, peanut butter, and onions."
+9021,lists_numbered,the steps are first book the cab second fix the login bug third send the invoice third pay the electricity bill third review the pull request,"The steps are:
+1. Book the cab
+2. Fix the login bug
+3. Send the invoice
+4. Pay the electricity bill
+5. Review the pull request"
+9022,lists_inline,tell riya to get onions green tea and bananas,"Tell Riya to get onions, green tea, and bananas."
+9023,lists_inline,we're out of butter and green tea,We're out of butter and green tea.
+9024,lists_bullet,here's what we need for the party spinach bread onions,"Here's what we need for the party:
+- Spinach
+- Bread
+- Onions"
+9025,lists_bullet,okay so grocery list strawberries eggs milk rice,"Grocery list:
+- Strawberries
+- Eggs
+- Milk
+- Rice"
+9026,lists_inline,we're out of green tea milk and mango,"We're out of green tea, milk, and mango."
+9027,lists_numbered,my priorities today are one fix the login bug two pay the electricity bill three call Mom four review the pull request,"My priorities today:
+1. Fix the login bug
+2. Pay the electricity bill
+3. Call Mom
+4. Review the pull request"
+9028,lists_inline,can you pick up tomatoes eggs and atta on your way home,"Can you pick up tomatoes, eggs, and atta on your way home?"
+9029,lists_bullet,grocery list paneer bread curd mango spinach and eggs,"Grocery list:
+- Paneer
+- Bread
+- Curd
+- Mango
+- Spinach
+- Eggs"
+9030,lists_bullet,stuff i need from the market tomatoes onions curd dal and butter,"Stuff I need from the market:
+- Tomatoes
+- Onions
+- Curd
+- Dal
+- Butter"
+9031,lists_inline,can you pick up mango peanut butter and milk on your way home,"Can you pick up mango, peanut butter, and milk on your way home?"
+9032,lists_numbered,my priorities today are one book the cab two fix the login bug three post on LinkedIn,"My priorities today:
+1. Book the cab
+2. Fix the login bug
+3. Post on LinkedIn"
+9033,lists_bullet,my shopping list is atta dal strawberries and tomatoes,"My shopping list:
+- Atta
+- Dal
+- Strawberries
+- Tomatoes"
+9034,lists_inline,we're out of bread oats and tomatoes,"We're out of bread, oats, and tomatoes."
+9035,lists_inline,we're out of green tea and chocolate,We're out of green tea and chocolate.

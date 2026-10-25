@@ -16659,7 +16659,7 @@ function heraIslandPaint() {
   if (!heraIsland) return;
   heraIsland.style.setProperty("--hi-lv", heraLevel.toFixed(3));
   heraIsland.style.setProperty("--hi-lv-s", (1 + heraLevel * 0.9).toFixed(3));
-  const t = performance.now() / 120;
+  const t = performance.now() / 55; // faster wave
   heraDots.forEach((d, i) => {
     const wave = 0.5 + 0.5 * Math.sin(t + i * 1.1);
     // Up to ~6x wide (3px -> 18px) at full voice; centre dots move most.

@@ -51,10 +51,11 @@ SPOKEN PUNCTUATION (do exactly what was said, where it was said)
 - If they said "comma" in an odd place, still put the comma there. If they said "exclamation mark" after a question, use "!".
 - Letters: "hey neha comma new paragraph ... new paragraph cheers comma new line itish" -> "Hey Neha,\\n\\n...\\n\\nCheers,\\nItish".
 
-LISTS
-- "my to do list is one X two Y three Z" -> "My to-do list:\\n1. X\\n2. Y\\n3. Z" (items capitalised, no full stops).
-- "grocery list bullet A bullet B" -> "Grocery list:\\n- A\\n- B".
-- "i need to buy A B and C" -> "I need to buy A, B, and C." (Oxford comma, one line).
+LISTS (decide like a person typing would)
+- Numbered when there is an order: steps, a plan, priorities, "one two three", "first ... then ... finally". "the steps are first X then Y and finally Z" -> "The steps are:\\n1. X\\n2. Y\\n3. Z".
+- Bullets when they announce a list and then name 3 or more things: "the following things", "these things", "list", "things to pack", "don't forget to bring", "here's what we need". "i have to get the following things eggs mango and milk" -> "I have to get the following things:\\n- Eggs\\n- Mango\\n- Milk". Also "bullet A bullet B".
+- The intro line ends with ":", items are capitalised with no full stops, "and" before the last item is dropped.
+- Stays one sentence when it is 2 items, or 3 short items inside an ordinary sentence with no announcement: "can you pick up milk eggs and bread on your way home" -> "Can you pick up milk, eggs, and bread on your way home?" (Oxford comma).
 
 SENTENCES
 - Several thoughts run together become separate sentences: "the client loved the design can you send the link" -> "The client loved the design. Can you send the link?"
@@ -74,7 +75,7 @@ const FILLER = new Set(["um", "uh", "hmm", "like", "you", "know", "i", "mean", "
 const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
 /* The shape words matter more than the content words: "actually", "comma",
    "bullet", "percent", "dot" decide how a line is written. */
-const SHAPE = new Set(["actually", "scratch", "wait", "no", "sorry", "make", "comma", "period", "paragraph", "line", "question", "exclamation", "mark", "bullet", "list", "one", "two", "percent", "lakh", "crore", "thousand", "hundred", "dot", "at", "underscore", "am", "pm", "p", "m", "number", "whatsapp", "call", "email", "reach", "send", "budget", "price", "charge", "pay", "vendor", "buy", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "birthday", "ship", "submit", "meeting", "hackathon"]);
+const SHAPE = new Set(["actually", "scratch", "wait", "no", "sorry", "make", "comma", "period", "paragraph", "line", "question", "exclamation", "mark", "bullet", "list", "following", "things", "steps", "first", "then", "finally", "pack", "bring", "one", "two", "percent", "lakh", "crore", "thousand", "hundred", "dot", "at", "underscore", "am", "pm", "p", "m", "number", "whatsapp", "call", "email", "reach", "send", "budget", "price", "charge", "pay", "vendor", "buy", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "birthday", "ship", "submit", "meeting", "hackathon"]);
 const INDEX = (EXAMPLES as Example[]).map((e) => ({ e, w: new Set(words(e.i)) }));
 
 function nearest(transcript: string, k = 8): Example[] {

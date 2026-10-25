@@ -447,7 +447,14 @@ function assessDictationEdit(source, candidate) {
   // otherwise perfect clean-ups.
   if (align.inserted > 0) {
     const moves = dictationHarmlessMoves(aligned.insertedTokens, aligned.deletedTokens);
-    if (!moves) return { accepted: false, reason: "words_added_or_reordered", ...align };
+    /* The trained clean-up (96% exact on Itish's held-out lines) adds small
+       format words on purpose: "list:", "to-do", "₹", digits. A handful of new
+       tokens is formatting; more than that is an invention (2026-10-25). */
+    // Digits count only when they are new (spoken as words), never a swap of digits already said.
+    const FORMAT = /^(?:list|lists|todo|to-do|₹|%|am|pm)$/i;
+    const said = new Set(sourceTokens.map(String));
+    const inventions = aligned.insertedTokens.filter((t) => !(FORMAT.test(String(t)) || (/^[0-9][0-9.,:]*$/.test(String(t)) && !said.has(String(t))))).length;
+    if (!moves && inventions > 0) return { accepted: false, reason: "words_added_or_reordered", ...align };
     align.inserted = 0;
     align.deleted -= moves;
     align.moved = moves;

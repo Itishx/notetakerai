@@ -15,7 +15,7 @@ function parse(csv) {
   if (cell || row.length) { row.push(cell); out.push(row); }
   const [h, ...rs] = out; return rs.filter((r) => r.length >= 4).map((r) => Object.fromEntries(h.map((k, i) => [k, r[i]])));
 }
-const rows = parse(fs.readFileSync("test.csv", "utf8"));
+const rows = parse(fs.readFileSync(process.env.TEST || "test.csv", "utf8"));
 const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
 const loose = (s) => norm(s).toLowerCase().replace(/[.!?,]+$/, "");
 const results = []; let i = 0;
