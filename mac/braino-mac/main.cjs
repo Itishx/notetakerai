@@ -3122,6 +3122,7 @@ async function finishLocalDictation(reason) {
 async function finishCloudDictation(reason) {
   heraCloudActive = false;
   const started = Date.now();
+  dictationFocusPrefetch = runAxHelper(["focused"]).catch(() => null);
   sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "cloud" });
   const audio = await hera().stop();
   if (!audio?.audioBase64) {
@@ -4226,6 +4227,27 @@ function registerHotkeys() {
   return registered;
 }
 
+/* Native paste through the already-running key watcher: ~20ms instead of an
+   osascript per paste (~1s measured). null when the watcher cannot do it. */
+const nativePasteWaiters = [];
+function nativePaste(timeoutMs = 400) {
+  if (!swiftHotkey || swiftHotkey.killed || !swiftHotkey.stdin || swiftHotkey.stdin.destroyed) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (app) => { if (done) return; done = true; resolve(app); };
+    nativePasteWaiters.push(finish);
+    setTimeout(() => {
+      const i = nativePasteWaiters.indexOf(finish);
+      if (i >= 0) nativePasteWaiters.splice(i, 1);
+      finish(null);
+    }, timeoutMs);
+    try { swiftHotkey.stdin.write("paste\n"); } catch (_) { finish(null); }
+  });
+}
+/* The focused field, looked up the moment dictation stops, in parallel with
+   transcribing, so insertion does not wait for it afterwards. */
+let dictationFocusPrefetch = null;
+
 let heraHold = { on: false, at: 0, stopQueued: false };
 let heraDiscard = false;
 /* The orb's ✕ and ✓: cancel types nothing, done types what was said. */
@@ -4243,13 +4265,19 @@ function startSwiftHotkeyHelper() {
   const hotkeyBin = prebuiltHelper("BrainoControlTap");
   swiftHotkey = spawn(hotkeyBin || "xcrun", hotkeyBin ? [] : ["swift", HOTKEY_HELPER_PATH], {
     cwd: ROOT_DIR,
-    stdio: ["ignore", "pipe", "pipe"],
+    // stdin carries "paste" (native Cmd+V, 2026-10-25).
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
   swiftHotkey.stdout.on("data", (chunk) => {
     String(chunk || "").split(/\r?\n/).forEach((line) => {
       let trimmed = line.trim();
       if (!trimmed) return;
+      if (trimmed.startsWith("pasted\t") || trimmed === "pasted") {
+        const waiter = nativePasteWaiters.shift();
+        if (waiter) waiter(trimmed.split("\t")[1] || "");
+        return;
+      }
       if (trimmed === "double-control") {
         sendToRenderer("braino-mac:voice-toggle", { source: "double Control" });
         ensureDockWindowVisible("voice-hotkey");
@@ -10804,6 +10832,18 @@ function stopDictationSkill(reason = "stopped") {
 async function pasteDictationFallback(text, expectedApp = "") {
   const previousClipboard = clipboard.readText();
   clipboard.writeText(text);
+  // Fast path: a native Cmd+V from the key watcher.
+  {
+    const front = await nativePaste();
+    if (front !== null) {
+      if (expectedApp && front && front.toLowerCase() !== String(expectedApp).toLowerCase()) {
+        return { ok: false, targetApp: front, previousClipboard, error: `Focus moved from ${expectedApp} to ${front}.` };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 140));
+      if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
+      return { ok: true, targetApp: front || expectedApp, previousClipboard, native: true };
+    }
+  }
   try {
     const { stdout } = await execFileP("/usr/bin/osascript", [
       "-e",
@@ -11032,7 +11072,9 @@ async function insertDictationText(value, preparedValue = []) {
     turns: preparedSession.totalTurns,
     preparedTurns: preparedSession.acceptedTurns,
   });
-  const focus = await runAxHelper(["focused"]);
+  const prefetched = dictationFocusPrefetch;
+  dictationFocusPrefetch = null;
+  const focus = (prefetched && await prefetched) || await runAxHelper(["focused"]);
   logMac("dictation.insert.focus_ready", {
     status: focus.status,
     durationMs: Date.now() - insertionStartedAt,
@@ -11082,9 +11124,23 @@ async function insertDictationText(value, preparedValue = []) {
   });
   let ok = pasted.ok;
   let method = ok ? "paste" : "";
-  let verification = ok
-    ? await verifyDictationFieldChange(focusTarget, text)
-    : { verified: false, reason: "paste_command_failed" };
+  /* The words are on screen now; checking they landed no longer holds the
+     paste up (it cost ~0.6s). If the check later says they did not, the copy
+     box shows them so nothing is lost. */
+  if (ok) {
+    void verifyDictationFieldChange(focusTarget, text).then((v) => {
+      if (v && v.verified === false) {
+        logMac("dictation.insert.unverified_after", { reason: v.reason || "" });
+        keepDictationFallback(text, "unverified");
+      }
+    }).catch(() => {});
+    dictationState.insertions += 1;
+    dictationState.insertionMode = method;
+    recordUsage({ dictationInserts: 1, dictationChars: text.length });
+    logMac("dictation.inserted", { chars: text.length, method, status: focus.status, insertion: dictationState.insertions, native: Boolean(pasted.native), totalMs: Date.now() - insertionStartedAt });
+    return { ok: true, method, ...dictationStatePayload() };
+  }
+  let verification = { verified: false, reason: "paste_command_failed" };
   if (ok && verification.verified === false) {
     ok = false;
     method = "";

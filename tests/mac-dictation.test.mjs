@@ -71,8 +71,8 @@ test("prefetches the narrow formatter while speaking and never blocks insertion 
     new URL("../supabase/functions/voice/dictation-refine/index.ts", import.meta.url),
     "utf8",
   );
-  assert.match(edge, /You clean up dictated speech/);
-  assert.match(edge, /Add a word the speaker did not say/);
+  assert.match(edge, /You turn raw dictated speech into the exact text/);
+  assert.match(edge, /Add a word that was not said/);
   // Both engines are judged by the same clean-up contract, so dictation does
   // not silently behave differently depending on which one served the session.
   assert.match(main, /assessDictationEdit\(raw, candidate\)/);

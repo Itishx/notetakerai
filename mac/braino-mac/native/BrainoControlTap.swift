@@ -34,6 +34,7 @@ final class BrainoControlTap {
     requestAccessibilityPrompt()
     printLine("braino-hotkey-helper-ready")
     tryStartEventTap()
+    listenForCommands()
 
     Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
       guard let self, self.eventTap == nil else { return }
@@ -254,6 +255,37 @@ final class BrainoControlTap {
     } else {
       lastSpaceDown = 0
     }
+  }
+
+  /* Commands from Braino on stdin (2026-10-25). "paste" sends Cmd+V as a real
+     keyboard event, here, in a process that is already running and already
+     trusted: about 20ms, against ~1s for an osascript per paste. Replies
+     "pasted<TAB><front app>". */
+  private func listenForCommands() {
+    let thread = Thread {
+      while let line = readLine(strippingNewline: true) {
+        let cmd = line.trimmingCharacters(in: .whitespaces)
+        if cmd == "paste" {
+          DispatchQueue.main.async { [weak self] in self?.pasteNow() }
+        }
+      }
+    }
+    thread.name = "braino.tap.stdin"
+    thread.start()
+  }
+
+  private func pasteNow() {
+    let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+    let src = CGEventSource(stateID: .combinedSessionState)
+    let vKey: CGKeyCode = 9
+    let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)
+    let up = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: false)
+    // Only Command: whatever modifiers the user is still holding must not leak in.
+    down?.flags = .maskCommand
+    up?.flags = .maskCommand
+    down?.post(tap: .cghidEventTap)
+    up?.post(tap: .cghidEventTap)
+    printLine("pasted\t\(front)")
   }
 
   private func printLine(_ line: String) {
