@@ -118,7 +118,7 @@ serve(async (req) => {
     // against the UI's speaker and caption timelines.
     let clockCursorMs = meetingContext.segmentStartMs;
 
-    let providerUsed: { provider?: string; groqFailure?: string } = {};
+    let providerUsed: { provider?: string; groqFailure?: string; groqMs?: number } = {};
     for (let i = 0; i < segments.length; i++) {
       try {
         console.log(`Transcribing ${segments[i].role} stream ${i + 1}/${segments.length}...`);
@@ -143,7 +143,7 @@ serve(async (req) => {
           }
         }
         const transcript = result.text;
-        if ((result as any).provider) providerUsed = { provider: (result as any).provider, groqFailure: (result as any).groqFailure || "" };
+        if ((result as any).provider) providerUsed = { provider: (result as any).provider, groqFailure: (result as any).groqFailure || "", groqMs: (result as any).groqMs || 0 };
         if (transcript) {
           transcripts.push(transcript);
         }

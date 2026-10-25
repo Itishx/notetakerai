@@ -3178,7 +3178,8 @@ async function collectHeraPhases(audio) {
   if (audio.tail) jobs.push(transcribeHeraPhase(audio.tail));
   const results = (await Promise.all(jobs)).sort((a, b) => a.index - b.index);
   // Every phase must be back, in order, with no gap; otherwise the full recording is used.
-  const complete = results.length === audio.phases + (audio.tail ? 1 : 0) && results.every((r, i) => r.index === i && r.ok);
+  // phases counts every cut, the tail included.
+  const complete = results.length === audio.phases && results.every((r, i) => r.index === i && r.ok);
   const text = results.map((r) => r.text).filter(Boolean).join(" ").trim();
   logMac("hera.phases", { phases: audio.phases, results: results.length, complete, chars: text.length });
   return complete && text ? text : null;
@@ -3231,7 +3232,7 @@ async function finishCloudDictation(reason) {
   const pasteMs = Date.now() - pasteStart;
   try { fs.writeFileSync(path.join(app.getPath("userData"), "last-dictation.txt"), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${prepared || raw}\n`); } catch (_) {}
   // One readable line in the terminal per dictation: who transcribed, and where the time went.
-  console.log(`[HERA] ${(audio.ms / 1000).toFixed(1)}s spoken | text: ${heard.streamed ? "phases" : (heard.provider || "?")} ${transcribedMs}ms${heard.groqFailure ? ` (groq: ${heard.groqFailure})` : ""} | clean-up: ${quick ? "skipped" : `${cleanMs}ms`} | paste: ${pasteMs}ms | TOTAL ${Date.now() - started}ms`);
+  console.log(`[HERA] ${(audio.ms / 1000).toFixed(1)}s spoken | text: ${heard.streamed ? "phases" : (heard.provider || "?")} ${transcribedMs}ms${heard.groqMs ? ` (groq itself ${heard.groqMs}ms)` : ""}${heard.groqFailure ? ` (groq: ${heard.groqFailure})` : ""} | clean-up: ${quick ? "skipped" : `${cleanMs}ms`} | paste: ${pasteMs}ms | TOTAL ${Date.now() - started}ms`);
   logMac("hera.cloud.done", { provider: heard.provider || (heard.streamed ? "phases" : ""), groqFailure: heard.groqFailure || "", cleanMs, pasteMs, streamed: Boolean(heard.streamed), streamChars: (audio.streamText || "").length, recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
@@ -17237,7 +17238,7 @@ async function transcribeAudioCommand(payload = {}) {
     hasTranscript: Boolean(transcript),
   });
   return transcript
-    ? { ok: true, transcript, provider: data?.provider || "", groqFailure: data?.groqFailure || "" }
+    ? { ok: true, transcript, provider: data?.provider || "", groqFailure: data?.groqFailure || "", groqMs: data?.groqMs || 0 }
     : { ok: false, error: "The audio was recorded, but no speech was detected." };
 }
 

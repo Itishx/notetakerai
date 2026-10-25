@@ -22,6 +22,8 @@ const corsHeaders = {
 };
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = Deno.env.get("DICTATION_GROQ_MODEL") || "openai/gpt-oss-120b"; // Llama 3.3 was retired on Groq
 const DICTATION_REFINEMENT_MODEL = Deno.env.get("DICTATION_REFINEMENT_MODEL") || "gpt-4.1-mini";
 const MAX_TRANSCRIPT_CHARS = 20000;
 
@@ -133,11 +135,27 @@ serve(async (req) => {
     messages.push({ role: "user", content: transcript });
 
     const startedAt = Date.now();
-    const response = await fetch(OPENAI_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, temperature: 0, response_format: { type: "json_object" }, messages }),
-    });
+    /* Groq first (gpt-oss-120b at low reasoning, fast vs ~1.3 s), approved by Itish on his own
+       long dictations 2026-10-25; OpenAI is the fallback on any failure. */
+    const groqKey = Deno.env.get("GROQ_API_KEY");
+    const useGroq = Boolean(groqKey) && body?.provider !== "openai";
+    let response = useGroq
+      ? await fetch(GROQ_ENDPOINT, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: GROQ_MODEL, temperature: 0, response_format: { type: "json_object" }, messages, ...(GROQ_MODEL.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
+        }).catch(() => null)
+      : null;
+    let provider = "groq";
+    if (!response || !response.ok) {
+      if (response) console.error("groq refine failed", response.status);
+      provider = "openai";
+      response = await fetch(OPENAI_ENDPOINT, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, temperature: 0, response_format: { type: "json_object" }, messages }),
+      });
+    }
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -154,7 +172,8 @@ serve(async (req) => {
     return json({
       formatted,
       changed: formatted !== transcript,
-      model,
+      model: provider === "groq" ? GROQ_MODEL : model,
+      provider,
       mode,
       shots: shots.length,
       cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0,
