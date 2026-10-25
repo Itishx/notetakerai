@@ -113,8 +113,8 @@ function startStream() {
     noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : noiseFloor * 0.998 + rms * 0.002;
     const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.006, noiseFloor * 2.5);
     if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
-    // Whole sentences only: a cut mid-thought loses the context the transcriber needs.
-    else { silentMs += ms; if (spokeSinceCommit && speechMs > 1500 && silentMs > 900) commit(); }
+    // A phase closes only after ~5 s of talk (12-15 words) and a real pause: whole sentences, never 2-3 words.
+    else { silentMs += ms; if (spokeSinceCommit && speechMs > 5000 && silentMs > 900) commit(); }
   };
   srcNode.connect(proc); proc.connect(ctx.destination);
 }

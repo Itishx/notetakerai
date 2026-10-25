@@ -3168,12 +3168,15 @@ async function finishCloudDictation(reason) {
   // No notch message: the island has already folded back into Braino.
   // Streamed while speaking: only the last stretch was left, so it is ready now.
   // A stream that caught too little for the time spoken (dropped audio) is not trusted.
-  const streamOk = audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
+  /* Itish's rule (2026-10-25): short dictation (under ~12 s, a sentence or two) never uses live
+     text; the full recording is small, accurate and fast. Only longer talk is taken in phases. */
+  const longTalk = (audio.ms || 0) >= 12000;
+  const streamOk = longTalk && audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
   let heard = streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
     : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   // Neither side is trusted blindly: if the live text caught more words than the full upload, keep it.
-  if (!streamOk && audio.streamText && audio.streamText.length > String(heard.transcript || "").length * 1.2) heard = { ok: true, transcript: audio.streamText, streamed: true };
+  if (longTalk && !streamOk && audio.streamText && audio.streamText.length > String(heard.transcript || "").length * 1.2) heard = { ok: true, transcript: audio.streamText, streamed: true };
   const transcribedMs = Date.now() - started;
   if (!heard.ok || !heard.transcript) {
     heraLog(`STOPPED — the cloud heard nothing (${heard.error || "empty"})`, { reason, recordedMs: audio.ms });
