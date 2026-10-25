@@ -576,3 +576,11 @@ test("a chatty preamble is removed and harmless words may move", async () => {
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
   assert.match(main, /formatDictationTurn\(raw\)\s*\.then\(\(offered\) => stripFormatterChatter\(offered\)\)/);
 });
+
+test("the cloud recorder page script parses (a broken page silently drops to the on-device engine)", () => {
+  const src = readFileSync(new URL("../mac/braino-mac/hera.cjs", import.meta.url), "utf8");
+  const body = src.match(/const RECORDER_HTML = `([\s\S]*?)`;/)[1];
+  const html = new Function("return `" + body + "`")();
+  const js = html.replace(/^[\s\S]*?<script>/, "").replace(/<\/script>[\s\S]*$/, "");
+  assert.doesNotThrow(() => new Function(js));
+});
