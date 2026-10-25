@@ -484,6 +484,23 @@ export default function Affective() {
   const root = useReveal();
   const { theme, toggle } = useAffTheme();
   const [blink, setBlink] = useState(false);
+  /* The film pauses itself when it scrolls off screen or the tab is hidden
+     (on phones it kept playing out of sight), and picks up again when it
+     comes back into view, unless the viewer paused it (2026-10-26). */
+  const filmRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const v = filmRef.current;
+    if (!blink || !v) return;
+    let autoPaused = false;
+    const pause = () => { if (!v.paused) { v.pause(); autoPaused = true; } };
+    const resume = () => { if (autoPaused && v.paused && !v.ended) { autoPaused = false; v.play().catch(() => {}); } };
+    const io = new IntersectionObserver(([e]) => (e.isIntersecting && e.intersectionRatio >= 0.35 ? resume() : pause()), { threshold: [0, 0.35] });
+    io.observe(v);
+    const onVis = () => (document.hidden ? pause() : undefined);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", pause);
+    return () => { io.disconnect(); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", pause); v.pause(); };
+  }, [blink]);
   useDrift();
   usePan();
   useLitWords();
@@ -611,7 +628,7 @@ export default function Affective() {
               chores come back the moment it ends (2026-10-03). */}
           {blink ? (
             <div className="hb6-film">
-              <video src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+              <video ref={filmRef} src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
               <p className="aff-trivia aff-trivia-film" role="note"><span>Trivia</span>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p>
             </div>
           ) : (
