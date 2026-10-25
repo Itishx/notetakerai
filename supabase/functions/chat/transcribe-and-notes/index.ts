@@ -118,6 +118,7 @@ serve(async (req) => {
     // against the UI's speaker and caption timelines.
     let clockCursorMs = meetingContext.segmentStartMs;
 
+    let providerUsed: { provider?: string; groqFailure?: string } = {};
     for (let i = 0; i < segments.length; i++) {
       try {
         console.log(`Transcribing ${segments[i].role} stream ${i + 1}/${segments.length}...`);
@@ -142,6 +143,7 @@ serve(async (req) => {
           }
         }
         const transcript = result.text;
+        if ((result as any).provider) providerUsed = { provider: (result as any).provider, groqFailure: (result as any).groqFailure || "" };
         if (transcript) {
           transcripts.push(transcript);
         }
@@ -194,7 +196,7 @@ serve(async (req) => {
        the transcript; writing lecture notes on top of every one cost a second
        model call and several seconds nobody waited for on purpose. */
     if (body.transcriptOnly === true) {
-      return jsonResponse({ transcript: fullTranscript });
+      return jsonResponse({ transcript: fullTranscript, ...providerUsed });
     }
 
     console.log("Generating notes...");
@@ -440,6 +442,7 @@ async function transcribeSegment({
   /* Dictation goes to Groq first (Whisper large v3 turbo, ~0.3-0.5 s for a
      phase vs ~1-2 s) when its key is set; any failure falls through to OpenAI. */
   const groqKey = dictation ? Deno.env.get("GROQ_API_KEY") : "";
+  let groqFailure = dictation && !groqKey ? "no key" : "";
   if (groqKey) {
     try {
       const g = new FormData();
@@ -449,13 +452,14 @@ async function transcribeSegment({
       g.append("temperature", "0");
       if (language) g.append("language", language);
       if (vocabularyHint) g.append("prompt", vocabularyHint);
+      const groqStart = Date.now();
       const gr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${groqKey}` }, body: g });
       if (gr.ok) {
         const gd = await gr.json();
         const text = typeof gd.text === "string" ? gd.text.trim() : "";
-        if (text) return { text, entries: [] as TranscriptEntry[] };
-      } else console.error("groq transcription failed", gr.status);
-    } catch (error) { console.error("groq transcription error", error); }
+        if (text) return { text, entries: [] as TranscriptEntry[], provider: "groq", groqMs: Date.now() - groqStart };
+      } else { groqFailure = `status ${gr.status}`; console.error("groq transcription failed", gr.status, (await gr.text().catch(() => "")).slice(0, 200)); }
+    } catch (error) { groqFailure = String(error); console.error("groq transcription error", error); }
   }
   let transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -476,7 +480,7 @@ async function transcribeSegment({
 
   const transcribeData = await transcribeRes.json();
   const flatText = typeof transcribeData.text === "string" ? transcribeData.text.trim() : "";
-  if (mode !== "meeting") return { text: flatText, entries: [] as TranscriptEntry[] };
+  if (mode !== "meeting") return { text: flatText, entries: [] as TranscriptEntry[], provider: "openai", groqFailure };
 
   const entries = parseDiarizedEntries(transcribeData, clockOffsetMs);
   if (!entries.length) return { text: flatText, entries: [] as TranscriptEntry[] };

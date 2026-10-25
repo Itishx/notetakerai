@@ -3026,6 +3026,8 @@ async function startLocalDictation() {
      (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
      every word said in that time was lost, the "eaten words". */
   const useCloud = !liveTranscriptMode && heraCloudEnabled();
+  // Wake the transcriber while you talk (an OPTIONS call: no model, no cost), so release never pays a cold start.
+  if (useCloud) fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, { method: "OPTIONS" }).catch(() => {});
   const captureP = useCloud ? hera().start().then((r) => { if (r?.ok) startHeraPhases(); return r; }) : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
   const [started, capture] = await Promise.all([
     startDictationSkill().finally(() => { localDictationStarting = false; }),
@@ -3219,12 +3221,18 @@ async function finishCloudDictation(reason) {
   const raw = spokenNumbersToDigits(heard.transcript.trim());
   // Short plain lines skip the clean-up call (~1.2s): the transcriber already punctuates them.
   const quick = quickDictationTidy(raw);
+  const cleanStart = Date.now();
   const cloud = quick ? null : await refineDictationText(raw, { timeoutMs: 3000 }).catch(() => null);
+  const cleanMs = Date.now() - cleanStart;
   const prepared = quick || (cloud?.refined && cloud.text ? cloud.text : "");
   localDictationActive = false;
+  const pasteStart = Date.now();
   const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
+  const pasteMs = Date.now() - pasteStart;
   try { fs.writeFileSync(path.join(app.getPath("userData"), "last-dictation.txt"), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${prepared || raw}\n`); } catch (_) {}
-  logMac("hera.cloud.done", { streamed: Boolean(heard.streamed), streamChars: (audio.streamText || "").length, recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
+  // One readable line in the terminal per dictation: who transcribed, and where the time went.
+  console.log(`[HERA] ${(audio.ms / 1000).toFixed(1)}s spoken | text: ${heard.streamed ? "phases" : (heard.provider || "?")} ${transcribedMs}ms${heard.groqFailure ? ` (groq: ${heard.groqFailure})` : ""} | clean-up: ${quick ? "skipped" : `${cleanMs}ms`} | paste: ${pasteMs}ms | TOTAL ${Date.now() - started}ms`);
+  logMac("hera.cloud.done", { provider: heard.provider || (heard.streamed ? "phases" : ""), groqFailure: heard.groqFailure || "", cleanMs, pasteMs, streamed: Boolean(heard.streamed), streamChars: (audio.streamText || "").length, recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
   lastDictationEndedAt = Date.now();
@@ -17229,7 +17237,7 @@ async function transcribeAudioCommand(payload = {}) {
     hasTranscript: Boolean(transcript),
   });
   return transcript
-    ? { ok: true, transcript }
+    ? { ok: true, transcript, provider: data?.provider || "", groqFailure: data?.groqFailure || "" }
     : { ok: false, error: "The audio was recorded, but no speech was detected." };
 }
 
