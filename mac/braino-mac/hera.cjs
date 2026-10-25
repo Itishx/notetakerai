@@ -50,9 +50,10 @@ function coolMic() {
    it is transcribed while you keep talking. On release only the last stretch
    is left. The MediaRecorder keeps running as the backup. */
 let ws = null, wsReady = false, pending = [], proc = null, srcNode = null;
+let dropped = 0, failedItems = 0, errors = 0;
 let order = [], texts = {}, spokeSinceCommit = false, speechMs = 0, silentMs = 0, streamFailed = false;
 function b64(int16) { const u = new Uint8Array(int16.buffer); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
-function send(o) { if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 400) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); }
+function send(o) { if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 3000) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); else dropped++; }
 function commit() { if (!spokeSinceCommit) return; spokeSinceCommit = false; speechMs = 0; send({ type: "input_audio_buffer.commit" }); }
 /* Capture starts with the mic; the socket attaches when its key arrives,
    and everything said before that is sent first from the buffer. */
@@ -86,11 +87,17 @@ function connect(secret, attempt = 0) {
     }
     if (m.type === "input_audio_buffer.committed" && m.item_id && !order.includes(m.item_id)) order.push(m.item_id);
     else if (m.type === "conversation.item.input_audio_transcription.completed") { texts[m.item_id] = String(m.transcript || ""); if (!order.includes(m.item_id)) order.push(m.item_id); }
-    else if (m.type === "error") { console.log("hera-stream-error:" + String(m.error && m.error.message || "").slice(0, 160)); if (!order.length) streamFailed = true; }
+    else if (m.type === "conversation.item.input_audio_transcription.failed") { failedItems++; console.log("hera-stream-error:item failed " + String(m.error && m.error.message || "").slice(0, 120)); }
+    else if (m.type === "error") {
+      const msg = String(m.error && m.error.message || "");
+      // An empty commit after a pause is harmless; anything else makes the stream untrusted.
+      if (!/buffer too small|buffer is empty/i.test(msg)) errors++;
+      console.log("hera-stream-error:" + msg.slice(0, 160));
+    }
   };
 }
 function startStream() {
-  order = []; texts = {}; pending = []; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
+  order = []; texts = {}; pending = []; dropped = 0; failedItems = 0; errors = 0; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
   if (!ctx) { streamFailed = true; return; }
   srcNode = ctx.createMediaStreamSource(stream);
   proc = ctx.createScriptProcessor(2048, 1, 1);
@@ -116,17 +123,18 @@ async function finishStream() {
   if (!ws || streamFailed) { try { ws && ws.close(); } catch (_) {} ws = null; return null; }
   commit();
   // Wait for every committed stretch to come back, briefly.
-  const until = Date.now() + 2500;
+  const until = Date.now() + 4000;
   while (Date.now() < until) {
     const waiting = order.length === 0 ? (wsReady || pending.length) : order.some((id) => !(id in texts));
     if (!waiting) break;
     await new Promise((r) => setTimeout(r, 40));
   }
-  const done = order.length > 0 && order.every((id) => id in texts);
+  const done = order.length > 0 && order.every((id) => id in texts) && !dropped && !failedItems && !errors && !pending.length;
+  console.log("hera-stream-stat:" + JSON.stringify({ items: order.length, completed: order.filter((id) => id in texts).length, dropped, failedItems, errors, pending: pending.length }));
   const text = order.map((id) => texts[id] || "").join(" ").replace(/\\s+/g, " ").trim();
   try { ws.close(); } catch (_) {}
   ws = null;
-  return done ? text : (text || null);
+  return done && text ? text : null;
 }
 window.heraStart = async () => {
   chunks = [];
@@ -181,6 +189,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
       const msg = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
       if (typeof msg === "string" && msg.startsWith("hera-level:")) onLevel(Number(msg.slice(11)) || 0);
       else if (typeof msg === "string" && msg.startsWith("hera-stream-error:")) log("hera.stream.error", { message: msg.slice(18) });
+      else if (typeof msg === "string" && msg.startsWith("hera-stream-stat:")) { try { log("hera.stream.stat", JSON.parse(msg.slice(17))); } catch (_) {} }
     });
     /* From a real file, not a data: URL. Chromium hides navigator.mediaDevices
        on data: pages (not a secure context), so the recorder could never open
