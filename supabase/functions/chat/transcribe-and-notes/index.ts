@@ -437,6 +437,26 @@ async function transcribeSegment({
   // Telling it the guest list up front is what keeps Sowmya from arriving as "so my".
   if (vocabularyHint) form.append("prompt", vocabularyHint);
 
+  /* Dictation goes to Groq first (Whisper large v3 turbo, ~0.3-0.5 s for a
+     phase vs ~1-2 s) when its key is set; any failure falls through to OpenAI. */
+  const groqKey = dictation ? Deno.env.get("GROQ_API_KEY") : "";
+  if (groqKey) {
+    try {
+      const g = new FormData();
+      g.append("file", new Blob([decodeBase64(segment.audioBase64)], { type: segment.mimeType }), segment.fileName);
+      g.append("model", "whisper-large-v3-turbo");
+      g.append("response_format", "json");
+      g.append("temperature", "0");
+      if (language) g.append("language", language);
+      if (vocabularyHint) g.append("prompt", vocabularyHint);
+      const gr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${groqKey}` }, body: g });
+      if (gr.ok) {
+        const gd = await gr.json();
+        const text = typeof gd.text === "string" ? gd.text.trim() : "";
+        if (text) return { text, entries: [] as TranscriptEntry[] };
+      } else console.error("groq transcription failed", gr.status);
+    } catch (error) { console.error("groq transcription error", error); }
+  }
   let transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: {
