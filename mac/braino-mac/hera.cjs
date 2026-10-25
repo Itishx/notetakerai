@@ -50,7 +50,7 @@ function coolMic() {
    it is transcribed while you keep talking. On release only the last stretch
    is left. The MediaRecorder keeps running as the backup. */
 let ws = null, wsReady = false, pending = [], proc = null, srcNode = null;
-let dropped = 0, failedItems = 0, errors = 0;
+let dropped = 0, failedItems = 0, errors = 0, noiseFloor = 0.01;
 let order = [], texts = {}, spokeSinceCommit = false, speechMs = 0, silentMs = 0, streamFailed = false;
 function b64(int16) { const u = new Uint8Array(int16.buffer); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
 function send(o) { if (ws && wsReady) ws.send(JSON.stringify(o)); else if (o.type === "input_audio_buffer.append" && pending.length < 3000) pending.push(o); else if (o.type === "input_audio_buffer.commit") pending.push(o); else dropped++; }
@@ -108,9 +108,12 @@ function startStream() {
     let sum = 0;
     for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, f[Math.floor(i * ratio)])); out[i] = v < 0 ? v * 0x8000 : v * 0x7fff; sum += v * v; }
     send({ type: "input_audio_buffer.append", audio: b64(out) });
-    const ms = f.length / ctx.sampleRate * 1000, loud = Math.sqrt(sum / Math.max(1, n)) > 0.012;
+    // The raw mic has room noise, so "quiet" is measured against this room's own floor.
+    const rms = Math.sqrt(sum / Math.max(1, n));
+    noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : noiseFloor * 0.998 + rms * 0.002;
+    const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.006, noiseFloor * 2.5);
     if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
-    else { silentMs += ms; if (spokeSinceCommit && speechMs > 400 && silentMs > 550) commit(); }
+    else { silentMs += ms; if (spokeSinceCommit && speechMs > 400 && silentMs > 400) commit(); }
   };
   srcNode.connect(proc); proc.connect(ctx.destination);
 }

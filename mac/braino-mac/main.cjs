@@ -246,6 +246,20 @@ function hera() {
 /* A short-lived key for the realtime transcriber (dictation session: gpt-live-
    transcribe, English and Hindi), so words are transcribed while you speak.
    Fetched in the background; on failure the recording is transcribed whole. */
+/* A short plain sentence needs no model: no numbers, lists, corrections,
+   spoken punctuation, emails or fillers. Returns the tidied line, or "" to
+   send it to the clean-up model. */
+const DICTATION_NEEDS_MODEL = /\b(?:um+|uh+|er|hmm+|like|you know|i mean|actually|wait|no|scratch|sorry|or|comma|period|full stop|question mark|exclamation|new line|new paragraph|bullet|list|following|first|then|finally|steps?|percent|dot|at|underscore|rupees?|lakh|crore|thousand|hundred|am|pm|so|okay)\b|\d|@|\b(\w+) \1\b/i;
+function quickDictationTidy(raw) {
+  const text = String(raw || "").trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  // Only when the transcriber already formatted it (capitalised, punctuated); a bare run-on goes to the model.
+  if (!text || words.length > 12 || DICTATION_NEEDS_MODEL.test(text) || !/^[A-Z]/.test(text) || !/[.?!,]/.test(text)) return "";
+  let out = text.replace(/\bi\b/g, "I").replace(/\bi'(m|ll|ve|d)\b/gi, (_m, x) => "I'" + x.toLowerCase());
+  out = out.charAt(0).toUpperCase() + out.slice(1);
+  if (!/[.?!]$/.test(out)) out += /^(?:can|could|would|will|is|are|do|does|did|what|why|how|where|when|who|which|shall|should)\b/i.test(out) ? "?" : ".";
+  return out;
+}
 async function heraStreamSecret() {
   try {
     const token = await getBrainoAuthToken().catch(() => "");
@@ -3166,8 +3180,10 @@ async function finishCloudDictation(reason) {
     return;
   }
   const raw = spokenNumbersToDigits(heard.transcript.trim());
-  const cloud = await refineDictationText(raw, { timeoutMs: 3000 }).catch(() => null);
-  const prepared = cloud?.refined && cloud.text ? cloud.text : "";
+  // Short plain lines skip the clean-up call (~1.2s): the transcriber already punctuates them.
+  const quick = quickDictationTidy(raw);
+  const cloud = quick ? null : await refineDictationText(raw, { timeoutMs: 3000 }).catch(() => null);
+  const prepared = quick || (cloud?.refined && cloud.text ? cloud.text : "");
   localDictationActive = false;
   const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
   try { fs.writeFileSync(path.join(app.getPath("userData"), "last-dictation.txt"), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${prepared || raw}\n`); } catch (_) {}
