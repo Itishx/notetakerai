@@ -1,0 +1,26 @@
+.mv-page {
+  --mv-bg: #fbf7f3;
+  --mv-ink: #0b0b0b;
+  --mv-mute: #6f6a64;
+  --mv-line: rgba(0, 0, 0, 0.08);
+  min-height: 100vh;
+  background: var(--mv-bg);
+  color: var(--mv-ink);
+  font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Inter", sans-serif;
+  padding: 0 16px 96px;
+}
+.mv-hero { min-height: 82vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; }
+.mv-mark { display: block; margin-bottom: 28px; animation: mvIn 1.1s cubic-bezier(.2, .8, .2, 1) both; }
+.mv-hero h1 { font-size: clamp(44px, 8vw, 76px); font-weight: 600; letter-spacing: -0.035em; margin: 0; animation: mvIn 1.1s .12s cubic-bezier(.2, .8, .2, 1) both; }
+.mv-sub { margin: 0; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mv-mute); animation: mvIn 1.1s .2s both; }
+.mv-line { max-width: 440px; margin: 18px 0 0; font-size: 17px; line-height: 1.5; color: var(--mv-mute); animation: mvIn 1.1s .28s both; }
+.mv-go { display: flex; gap: 10px; margin-top: 26px; flex-wrap: wrap; justify-content: center; animation: mvIn 1.1s .36s both; }
+.mv-btn { padding: 11px 20px; border-radius: 999px; background: var(--mv-ink); color: var(--mv-bg); font-size: 14px; font-weight: 500; text-decoration: none; }
+.mv-ghost { background: transparent; color: var(--mv-ink); box-shadow: inset 0 0 0 1px var(--mv-line); }
+.mv-points { list-style: none; margin: 0 auto; padding: 0; max-width: 980px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--mv-line); border-radius: 18px; overflow: hidden; }
+.mv-points li { background: var(--mv-bg); padding: 28px 26px; }
+.mv-points h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.mv-points p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--mv-mute); }
+@media (max-width: 760px) { .mv-points { grid-template-columns: 1fr; } }
+@keyframes mvIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mv-page * { animation: none !important; } }
