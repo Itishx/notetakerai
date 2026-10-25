@@ -3169,9 +3169,11 @@ async function finishCloudDictation(reason) {
   // Streamed while speaking: only the last stretch was left, so it is ready now.
   // A stream that caught too little for the time spoken (dropped audio) is not trusted.
   const streamOk = audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
-  const heard = streamOk
+  let heard = streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
     : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
+  // Neither side is trusted blindly: if the live text caught more words than the full upload, keep it.
+  if (!streamOk && audio.streamText && audio.streamText.length > String(heard.transcript || "").length * 1.2) heard = { ok: true, transcript: audio.streamText, streamed: true };
   const transcribedMs = Date.now() - started;
   if (!heard.ok || !heard.transcript) {
     heraLog(`STOPPED — the cloud heard nothing (${heard.error || "empty"})`, { reason, recordedMs: audio.ms });
@@ -11082,7 +11084,8 @@ function preparedDictationSession(value, preparedValue) {
     // Spoken layout commands must reach the deterministic normalizer as raw
     // words. Formatting "new line" into "New line." would destroy intent.
     if (!candidate || !normalizeDictationSession([raw]).trim()) return raw;
-    const assessment = assessDictationRefinement(raw, candidate);
+    // The edit gate (fillers, corrections, list layout allowed; inventions refused), not the old word-for-word one.
+    const assessment = assessDictationEdit(raw, candidate);
     if (!assessment.accepted) return raw;
     acceptedTurns += 1;
     return candidate;
