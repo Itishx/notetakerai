@@ -84,7 +84,8 @@ test("prefetches the narrow formatter while speaking and never blocks insertion 
     main.indexOf("function parseAxClickIntent"),
   );
   assert.doesNotMatch(insertion, /await refineDictationText/);
-  assert.match(insertion, /const focus = await runAxHelper/);
+  // The field lookup starts when dictation stops (prefetched) and is awaited here.
+  assert.match(insertion, /const focus = \(prefetched && await prefetched\) \|\| await runAxHelper\(\["focused"\]\)/);
   assert.match(main, /error\?\.name === "AbortError" \? "timeout"/);
   assert.match(main, /warmDictationRefinement\(\);/);
   assert.match(main, /timeoutMs: 10000, warmup: true/);
