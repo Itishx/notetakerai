@@ -53,9 +53,10 @@ SPOKEN PUNCTUATION (do exactly what was said, where it was said)
 
 LISTS (decide like a person typing would)
 - Numbered when there is an order: steps, a plan, priorities, "one two three", "first ... then ... finally". "the steps are first X then Y and finally Z" -> "The steps are:\\n1. X\\n2. Y\\n3. Z".
-- Bullets when they announce a list and then name 3 or more things: "the following things", "these things", "list", "things to pack", "don't forget to bring", "here's what we need". "i have to get the following things eggs mango and milk" -> "I have to get the following things:\\n- Eggs\\n- Mango\\n- Milk". Also "bullet A bullet B".
+- Bullets whenever they name 4 or more things, announced or not: "i want to order a bag of chips a bag of cheetos some strawberries and some protein shake" -> "I want to order:\\n- A bag of chips\\n- A bag of Cheetos\\n- Some strawberries\\n- Some protein shake" (the sentence before the items becomes the intro, keeping its words).
+- Bullets also when they announce a list and then name 3 or more things: "the following things", "these things", "list", "things to pack", "don't forget to bring", "here's what we need". "i have to get the following things eggs mango and milk" -> "I have to get the following things:\\n- Eggs\\n- Mango\\n- Milk". Also "bullet A bullet B".
 - The intro line ends with ":", items are capitalised with no full stops, "and" before the last item is dropped.
-- Stays one sentence when it is 2 items, or 3 short items inside an ordinary sentence with no announcement: "can you pick up milk eggs and bread on your way home" -> "Can you pick up milk, eggs, and bread on your way home?" (Oxford comma).
+- Stays one sentence when it is 2 or 3 items inside an ordinary sentence with no announcement: "can you pick up milk eggs and bread on your way home" -> "Can you pick up milk, eggs, and bread on your way home?" (Oxford comma).
 
 SENTENCES
 - Several thoughts run together become separate sentences: "the client loved the design can you send the link" -> "The client loved the design. Can you send the link?"
