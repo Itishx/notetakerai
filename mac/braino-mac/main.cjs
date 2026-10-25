@@ -3153,7 +3153,9 @@ async function finishCloudDictation(reason) {
   }
   // No notch message: the island has already folded back into Braino.
   // Streamed while speaking: only the last stretch was left, so it is ready now.
-  const heard = audio.streamed && audio.streamText
+  // A stream that caught too little for the time spoken (dropped audio) is not trusted.
+  const streamOk = audio.streamed && audio.streamText && audio.streamText.length >= Math.min(40, (audio.ms || 0) / 250);
+  const heard = streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
     : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
   const transcribedMs = Date.now() - started;

@@ -123,7 +123,7 @@ async function finishStream() {
     await new Promise((r) => setTimeout(r, 40));
   }
   const done = order.length > 0 && order.every((id) => id in texts);
-  const text = order.map((id) => texts[id] || "").join(" ").replace(/\s+/g, " ").trim();
+  const text = order.map((id) => texts[id] || "").join(" ").replace(/\\s+/g, " ").trim();
   try { ws.close(); } catch (_) {}
   ws = null;
   return done ? text : (text || null);
