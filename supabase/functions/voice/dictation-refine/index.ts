@@ -23,6 +23,7 @@ const corsHeaders = {
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_SPARE_MODEL = "openai/gpt-oss-20b";
 const GROQ_MODEL = Deno.env.get("DICTATION_GROQ_MODEL") || "openai/gpt-oss-120b"; // Llama 3.3 was retired on Groq
 const DICTATION_REFINEMENT_MODEL = Deno.env.get("DICTATION_REFINEMENT_MODEL") || "gpt-4.1-mini";
 const MAX_TRANSCRIPT_CHARS = 20000;
@@ -139,14 +140,30 @@ serve(async (req) => {
        long dictations 2026-10-25; OpenAI is the fallback on any failure. */
     const groqKey = Deno.env.get("GROQ_API_KEY");
     const useGroq = Boolean(groqKey) && body?.provider !== "openai";
-    let response = useGroq
-      ? await fetch(GROQ_ENDPOINT, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: GROQ_MODEL, temperature: 0, response_format: { type: "json_object" }, messages, ...(GROQ_MODEL.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
-        }).catch(() => null)
-      : null;
-    let provider = "groq";
+    /* Free-tier limits are per model, so when the first is at its limit the
+       second has its own allowance. Then Cerebras (if keyed), then OpenAI. */
+    const fast = (url: string, key: string, m: string) => fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: m, temperature: 0, response_format: { type: "json_object" }, messages, ...(m.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
+    }).catch(() => null);
+    let response: Response | null = null;
+    let usedModel = GROQ_MODEL;
+    if (useGroq) {
+      for (const m of [GROQ_MODEL, GROQ_SPARE_MODEL]) {
+        usedModel = m;
+        response = await fast(GROQ_ENDPOINT, groqKey!, m);
+        if (response?.ok) break;
+        if (response) console.error("groq refine failed", m, response.status);
+      }
+    }
+    const cerebrasKey = Deno.env.get("CEREBRAS_API_KEY");
+    if ((!response || !response.ok) && cerebrasKey && body?.provider !== "openai") {
+      usedModel = "cerebras:gpt-oss-120b";
+      response = await fast("https://api.cerebras.ai/v1/chat/completions", cerebrasKey, "gpt-oss-120b");
+      if (response && !response.ok) console.error("cerebras refine failed", response.status);
+    }
+    let provider = usedModel.startsWith("cerebras") ? "cerebras" : "groq";
     if (!response || !response.ok) {
       if (response) console.error("groq refine failed", response.status);
       provider = "openai";
@@ -172,7 +189,7 @@ serve(async (req) => {
     return json({
       formatted,
       changed: formatted !== transcript,
-      model: provider === "groq" ? GROQ_MODEL : model,
+      model: provider === "openai" ? model : usedModel,
       provider,
       mode,
       shots: shots.length,
