@@ -113,7 +113,7 @@ function startStream() {
     noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : noiseFloor * 0.998 + rms * 0.002;
     const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.006, noiseFloor * 2.5);
     if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
-    else { silentMs += ms; if (spokeSinceCommit && speechMs > 400 && silentMs > 400) commit(); }
+    else { silentMs += ms; if (spokeSinceCommit && speechMs > 1500 && silentMs > 900) commit(); // whole sentences only: a cut mid-thought loses the context the transcriber needs }
   };
   srcNode.connect(proc); proc.connect(ctx.destination);
 }
