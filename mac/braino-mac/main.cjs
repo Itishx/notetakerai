@@ -3154,7 +3154,7 @@ async function finishCloudDictation(reason) {
   // No notch message: the island has already folded back into Braino.
   // Streamed while speaking: only the last stretch was left, so it is ready now.
   // A stream that caught too little for the time spoken (dropped audio) is not trusted.
-  const streamOk = audio.streamed && audio.streamText && audio.streamText.length >= Math.min(40, (audio.ms || 0) / 250);
+  const streamOk = audio.streamed && audio.streamText && audio.streamText.length >= Math.max(12, (audio.ms || 0) / 120); // people say ~12-15 chars a second; far fewer means chunks were lost
   const heard = streamOk
     ? { ok: true, transcript: audio.streamText, streamed: true }
     : await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
@@ -3170,7 +3170,7 @@ async function finishCloudDictation(reason) {
   const prepared = cloud?.refined && cloud.text ? cloud.text : "";
   localDictationActive = false;
   const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
-  logMac("hera.cloud.done", { streamed: Boolean(heard.streamed), recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
+  logMac("hera.cloud.done", { streamed: Boolean(heard.streamed), streamChars: (audio.streamText || "").length, recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
   lastDictationEndedAt = Date.now();
