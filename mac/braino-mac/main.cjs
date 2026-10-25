@@ -3012,7 +3012,7 @@ async function startLocalDictation() {
      (2026-10-25). It used to wait for the field first: 2s+ in Cursor, and
      every word said in that time was lost, the "eaten words". */
   const useCloud = !liveTranscriptMode && heraCloudEnabled();
-  const captureP = useCloud ? hera().start({ secret: heraStreamSecret() }) : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
+  const captureP = useCloud ? hera().start() /* live streaming off: it dropped words (2026-10-25); full recording is the reliable path */ : Promise.resolve({ ok: parakeetSend("start"), parakeet: true });
   const [started, capture] = await Promise.all([
     startDictationSkill().finally(() => { localDictationStarting = false; }),
     captureP.catch((error) => ({ ok: false, error: String(error?.message || error) })),
@@ -3170,6 +3170,7 @@ async function finishCloudDictation(reason) {
   const prepared = cloud?.refined && cloud.text ? cloud.text : "";
   localDictationActive = false;
   const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
+  try { fs.writeFileSync(path.join(app.getPath("userData"), "last-dictation.txt"), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${prepared || raw}\n`); } catch (_) {}
   logMac("hera.cloud.done", { streamed: Boolean(heard.streamed), streamChars: (audio.streamText || "").length, recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
   heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
