@@ -102,7 +102,7 @@ const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%
 
 
 const PRICE_ROWS = [
-  { k: "Dictation in any app", free: "2,000 words a week", pro: "Unlimited" },
+  { k: "Dictation in any app", free: "Unlimited for your first 4 days, then 2,000 words a week", pro: "Unlimited" },
   { k: "Open and switch apps, tabs and websites", free: "✓", pro: "✓" },
   { k: "Send a message, with your yes", free: "10 a day", pro: "Unlimited" },
   { k: "Fill a form, with your yes", free: "3 a month", pro: "Unlimited" },
@@ -116,7 +116,7 @@ const PRICE_ROWS = [
    developer API (about ₹30 an audio hour), not a dictation app, so it isn't here. */
 const COMPARE = [
   { k: "Price for unlimited", maven: "$10 a month", wispr: "$15 a month ($12 yearly)", apple: "Free" },
-  { k: "Free plan", maven: "2,000 words a week", wispr: "2,000 words a week", apple: "Unlimited, basic" },
+  { k: "Free plan", maven: "Unlimited for 4 days, then 2,000 words a week", wispr: "2,000 words a week", apple: "Unlimited, basic" },
   { k: "Removes ums, adds punctuation", maven: "Yes", wispr: "Yes", apple: "Partly" },
   { k: "Writes ₹, lakh, crore and Indian phone numbers", maven: "Built for it", wispr: "General", apple: "No" },
   { k: "Does the next step (open, send, fill)", maven: "Yes, with your yes", wispr: "No", apple: "No" },
@@ -134,7 +134,7 @@ function PriceTabs() {
         <button type="button" role="tab" aria-selected={tab === "compare"} className={tab === "compare" ? "on" : ""} onClick={() => setTab("compare")}>Value for money</button>
       </div>
       <div className="mv-compare" data-ptab="compare" hidden>
-        <p className="mv-compare-lead">More for less: a third cheaper than Wispr Flow, the same free plan, and it does the next step for you.</p>
+        <p className="mv-compare-lead">More for less: a third cheaper than Wispr Flow, 4 unlimited days to start, and it does the next step for you.</p>
         <div className="mv-compare-scroll">
           <table className="mv-ctable">
             <thead><tr><th scope="col" /><th scope="col" className="is-us">Maven</th><th scope="col">Wispr Flow</th><th scope="col">Apple Dictation</th></tr></thead>
@@ -150,7 +150,7 @@ function PriceTabs() {
 }
 
 const PLANS = [
-  { name: "Free", price: "$0", per: "", line: "Dictation, plus Maven doing one thing at a time on your Mac.", gets: ["Dictation in any app, 2,000 words a week", "Open and switch apps, tabs and websites", "Write and send a message, with your yes, 10 a day", "Fill a form from your details, with your yes, 5 a day", "Remembers your names and basic details"], cta: "Download for Mac", pro: false },
+  { name: "Free", price: "$0", per: "", line: "Dictation, plus Maven doing one thing at a time on your Mac.", gets: ["Dictation in any app: unlimited for your first 4 days, then 2,000 words a week", "Open and switch apps, tabs and websites", "Write and send a message, with your yes, 10 a day", "Fill a form from your details, with your yes, 3 a month", "Remembers your names and basic details"], cta: "Download for Mac", pro: false },
   { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation, sending and form filling", "Acts on what's on your screen: “reply to this”", "Full memory: your lists, your details, your way of writing", "Hinglish, coming soon"], cta: "Get Pro", pro: true },
 ];
 
