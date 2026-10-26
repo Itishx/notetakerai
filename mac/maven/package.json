@@ -1,0 +1,17 @@
+{
+  "name": "maven",
+  "productName": "Maven",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Maven: a silent dictation buddy by Affective.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "build": {
+    "appId": "ai.affective.maven"
+  },
+  "devDependencies": {
+    "electron": "^37.4.0"
+  }
+}

@@ -25,6 +25,7 @@
     "deploy:preview": "vercel",
     "mac:dictate:build": "cd mac/braino-mac/native/BrainoDictate && swift build -c release",
     "mac:format:build": "cd mac/braino-mac/native/BrainoFormat && swiftc -O -o BrainoFormat main.swift",
+    "maven:dev": "cd mac/maven && electron .",
     "mac:dev": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-mac/main.cjs",
     "mac:fresh": "node scripts/mac-fresh-start.mjs",
     "mac:package": "node scripts/mac-package.mjs",
