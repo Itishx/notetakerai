@@ -28,7 +28,32 @@ function paintWave() {
   });
   face.style.setProperty("--lv", level.toFixed(3));
 }
-function loop() { paint(); paintWave(); anim = island.classList.contains("listening") ? requestAnimationFrame(loop) : 0; }
+/* Edge light: a point with a fading tail travels round the capsule's outline. */
+const edge = island.querySelector(".edge");
+const ectx = edge.getContext("2d");
+let edgeT = 0;
+function paintEdge() {
+  const W = 58, H = 30, r = H / 2, L = W - H, per = 2 * L + Math.PI * H, k = 2; // canvas is 2x the 100x60 box
+  edgeT += 0.004 + level * 0.022;
+  const cx = 50, cy = 30;
+  const at = (d) => {
+    d = ((d % per) + per) % per;
+    if (d < L) return [cx - L / 2 + d, cy - r]; d -= L;
+    if (d < Math.PI * r) { const a = -Math.PI / 2 + d / r; return [cx + L / 2 + Math.cos(a) * r, cy + Math.sin(a) * r]; } d -= Math.PI * r;
+    if (d < L) return [cx + L / 2 - d, cy + r]; d -= L;
+    const a = Math.PI / 2 + d / r; return [cx - L / 2 + Math.cos(a) * r, cy + Math.sin(a) * r];
+  };
+  ectx.setTransform(k, 0, 0, k, 0, 0);
+  ectx.clearRect(0, 0, 100, 60);
+  ectx.shadowColor = "rgba(255,190,150,1)"; ectx.shadowBlur = 8;
+  const head = (edgeT % 1) * per;
+  for (let i = 0; i < 26; i++) {
+    const [x, y] = at(head - i * 2);
+    ectx.fillStyle = `rgba(255,236,220,${(1 - i / 26) * (0.6 + 0.4 * level)})`;
+    ectx.beginPath(); ectx.arc(x, y, 1.6 - i * 0.04, 0, Math.PI * 2); ectx.fill();
+  }
+}
+function loop() { paint(); paintWave(); paintEdge(); anim = island.classList.contains("listening") ? requestAnimationFrame(loop) : 0; }
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
 function scheduleBlink() {
