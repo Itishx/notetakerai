@@ -137,7 +137,7 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 
 **Rules:**
 - You can see, edit and delete every memory in Settings.
-- Memory lives in your account. Audio is never kept.
+- History and memory live on your Mac for now (in your account once accounts exist). Audio is never kept.
 - Free: names and basic details. Pro: everything.
 
 ---
