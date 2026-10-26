@@ -14,7 +14,21 @@ function paint() {
     d.style.setProperty("--d", (1 + level * 2.6 * wave).toFixed(2));
   });
 }
-function loop() { paint(); anim = island.classList.contains("listening") ? requestAnimationFrame(loop) : 0; }
+/* The waveform: taller in the middle, moving with your voice, never flat. */
+const bars = [...island.querySelectorAll(".wave b")];
+const face = island.querySelector(".face");
+function paintWave() {
+  const t = performance.now() / 90;
+  const n = bars.length, mid = (n - 1) / 2;
+  bars.forEach((b, i) => {
+    const centre = 1 - Math.abs(i - mid) / (mid + 1);
+    const wobble = 0.55 + 0.45 * Math.sin(t + i * 0.9) * Math.cos(t * 0.7 - i * 0.5);
+    const h = 3 + (2 + level * 15) * centre * wobble + level * 3;
+    b.style.setProperty("--h", Math.max(3, Math.min(20, h)).toFixed(1) + "px");
+  });
+  face.style.setProperty("--lv", level.toFixed(3));
+}
+function loop() { paint(); paintWave(); anim = island.classList.contains("listening") ? requestAnimationFrame(loop) : 0; }
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
 function scheduleBlink() {

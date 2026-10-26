@@ -40,3 +40,18 @@ body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemF
   opacity: 0; transition: opacity .15s ease; box-shadow: 0 0 0 .5px rgba(255,255,255,.15); }
 #note.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ── Listening, experimental (2026-10-26): the eyes melt into one glowing
+   waveform. The capsule stretches, the bars rise with your voice, and a warm
+   glow breathes around it as loud as you are. ── */
+.face { position: relative; }
+.wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 2.5px; opacity: 0; transform: scaleX(.4); transition: opacity .16s ease, transform .22s cubic-bezier(.34,1.3,.45,1); pointer-events: none; }
+.wave b { display: block; width: 2.5px; height: var(--h, 3px); border-radius: 2px;
+  background: linear-gradient(180deg, #fff 0%, #ffd9c2 55%, #ff9a7a 100%);
+  box-shadow: 0 0 6px rgba(255, 170, 130, .85), 0 0 12px rgba(255, 120, 100, .35); transition: height .05s linear; }
+#island.listening .eye { transform: scale(0); opacity: 0; }
+#island.listening .wave { opacity: 1; transform: scaleX(1); }
+#island.listening .face { width: 92px; box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 8px 20px rgba(0,0,0,.28), 0 0 calc(8px + 26px * var(--lv, 0)) rgba(255, 140, 110, calc(.18 + .5 * var(--lv, 0))); }
+#island.listening .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.10) 50%, transparent 70%); background-size: 250% 100%; animation: sheen 1.8s linear infinite; }
+@keyframes sheen { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+.eye { transition: height .14s ease, width .14s ease, border-radius .14s ease, background .14s ease, transform .16s ease, opacity .12s ease; }
