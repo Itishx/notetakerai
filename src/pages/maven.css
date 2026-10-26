@@ -205,11 +205,6 @@
 .mv-said-k { margin: 0 0 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
 .mv-said-raw { margin: 0; font-family: var(--a-display); font-size: 19px; line-height: 1.45; color: var(--a-ink-soft); }
 .mv-said-raw s { color: #c0392b; text-decoration-thickness: 1.5px; opacity: .8; }
-.mv-fixed { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.mv-fixed li { font-size: 13px; padding: 5px 11px; border-radius: 999px; background: var(--a-surface); border: 1px solid var(--a-line); color: var(--a-ink); opacity: 0; transform: translateY(4px); transition: opacity .3s ease, transform .3s ease; }
-.mv-fixed li::before { content: "\2713  "; color: #1f8a4c; }
-.mv-fixed.is-on li { opacity: 1; transform: none; }
-.mv-fixed.is-on li:nth-child(2) { transition-delay: .15s; } .mv-fixed.is-on li:nth-child(3) { transition-delay: .3s; }
 
 /* ── Round 6 ── */
 /* scenes: room above the number and heading */
@@ -268,21 +263,6 @@
 .mv-does-h { margin: 0; }
 .mv-does-h em { font-style: italic; color: var(--a-ink-soft); }
 .mv-does-head p { margin: 14px 0 0; color: var(--a-ink-soft); font-size: 18px; }
-.mv-switch { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: clamp(28px, 4vw, 60px); align-items: start; }
-.mv-switch-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--a-line); }
-.mv-switch-list li { border-bottom: 1px solid var(--a-line); }
-.mv-switch-list button { width: 100%; display: flex; align-items: baseline; gap: 14px; padding: 18px 0; background: none; border: 0; text-align: left; font: inherit; cursor: pointer; color: var(--a-ink-faint); transition: color .2s ease; }
-.mv-switch-list li.on button, .mv-switch-list button:hover { color: var(--a-ink); }
-.mv-switch-n { font-size: 13px; font-variant-numeric: tabular-nums; }
-.mv-switch-t { font-family: var(--a-display); font-size: clamp(20px, 2vw, 26px); letter-spacing: -.01em; }
-.mv-switch-more { position: relative; padding: 0 0 22px 32px; animation: mvLand .3s ease both; }
-.mv-switch-p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--a-ink-soft); }
-.mv-switch-more .mv-said { margin-top: 16px; }
-.mv-switch-bar { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: var(--a-ink); transform-origin: left; animation: mvBar 6.5s linear both; }
-@keyframes mvBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.mv-switch > .mv-mac { position: sticky; top: 100px; }
-@media (max-width: 860px) { .mv-switch { grid-template-columns: 1fr; } .mv-switch > .mv-mac { position: static; order: -1; } }
-
 /* ── Footer 3: Maven itself ── */
 .mv-foot3 { --a-ink: #f4f2ec; --a-bg: #0d0d0c; --a-ink-soft: rgba(244,242,236,.62); background: #0d0d0c; color: #f4f2ec; text-align: center; padding: clamp(80px, 10vw, 130px) var(--a-gutter) 30px; overflow: hidden; }
 .mv-foot3-face { display: flex; justify-content: center; }
@@ -331,8 +311,7 @@
   font-family: -apple-system, "SF Pro Text", BlinkMacSystemFont, "Helvetica Neue", "Inter", sans-serif;
 }
 .mv .aff-h1, .mv .mv-h2, .mv .mv-foot3-word, .mv .ao-title, .mv h1, .mv h2 { font-family: var(--a-display); font-weight: 600; letter-spacing: -0.03em; }
-.mv .mv-say, .mv .mv-said-raw, .mv .mv-switch-t, .mv .mv-what-line, .mv .mv-amt, .mv .mv-groups button b { font-family: var(--a-display); }
-.mv-foot3-word { font-weight: 600; }
+.mv .mv-say, .mv .mv-said-raw, .mv .mv-foot3-word { font-weight: 600; }
 
 /* Footer, merged (2026-10-26): the face draws in, then MAVEN spreads across. */
 .mv-foot3-face .mv-faceshow { margin-bottom: 0; }
@@ -375,37 +354,7 @@
 .mv-half-do b { padding: 4px 10px; border-radius: 999px; background: var(--a-ink); color: var(--a-bg); font-size: 12.5px; font-weight: 600; }
 @media (max-width: 700px) { .mv-halves { grid-template-columns: 1fr; } }
 
-/* Features: tabs, chips, one big window, the words under it */
-.mv-stage2 { max-width: 980px; margin: 0 auto; }
-.mv-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 22px; }
-.mv-chips button { position: relative; overflow: hidden; font: inherit; font-size: 14.5px; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--a-line); background: none; color: var(--a-ink-soft); cursor: pointer; }
-.mv-chips button.on { color: var(--a-ink); border-color: var(--a-ink); }
-.mv-chip-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--a-ink); transform-origin: left; animation: mvBar 6.5s linear both; }
-.mv-cap2 { max-width: 680px; margin: 26px auto 0; text-align: center; animation: mvLand .3s ease both; }
-.mv-cap2 .mv-said { text-align: center; }
-.mv-cap2 .mv-fixed { justify-content: center; }
-
-/* Beyond dictation: a track, not a table */
 .mv-beyond-head .mv-h2 { line-height: .98; }
-.mv-track { list-style: none; margin: 0; padding: 0; position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; }
-.mv-track::before { content: ""; position: absolute; left: 0; right: 0; top: 34px; height: 2px; background: linear-gradient(90deg, var(--a-line-strong) 0 28.5%, var(--a-ink) 28.5% 100%); }
-.mv-track li { position: relative; padding: 26px 10px 0 0; animation: mvLand .4s ease both; }
-.mv-track li i { position: relative; z-index: 1; display: block; width: 18px; height: 18px; border-radius: 50%; margin-bottom: 16px; background: var(--a-bg); border: 2px solid var(--a-line-strong); }
-.mv-track li.is-us i { background: var(--a-ink); border-color: var(--a-ink); }
-.mv-track li span { display: block; font-size: 15.5px; line-height: 1.35; color: var(--a-ink); font-weight: 500; }
-.mv-track li.is-both span { color: var(--a-ink-soft); font-weight: 400; }
-.mv-track li small { display: block; margin-top: 6px; font-size: 12px; color: var(--a-ink-faint); }
-.mv-track-stop { position: absolute; left: -14px; top: -8px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--a-line-strong); color: var(--a-ink-soft); background: var(--a-bg); }
-.mv-track li.is-us:nth-child(3)::after { content: ""; position: absolute; left: -12px; top: 18px; height: 34px; border-left: 2px dashed var(--a-line-strong); }
-@media (max-width: 860px) {
-  .mv-track { grid-template-columns: 1fr; }
-  .mv-track::before { left: 8px; right: auto; top: 0; bottom: 0; width: 2px; height: auto; background: linear-gradient(180deg, var(--a-line-strong) 0 28.5%, var(--a-ink) 28.5% 100%); }
-  .mv-track li { display: grid; grid-template-columns: 34px 1fr; padding: 10px 0; }
-  .mv-track li i { margin: 2px 0 0; }
-  .mv-track li span, .mv-track li small { grid-column: 2; }
-  .mv-track-stop { position: static; transform: none; grid-column: 2; justify-self: start; margin-bottom: 8px; }
-  .mv-track li.is-us:nth-child(3)::after { display: none; }
-}
 
 /* ── Round 9 (2026-10-26) ── */
 .mv .aff-hero { padding-top: clamp(14px, 2vw, 32px); }
@@ -414,5 +363,36 @@
 .mv-film-corner { position: absolute; top: 34px; right: clamp(14px, 2.4vw, 30px); z-index: 2; padding: 6px 8px; border-radius: 12px; background: rgba(255,255,255,.55); backdrop-filter: blur(14px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
 .mv-film-corner .mv-face { --s: .42; --a-ink: #0b0b0b; --a-bg: #fff; }
 .mv { --a-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
-.mv .aff-h1, .mv .mv-h2, .mv h1, .mv h2, .mv .mv-what-line, .mv .mv-switch-t, .mv .mv-amt, .mv .mv-pt-head em { font-family: var(--a-display); font-weight: 400; letter-spacing: -0.02em; }
-.mv-foot3 .mv-foot3-word { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 400; }
+.mv .aff-h1, .mv .mv-h2, .mv h1, .mv h2, .mv .mv-what-line, .mv .mv-foot3 .mv-foot3-word { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 400; }
+
+/* ── What it does: one scene at a time (2026-10-26) ── */
+.mv-one { max-width: 920px; margin: 0 auto; }
+.mv-one-cap { max-width: 620px; margin: clamp(36px, 5vw, 56px) auto 0; text-align: center; animation: mvLand .5s ease both; }
+.mv .mv-one-t { margin: 0; font-family: var(--a-display); font-weight: 400; font-size: clamp(28px, 3.4vw, 40px); line-height: 1.12; letter-spacing: -.02em; color: var(--a-ink); }
+.mv-one-p { margin: 16px 0 0; font-size: 17px; line-height: 1.6; color: var(--a-ink-soft); }
+.mv-one-said { margin: 22px 0 0; font-size: 15.5px; line-height: 1.55; color: var(--a-ink-faint); }
+.mv-one-said span { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.mv-one-said s { text-decoration-thickness: 1.5px; opacity: .6; }
+.mv-one-nav { display: flex; justify-content: center; align-items: center; gap: 18px; margin-top: 30px; }
+.mv-one-nav > button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--a-line); background: none; color: var(--a-ink-soft); font-size: 20px; line-height: 1; cursor: pointer; }
+.mv-one-nav > button:hover { color: var(--a-ink); border-color: var(--a-ink-soft); }
+.mv-one-dots { display: flex; gap: 8px; }
+.mv-one-dots button { width: 7px; height: 7px; padding: 0; border-radius: 50%; border: 0; background: var(--a-line); cursor: pointer; }
+.mv-one-dots button.on { background: var(--a-ink); }
+
+/* ── Beyond dictation: two plain lists ── */
+.mv-vs { display: grid; grid-template-columns: 1fr 1fr; max-width: 860px; border-top: 1px solid var(--a-line); }
+.mv-vs-col { padding: 28px 0 0; }
+.mv-vs-col.is-us { padding-left: clamp(24px, 4vw, 48px); border-left: 1px solid var(--a-line); }
+.mv-vs-col.is-them { padding-right: clamp(24px, 4vw, 48px); }
+.mv-vs-k { margin: 0 0 18px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
+.mv-vs-col.is-us .mv-vs-k { color: var(--a-ink); }
+.mv-vs ul { list-style: none; margin: 0; padding: 0; }
+.mv-vs li { padding: 9px 0; font-size: 17px; line-height: 1.45; color: var(--a-ink-soft); }
+.mv-vs-col.is-them li { color: var(--a-ink-faint); }
+.mv-vs li.is-more { color: var(--a-ink); font-weight: 500; }
+@media (max-width: 700px) {
+  .mv-vs { grid-template-columns: 1fr; }
+  .mv-vs-col.is-us { padding-left: 0; border-left: 0; border-top: 1px solid var(--a-line); margin-top: 28px; }
+  .mv-vs-col.is-them { padding-right: 0; }
+}
