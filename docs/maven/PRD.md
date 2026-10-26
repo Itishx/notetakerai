@@ -218,6 +218,7 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 - Reply to what's on screen
 - Learning your writing style from your edits
 - Hinglish
+- "Fix my English" writing setting (grammar fixed, meaning never changed), plus "Maven, fix my English" on selected text
 
 ### v2
 - A fine-tuned Maven model
