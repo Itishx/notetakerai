@@ -81,14 +81,14 @@ NEVER
    purpose (the project is at its edge-function cap). Fixed prompt first so it
    caches; only the command changes per call. */
 const INTENT_PROMPT = `You turn one spoken command into ONE action for a Mac assistant. Return one JSON object, nothing else:
-{"action": "open_app"|"open_url"|"switch_app"|"send_message"|"reply"|"fill"|"add_to_list"|"remember"|"none", "app"?: string, "url"?: string, "person"?: string, "message"?: string, "subject"?: string, "list"?: string, "item"?: string, "detail"?: "name"|"email"|"phone"|"address", "fact"?: string, "word"?: string, "reply3": string}
+{"action": "open_app"|"open_url"|"switch_app"|"send_message"|"reply"|"fill"|"add_to_list"|"remember"|"none", "app"?: string, "url"?: string, "person"?: string, "message"?: string, "subject"?: string, "list"?: string, "item"?: string, "detail"?: "name"|"email"|"phone"|"address", "fact"?: string, "word"?: string, "draft"?: boolean, "reply3": string}
 
 ACTIONS
 - open_app: "open Slack" -> {"action":"open_app","app":"Slack","reply3":"Slack. Open."}. Only real Mac apps.
 - switch_app: "go to WhatsApp", "switch to Chrome" -> {"action":"switch_app","app":"WhatsApp","reply3":"There."}.
 - open_url: a website or web app: "open YouTube" -> {"action":"open_url","app":"YouTube","url":"https://www.youtube.com","reply3":"YouTube. Open."}. Gmail, Notion, X, LinkedIn, GitHub and other sites are open_url. A full URL said aloud becomes url.
 - send_message: "tell Rahul the deck is done", "message Neha on WhatsApp that I'm late", "email Priya the invoice is sent" -> person, message, app ("WhatsApp" by default, "Mail" when they say email or mail), subject only for Mail (3 to 6 words). reply3 "Drafted. Send?".
-- reply: "reply to this, Friday works", "reply saying sounds good" -> {"action":"reply","message":"Friday works.","reply3":"Written. Send?"}.
+- reply: answering what is on screen. With the words given: "reply to this, Friday works", "reply saying sounds good" -> {"action":"reply","message":"Friday works.","reply3":"Written. Send?"}. Without the words (draft, write, craft or reply to "this" email, message, chat, mail): "please draft a reply to this email", "write a reply to this message", "reply to this chat" -> {"action":"reply","message":"","draft":true,"reply3":"Drafting."}. An instruction for the draft goes in message only when it is the actual words; otherwise put it in "subject" as the gist: "draft a reply saying no politely" -> {"action":"reply","message":"","draft":true,"subject":"say no politely","reply3":"Drafting."}. Drafting a reply IS one step, never "none".
 - fill: "fill in my address", "put my email here" -> {"action":"fill","detail":"address","reply3":"Filled. Your call."}.
 - add_to_list: "add milk to my grocery list" -> {"action":"add_to_list","list":"Grocery","item":"Milk","reply3":"Added."}. list is the list's name without the word "list", capitalised.
 - remember: "remember Riya is spelled R-I-Y-A" -> {"action":"remember","fact":"Riya is spelled Riya.","word":"Riya","reply3":"Got it."}. word only when the fact is how a name or word is written.
@@ -97,7 +97,7 @@ ACTIONS
 RULES
 - One step only. Never plan.
 - If unsure, action is "none".
-- Never invent a person, a number, an address or a URL path. person is exactly the name that was said ("Rahul", "my mom"), never a guess.
+- Never invent a person, a number, an address or a URL path. person is exactly the name that was said ("Rahul", "my mom"), never a guess. "send myself a message", "message me on WhatsApp" -> person "myself".
 - message is the words to send, cleaned like dictation: fillers and false starts removed, punctuation and capitals added, nothing added or reworded, written in first person as the speaker would type it ("tell Rahul I'll be late" -> "I'll be late.").
 - reply3 is at most 3 words. No em dashes.`;
 
@@ -127,11 +127,50 @@ async function intentFor(transcript: string, openaiKey: string | undefined) {
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* none below */ }
   const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "none"];
-  const intent: Record<string, string> = {};
+  const intent: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(parsed)) if (typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
+  if (parsed.draft === true || parsed.draft === "true") intent.draft = true;
+  if (intent.action === "reply" && intent.draft && !intent.message) intent.message = "";
   if (!ACTIONS.includes(intent.action)) intent.action = "none";
-  intent.reply3 = (intent.reply3 || (intent.action === "none" ? "Not my job." : "Done.")).split(/\s+/).slice(0, 3).join(" ");
+  intent.reply3 = (String(intent.reply3 || "") || (intent.action === "none" ? "Not my job." : "Done.")).split(/\s+/).slice(0, 3).join(" ");
   return { intent, provider, model, cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0 };
+}
+
+/* Maven "Do" reply drafting (2026-10-27): what is on screen + what the user
+   asked -> a short reply in their plain voice. Fixed prompt first so it caches. */
+const COMPOSE_PROMPT = `You draft a short reply for the user to the email or message shown in CONTEXT. Return one JSON object: {"formatted": "<reply>"}. No commentary, no Markdown.
+
+- Write as the user, in plain, direct, friendly words. Short: usually 1 to 4 sentences.
+- Follow INSTRUCTION if given (the gist or tone they want). If it is empty, write the natural, sensible reply.
+- Greeting: only a simple "Hi <first name>," when CONTEXT shows the sender's name; otherwise no greeting.
+- No sign-off name unless the user's name is clearly known from CONTEXT. No "Best regards" boilerplate.
+- Never invent facts, dates, times, numbers, prices, links or commitments. If the reply needs one the user did not give, write a placeholder in [brackets], like [date] or [price].
+- Reply in the language of the message. No em dashes.`;
+
+async function composeFor(context: string, instruction: string, openaiKey: string | undefined) {
+  const messages = [{ role: "system", content: COMPOSE_PROMPT }, { role: "user", content: `INSTRUCTION: ${instruction || "(none)"}\n\nCONTEXT:\n${context}` }];
+  const groqKey = Deno.env.get("GROQ_API_KEY");
+  const call = (url: string, key: string, m: string) => fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: m, temperature: 0.3, response_format: { type: "json_object" }, messages, ...(m.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
+  }).catch(() => null);
+  let response: Response | null = null, provider = "groq", model = GROQ_MODEL;
+  if (groqKey) {
+    response = await call(GROQ_ENDPOINT, groqKey, GROQ_MODEL);
+    if (response && !response.ok) console.error("groq compose failed", response.status);
+  }
+  if ((!response || !response.ok) && openaiKey) {
+    provider = "openai"; model = DICTATION_REFINEMENT_MODEL;
+    response = await call(OPENAI_ENDPOINT, openaiKey, model);
+  }
+  if (!response || !response.ok) return { error: "Compose request failed", status: response?.status || 503 };
+  const data = await response.json().catch(() => ({}));
+  let parsed: { formatted?: unknown } = {};
+  try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* empty below */ }
+  const formatted = typeof parsed.formatted === "string" ? parsed.formatted.replace(/\s*[—–]\s*/g, ", ").trim() : "";
+  if (!formatted) return { error: "Compose returned nothing", status: 502 };
+  return { formatted, provider, model, cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0 };
 }
 
 type Example = { c: string; i: string; o: string };
@@ -175,6 +214,15 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    if (body?.mode === "compose") {
+      const context = typeof body?.context === "string" ? body.context.trim().slice(0, 8000) : "";
+      const instruction = typeof body?.instruction === "string" ? body.instruction.trim().slice(0, 1000) : "";
+      if (!context) return json({ error: "No context provided" }, 400);
+      const t0 = Date.now();
+      const r = await composeFor(context, instruction, Deno.env.get("OPENAI_API_KEY"));
+      if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
+      return json({ ...r, durationMs: Date.now() - t0 });
+    }
     const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : "";
     if (!transcript) return json({ error: "No transcript provided" }, 400);
     if (transcript.length > MAX_TRANSCRIPT_CHARS) {

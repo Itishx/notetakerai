@@ -83,12 +83,15 @@ final class MavenKeys {
     }
   }
 
-  /* "paste" on stdin sends Cmd+V as a real keyboard event (~20ms). */
+  /* "paste" on stdin sends Cmd+V as a real keyboard event (~20ms); "copy" sends
+     Cmd+C (Do mode reading a selection) and answers "copied<TAB><front app>". */
   private func listenForCommands() {
     let thread = Thread {
       while let line = readLine(strippingNewline: true) {
         if line.trimmingCharacters(in: .whitespaces) == "paste" {
           DispatchQueue.main.async { [weak self] in self?.pasteNow() }
+        } else if line.trimmingCharacters(in: .whitespaces) == "copy" {
+          DispatchQueue.main.async { [weak self] in self?.copyNow() }
         }
       }
     }
@@ -108,6 +111,19 @@ final class MavenKeys {
     down?.post(tap: .cghidEventTap)
     up?.post(tap: .cghidEventTap)
     printLine("pasted\t\(front)")
+  }
+
+  private func copyNow() {
+    let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+    let src = CGEventSource(stateID: .combinedSessionState)
+    let cKey: CGKeyCode = 8
+    let down = CGEvent(keyboardEventSource: src, virtualKey: cKey, keyDown: true)
+    let up = CGEvent(keyboardEventSource: src, virtualKey: cKey, keyDown: false)
+    down?.flags = .maskCommand
+    up?.flags = .maskCommand
+    down?.post(tap: .cghidEventTap)
+    up?.post(tap: .cghidEventTap)
+    printLine("copied\t\(front)")
   }
 
   private func printLine(_ line: String) {

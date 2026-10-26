@@ -111,4 +111,54 @@ function mailto(to, subject, body) {
   return `mailto:${encodeURIComponent(to || "").replace(/%40/g, "@")}${q.length ? "?" + q.join("&") : ""}`;
 }
 
-module.exports = { findApp, openApp, siteFor, frontApp, activate, pressReturn, addToNote, emailFor, mailto, listApps };
+/* ---------- reading what's on screen (Do mode "draft a reply to this") ----------
+   Each returns { text, sender, app } or null. Read only; nothing is clicked. */
+const SEP = "\u241E"; // a separator no email contains
+async function readMail() {
+  const out = await osa(`
+tell application "Mail"
+  set s to selection
+  if (count of s) is 0 then return ""
+  set m to item 1 of s
+  set c to content of m
+  if (length of c) > 3000 then set c to text 1 thru 3000 of c
+  return (sender of m) & "${SEP}" & (subject of m) & "${SEP}" & c
+end tell`, 8000).catch(() => "");
+  const [sender, subject, body] = out.split(SEP);
+  if (!body || !body.trim()) return null;
+  return { app: "Mail", sender: (sender || "").trim(), text: `From: ${sender}\nSubject: ${subject}\n\n${body.trim()}` };
+}
+/* Chrome's active tab. Throws "javascript" when Allow JavaScript from Apple
+   Events is off, so the caller can fall back to copying the selection. */
+async function readChrome() {
+  let out;
+  try {
+    out = await osa(`tell application "Google Chrome" to tell active tab of front window to return (URL & "${SEP}" & title & "${SEP}" & (execute javascript "document.body ? document.body.innerText.slice(0, 6000) : ''"))`, 8000);
+  } catch (error) {
+    const msg = String(error?.message || error);
+    if (/javascript|Apple Events|-1723|AppleScript/i.test(msg)) { const e = new Error("javascript off"); e.code = "javascript"; throw e; }
+    return null;
+  }
+  const [url, title, body] = out.split(SEP);
+  if (!body || !body.trim()) return null;
+  const gmail = /mail\.google\.com/.test(url || "");
+  return { app: gmail ? "Gmail" : "Chrome", sender: "", text: `Page: ${title || url}\n\n${body.trim()}` };
+}
+/* Mail: the reply window is open when the front window's title starts "Re:". */
+async function mailReplyOpen() {
+  return /^re:/i.test(await osa('tell application "System Events" to tell application process "Mail" to return name of front window', 3000).catch(() => ""));
+}
+/* Opens Reply on the selected message (never sends). */
+async function mailStartReply() {
+  const r = await osa(`
+tell application "Mail"
+  activate
+  set s to selection
+  if (count of s) is 0 then return "none"
+  reply (item 1 of s) with opening window
+  return "ok"
+end tell`, 8000).catch(() => "failed");
+  return r === "ok";
+}
+
+module.exports = { findApp, openApp, siteFor, frontApp, activate, pressReturn, addToNote, emailFor, mailto, listApps, readMail, readChrome, mailReplyOpen, mailStartReply };

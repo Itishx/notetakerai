@@ -70,6 +70,32 @@ async function resolve(person) {
   return { ok: false, choices };
 }
 
+/* "myself", "me", "my own number", "self" -> WhatsApp's own chat ("Message
+   yourself"). Your number from My details, else your Contacts card, else a
+   contact lookup by your own name. -> { ok, name, phone } | { ok:false } */
+const SELF_WORDS = /^(myself|me|my ?self|my own number|my number|self|my own chat|yourself)$/i;
+function isSelf(person) { return SELF_WORDS.test(String(person || "").trim()); }
+async function resolveSelf(details = {}) {
+  const phone = String(details.phone || "").replace(/[^\d+]/g, "");
+  if (phone.replace(/\D/g, "").length >= 10) return { ok: true, name: "You", phone, self: true };
+  try { await execFileP("/usr/bin/open", ["-gja", "Contacts"], { timeout: 4000 }); await sleep(400); } catch (_) {}
+  const card = await osa(`
+tell application "Contacts"
+  set p to my card
+  if p is missing value then return ""
+  if (count of phones of p) is 0 then return (name of p) & tab
+  return (name of p) & tab & (value of first phone of p)
+end tell`, 8000).catch(() => "");
+  const [cardName, cardPhone] = card.split("\t");
+  if (cardPhone && cardPhone.replace(/\D/g, "").length >= 10) return { ok: true, name: "You", phone: cardPhone.trim(), self: true };
+  const myName = String(details.name || cardName || "").trim();
+  if (myName) {
+    const found = (await contactsNamed(myName)).filter((c) => clean(c.name) === clean(myName));
+    if (found.length === 1) return { ok: true, name: "You", phone: found[0].phone, self: true };
+  }
+  return { ok: false };
+}
+
 function normalizePhone(phone) {
   let d = String(phone || "").replace(/[^\d+]/g, "");
   if (d.startsWith("+")) d = d.slice(1);
@@ -112,4 +138,4 @@ async function send({ phone, text, openExternal, log = () => {} }) {
   return /sent/.test(r) ? { ok: true } : { ok: false, why: "Return was not pressed" };
 }
 
-module.exports = { resolve, send, normalizePhone, waitForWhatsAppReady, installed };
+module.exports = { resolve, resolveSelf, isSelf, send, normalizePhone, waitForWhatsAppReady, installed };

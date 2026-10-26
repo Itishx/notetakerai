@@ -406,6 +406,7 @@ async function startKeys() {
       const t = line.trim();
       if (!t) continue;
       if (t === "pasted" || t.startsWith("pasted\t")) { const w = pasteWaiters.shift(); if (w) w(t.split("\t")[1] || ""); continue; }
+      if (t === "copied" || t.startsWith("copied\t")) { const w = copyWaiters.shift(); if (w) w(t.split("\t")[1] || ""); continue; }
       if (t.startsWith("dictate-hold-")) { onChord(t.slice("dictate-hold-".length)); continue; }
       if (t.startsWith("do-hold-")) { onChord(t.slice("do-hold-".length), "do"); continue; }
       if (t === "ready") setKeysReady(true);
@@ -419,6 +420,7 @@ async function startKeys() {
     if (keys === proc) keys = null;
     setKeysReady(false);
     while (pasteWaiters.length) pasteWaiters.shift()(null);
+    while (copyWaiters.length) copyWaiters.shift()(null);
     if (quitting) return;
     if (keysRestarting) { keysRestarting = false; void startKeys(); }
     else setTimeout(() => void startKeys(), 3000);
@@ -429,6 +431,18 @@ function restartKeys(why) {
   if (!keys) { void startKeys(); return; }
   keysRestarting = true;
   try { keys.kill(); } catch (_) {}
+}
+/* Cmd+C through the key watcher (Do mode reading a selection). null when it can't. */
+const copyWaiters = [];
+function nativeCopy(timeoutMs = 400) {
+  if (!keys || keys.killed || !keys.stdin || keys.stdin.destroyed) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; resolve(v); };
+    copyWaiters.push(finish);
+    setTimeout(() => { const i = copyWaiters.indexOf(finish); if (i >= 0) copyWaiters.splice(i, 1); finish(null); }, timeoutMs);
+    try { keys.stdin.write("copy\n"); } catch (_) { finish(null); }
+  });
 }
 function nativePaste(timeoutMs = 400) {
   if (!keys || keys.killed || !keys.stdin || keys.stdin.destroyed) return Promise.resolve(null);
@@ -820,7 +834,11 @@ async function sendFlow(intent, rec) {
     return "asking";
   }
   if (!whatsapp.installed()) { clipboard.writeText(message); reply("No WhatsApp app.", "nope", 2000); return "no WhatsApp app, draft on clipboard"; }
-  const found = await whatsapp.resolve(person).catch(() => ({ ok: false }));
+  const self = whatsapp.isSelf(person);
+  const found = self
+    ? await whatsapp.resolveSelf(mavenStore.getDetails()).catch(() => ({ ok: false }))
+    : await whatsapp.resolve(person).catch(() => ({ ok: false }));
+  if (self && !found.ok) { clipboard.writeText(message); reply("Can't find your chat.", "nope", 2200); return "can't find own chat, draft on clipboard"; }
   const sendCard = async (who) => ask({ kind: "send", title: `To ${who.name}`, right: "Drafted. Send?", preview: message, primary: "Send" }, rec, {
     onYes: async (text, job) => {
       await giveFocusBack(""); // WhatsApp takes the front itself
@@ -855,6 +873,83 @@ async function pasteInto(front, text) {
   return pasted !== null;
 }
 
+/* ---------- "draft a reply to this": read the screen, draft, ask ----------
+   Mail's selected message, else Chrome's active tab (Gmail or any page), else
+   whatever is selected (Cmd+C, old clipboard put back). Never presses send. */
+async function readSelection() {
+  const old = clipboard.readText();
+  const marker = `maven-${Date.now()}`;
+  clipboard.writeText(marker);
+  const ok = await nativeCopy();
+  await new Promise((r) => setTimeout(r, 250));
+  const got = clipboard.readText();
+  clipboard.writeText(old || "");
+  if (ok === null || !got || got === marker || !got.trim()) return null;
+  return { app: ok || "", sender: "", text: got.trim().slice(0, 6000) };
+}
+async function readScreen(front) {
+  if (/^Mail$/i.test(front)) {
+    const m = await actions.readMail();
+    if (m) return { ...m, source: "mail" };
+  }
+  if (/^Google Chrome$/i.test(front)) {
+    try {
+      const c = await actions.readChrome();
+      if (c) return { ...c, source: c.app === "Gmail" ? "gmail" : "chrome" };
+    } catch (error) { log("do.chrome_js_off", {}); }
+  }
+  const sel = await readSelection();
+  return sel ? { ...sel, app: sel.app || front, source: "selection" } : null;
+}
+async function composeFor(context, instruction) {
+  if (!SUPABASE_ANON_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ mode: "compose", transcript: instruction || "reply", context, instruction }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.formatted) { log("do.compose_failed", { status: res.status }); return null; }
+    return data.formatted;
+  } catch (error) {
+    log("do.compose_failed", { error: error?.name === "AbortError" ? "timeout" : String(error?.message || error) });
+    return null;
+  } finally { clearTimeout(timer); }
+}
+const senderName = (s) => String(s || "").replace(/<[^>]*>/g, "").replace(/"/g, "").trim() || String(s || "").replace(/[<>]/g, "").trim();
+async function draftReply(intent, rec) {
+  const front = await actions.frontApp();
+  const seen = await readScreen(front);
+  if (!seen) { reply("Select it first.", "nope", 2200); rec.contextSource = "none"; return "nothing readable on screen"; }
+  rec.contextSource = seen.source;
+  const draft = await composeFor(seen.text, String(intent.subject || intent.instruction || "").trim());
+  if (!draft) { reply("Again?", "again"); return `compose failed (${seen.source})`; }
+  rec.draft = draft;
+  const who = senderName(seen.sender) || seen.app || front || "this";
+  await ask({ kind: "reply", title: `Reply to ${who}`, right: "Drafted. Yours?", preview: draft, primary: "Send" }, rec, {
+    onYes: async (text, job) => {
+      islandShow("idle");
+      if (seen.source === "mail") {
+        await giveFocusBack("Mail");
+        if (!(await actions.mailReplyOpen())) { await actions.mailStartReply(); await new Promise((r) => setTimeout(r, 900)); }
+        await new Promise((r) => setTimeout(r, 150));
+        clipboard.writeText(text);
+        const ok = (await nativePaste()) !== null;
+        reply(ok ? "Drafted. Your call." : "Copied. No box.", ok ? "done" : "nope", 2000);
+        return ok ? "draft pasted in Mail reply (not sent)" : "no reply box, copied";
+      }
+      const ok = await pasteInto(job.front, text); // never presses send
+      reply(ok ? "Drafted. Your call." : "Copied. No box.", ok ? "done" : "nope", 2000);
+      return ok ? `draft pasted in ${job.front} (not sent)` : "no text box, copied";
+    },
+  });
+  return "asking";
+}
+
 async function doAction(intent, rec) {
   mavenStore.init(app.getPath("userData"));
   const act = intent.action;
@@ -877,6 +972,7 @@ async function doAction(intent, rec) {
     return `opened ${site.href}`;
   }
   if (act === "send_message") return sendFlow(intent, rec);
+  if (act === "reply" && intent.draft === true && !String(intent.message || "").trim()) return draftReply(intent, rec);
   if (act === "reply") {
     const message = String(intent.message || "").trim();
     if (!message) { reply("Again?", "again"); return "no message"; }
@@ -949,6 +1045,7 @@ function finishDo(rec) {
     `  heard   (${rec.heardBy || "?"}, ${sec(rec.textMs)}): "${rec.heard}"`,
     `  intent  (${rec.model || "failed"}, ${sec(rec.intentMs)}): ${JSON.stringify(rec.intent || {})}`,
     `  action  ${i.action || "none"}${i.app ? ` · ${i.app}` : ""}${i.person ? ` · to ${i.person}` : ""}${rec.chose ? ` (chose ${rec.chose})` : ""}${rec.edited ? " · edited" : ""}`,
+    ...(rec.contextSource ? [`  screen  ${rec.contextSource}${rec.draft ? ` · draft: "${rec.draft.slice(0, 120)}"` : ""}`] : []),
     `  result  ${rec.result}`,
     `  time    text ${sec(rec.textMs)} · intent ${sec(rec.intentMs)} · act ${sec(rec.actMs)}${rec.sendMs ? ` · send ${sec(rec.sendMs)}` : ""} · total ${sec(totalMs)}`,
   ].join("\n"));
@@ -957,6 +1054,7 @@ function finishDo(rec) {
   mavenStore.appendCommand({
     at: rec.at, spokenSec: rec.spokenSec, heardBy: rec.heardBy, heard: rec.heard, intent: rec.intent, model: rec.model,
     action: i.action || "none", result: rec.result, chose: rec.chose || "", edited: rec.edited || "",
+    ...(rec.contextSource ? { contextSource: rec.contextSource } : {}), ...(rec.draft ? { draft: rec.draft } : {}),
     textSec: +(rec.textMs / 1000).toFixed(1), intentSec: +(rec.intentMs / 1000).toFixed(1), actSec: +(rec.actMs / 1000).toFixed(1), sendSec: +((rec.sendMs || 0) / 1000).toFixed(1), totalSec: +(totalMs / 1000).toFixed(1),
   });
 }
