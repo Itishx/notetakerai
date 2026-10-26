@@ -435,3 +435,20 @@
   .mv-app-lines { grid-template-columns: 1fr; gap: 12px; }
 }
 @keyframes mvBreathe { 0%, 100% { scale: 1; } 50% { scale: 1.04; } }
+
+/* ── Edge light face (matches the app) ── */
+.mv-face .mv-wave, .mv-face .mv-squint, .mv-face .mv-sheen { display: none !important; }
+.mv-face .mv-cap { position: relative; }
+.mv-edge { position: absolute; inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); overflow: visible; pointer-events: none; opacity: 0; transition: opacity .2s ease; }
+.mv-edge rect { fill: none; stroke: #ffece0; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 16 84; vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px rgba(255,190,150,1)) drop-shadow(0 0 7px rgba(255,140,110,.7)); animation: mvEdge 1.15s linear infinite; transition: stroke .35s ease, stroke-dasharray .45s ease; }
+@keyframes mvEdge { to { stroke-dashoffset: -100; } }
+.mv-face.is-listening .mv-edge { opacity: 1; }
+.mv-face.is-listening .mv-eyes { opacity: 1 !important; transform: translateY(-6%) !important; }
+.mv-face.is-listening .mv-eye { opacity: 1 !important; transform: none !important; }
+.mv-face.is-happy .mv-edge { opacity: 1; }
+.mv-face.is-happy .mv-edge rect { stroke: #8ff0b0; stroke-dasharray: 100 0; filter: drop-shadow(0 0 3px rgba(80,220,130,1)) drop-shadow(0 0 8px rgba(60,200,120,.65)); animation: none; }
+.mv-face.is-happy .mv-eyes, .mv-face.is-happy .mv-eye { opacity: 1 !important; transform: none !important; }
+.mv-face .mv-cap { overflow: visible; }
+.mv-face.is-listening .mv-cap, .mv-face.is-happy .mv-cap { width: calc(58px * var(--k)) !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .mv-edge rect { animation: none; } }
