@@ -173,7 +173,7 @@ function FigSpeed() {
   );
 }
 function FigFlow() {
-  const steps = ["You talk", "Heard in stretches, while you talk", "Cleaned up the way you write", "Lands at your cursor"];
+  const steps = ["You talk", "Turned into text", "Cleaned up the way you write", "Lands at your cursor"];
   return (
     <svg viewBox="0 0 760 120" className="mv-fig" role="img" aria-label="You talk, it is heard while you talk, cleaned up, and lands at your cursor.">
       {steps.map((t, i) => (
@@ -239,11 +239,7 @@ function MavenLetter() {
       <article className="ao-col">
         <h2>How it works</h2>
         <p>
-          <b>It listens while you talk.</b> Long thoughts are heard in stretches as you go, so when you let go,
-          only the last few seconds are left.
-        </p>
-        <p>
-          <b>It writes the way you write.</b> Filler goes, punctuation comes in, and four things in a row become a
+          <b>You talk, it writes the way you would.</b> Filler goes, punctuation comes in, and four things in a row become a
           list. We trained it on how people in India actually write: ₹25,000, not "twenty five thousand rupees".
         </p>
         <p>
@@ -258,7 +254,7 @@ function MavenLetter() {
         <p>
           Most of the time you just want your words typed. Sometimes you want the thing after that: tell Rahul,
           fill the address, add it to the list. Maven is built to tell the two apart from how you say it, and if
-          it isn't sure, it types. We're still building this part, and it's the part we're most excited about.
+          it isn't sure, it types. (Yes, this is the agentic part. Investors, you may sit up now.) We're still building it, and it's the part we're most excited about.
         </p>
         <Viz caption="Figure 3. The same voice, two kinds of help."><FigTwoModes /></Viz>
         <p>

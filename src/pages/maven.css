@@ -80,7 +80,7 @@
 @media (prefers-reduced-motion: reduce) { .mv-face *, .mv-face { animation: none !important; transition: none !important; } }
 
 /* ── Round 3 (2026-10-26) ─────────────────────────────────────────── */
-.mv .mv-h1 { font-size: clamp(56px, 9.5vw, 132px); line-height: .96; }
+.mv .mv-h1 { font-size: clamp(48px, 7vw, 96px); line-height: 1; }
 .mv-film { max-width: 1100px; margin: 8px auto 0; padding: 0 var(--a-gutter); }
 .mv-film-in, .mv-win { border-radius: 18px; overflow: hidden; background: var(--a-box); border: 1px solid var(--a-line); box-shadow: 0 30px 80px rgba(var(--a-shade), .12); }
 .mv-film-body { position: relative; min-height: clamp(300px, 40vw, 460px); padding: clamp(24px, 4vw, 48px); text-align: left; }
