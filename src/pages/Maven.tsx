@@ -525,14 +525,6 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* ── Maven's face: just the two lines, big; they draw in, then live ── */}
-        <section className="mv-facehero" id="face">
-          <FaceShow />
-          <p className="ah-kicker">Meet the face</p>
-          <h2 className="mv-h2">Two lines. Still alive.</h2>
-          <p className="mv-facehero-p">It breathes, blinks, looks where you are, and listens.</p>
-        </section>
-
         {/* ── Pricing ── */}
         <section className="hb6" id="pricing">
           <div className="aff-wrap">
@@ -573,30 +565,14 @@ export default function Maven() {
         </div>
       </section>
 
-      {/* ── The last word ── */}
-      <section className="hb-end" id="download">
-        <div className="hb-end-glow" aria-hidden="true" />
-        <div className="aff-wrap hb-end-in aff-reveal mv-end">
-          <MavenFace mood="happy" />
-          <h2 className="aff-h1 hb-end-line">Say something.</h2>
-          <a href={DOWNLOAD} className="aff-cta">Download for Mac</a>
-          <p className="mv-by">Maven, by <Link to="/">Affective</Link>. Powered by <Link to="/affectiveos">AffectiveOS</Link>.</p>
-        </div>
-      </section>
-
       </>}
       {/* Maven's footer (2026-10-26): Maven itself, not a sitemap. The face
           watches you, it answers in three words, and the name spells out
           what it stands for. */}
       <footer className="mv-foot3">
-        <div className="mv-foot3-face"><MavenFace mood="idle" /></div>
-        <FootReplies />
-        <h2 className="mv-foot3-word" aria-label="Maven: Memory And Voice Engine">
-          <span><b>M</b><i>emory</i></span>
-          <span><b>A</b><i>nd</i></span>
-          <span><b>V</b><i>oice</i></span>
-          <span><b>En</b><i>gine</i></span>
-        </h2>
+        <div className="mv-foot3-face" id="download"><FaceShow /></div>
+        <h2 className="aff-h1 mv-foot3-word">Maven</h2>
+        <p className="mv-foot3-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
         <nav className="mv-foot3-links" aria-label="Footer">
           <a href="#see">What it does</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a>
           <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
