@@ -233,7 +233,7 @@ const PRICE_ROWS = [
   { k: "Dictation in any app", free: "2,000 words a week", pro: "Unlimited" },
   { k: "Open and switch apps, tabs and websites", free: "✓", pro: "✓" },
   { k: "Send a message, with your yes", free: "10 a day", pro: "Unlimited" },
-  { k: "Fill a form, with your yes", free: "5 a day", pro: "Unlimited" },
+  { k: "Fill a form, with your yes", free: "3 a month", pro: "Unlimited" },
   { k: "Reply to what's on your screen", free: "—", pro: "✓" },
   { k: "Memory", free: "Names and basic details", pro: "Lists, details, your way of writing" },
   { k: "Hinglish", free: "—", pro: "Coming soon" },
@@ -253,6 +253,8 @@ const FAQ = [
 ];
 
 const MAVEN_FILM = "";
+/* "What it does" and "Beyond dictation" are off until they are redesigned from the PRD (2026-10-26). */
+const SHOW_DRAFT_SECTIONS = false;
 
 /* ── The announcement letter (2026-10-26): the AffectiveOS page's voice and
    layout, text and diagrams only. ── */
@@ -403,10 +405,8 @@ function MvSceneFilm() {
               : <p><span className="mv-caret" /></p>}
           </div>
         </div>
-        <div className={"mv-film-face" + (step === "landed" ? " is-gone" : "")}>
-          <MavenFace mood="listening" />
-          <span className="mv-film-hint">Listening…</span>
-        </div>
+        {/* Maven lives top right, where its mark sits in the menu bar. */}
+        <div className={"mv-film-corner" + (step === "landed" ? " is-done" : "")}><MavenFace mood={step === "landed" ? "happy" : "listening"} /></div>
       </div>
     </div>
   );
@@ -438,13 +438,13 @@ export default function Maven() {
   const { theme, toggle } = useAffTheme();
   const [view, setView] = useState<"product" | "letter">(() => (typeof window !== "undefined" && window.location.hash === "#letter" ? "letter" : "product"));
   const show = (v: "product" | "letter") => { setView(v); window.history.replaceState(null, "", v === "letter" ? "#letter" : window.location.pathname); window.scrollTo({ top: 0 }); };
-  const root = useAffReveal();
+  const root = useAffReveal([view]); // re-arm the reveal when coming back from the letter, or the page stays blank
     useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
 
   return (
     <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
-        links={[["What it does", "#see"], ["Beyond dictation", "#beyond"], ["Pricing", "#pricing"], ["Questions", "#faq"]]} go={["Download for Mac", "/maven#download"]} />
+        links={[]} go={["Download for Mac", "/maven#download"]} />
 
       {/* The page, or the letter that introduces it (2026-10-26). */}
       <div className="mv-tabs" role="tablist" aria-label="View">
@@ -478,7 +478,7 @@ export default function Maven() {
           <div className="aff-wrap aff-strip-in">
             <p className="aff-strip-label">Works wherever you type</p>
             <ul className="aff-strip-names aff-strip-logos">
-              {(["WhatsApp", "Chrome", "Mail", "Finder", "Calendar", "Spotify"] as const).map((n) => (
+              {(["Gmail", "WhatsApp", "Slack", "Chrome", "Notes", "Mail"] as const).map((n) => (
                 <li key={n}><AppLogo name={n} /><span>{n}</span></li>
               ))}
             </ul>
@@ -492,30 +492,12 @@ export default function Maven() {
           <div className="aff-wrap">
             <div className="mv-what aff-reveal">
               <p className="ah-kicker">What is Maven?</p>
-              <p className="mv-what-line">A Mac app that does two things. It writes what you say, properly, wherever you type. And it does the small job that comes next: opens the app, sends the message, fills the form.</p>
-              {/* Two halves, at a glance: the words, and the job after them. */}
-              <div className="mv-halves" aria-hidden="true">
-                <div className="mv-half">
-                  <p className="mv-half-k">It writes</p>
-                  <div className="mv-half-card">
-                    <p className="mv-half-raw">"<s>um so</s> the deck is done <s>uh</s> numbers by <s>five no wait</s> six"</p>
-                    <p className="mv-half-arrow">↓</p>
-                    <p className="mv-half-out">The deck is done. Numbers by 6 PM.<span className="mv-caret" /></p>
-                  </div>
-                </div>
-                <div className="mv-half">
-                  <p className="mv-half-k">It does</p>
-                  <div className="mv-half-card">
-                    <p className="mv-half-raw">"open youtube"</p>
-                    <p className="mv-half-arrow">↓</p>
-                    <div className="mv-half-do"><AppLogo name="Chrome" /><span>youtube.com</span><b>YouTube. Open.</b></div>
-                  </div>
-                </div>
-              </div>
+              <p className="mv-what-line">Maven is a small AI buddy that writes what you say, properly, wherever you type. Ask, and it does the small job that comes next. It doesn't talk back. It just does it.</p>
             </div>
           </div>
         </section>
 
+        {SHOW_DRAFT_SECTIONS && <>
         {/* ── What it does: a switcher ── */}
         <section className="mv-does-sec" id="see">
           <div className="aff-wrap">
@@ -548,6 +530,7 @@ export default function Maven() {
           </div>
         </section>
 
+        </>}
         {/* ── Pricing ── */}
         <section className="hb6" id="pricing">
           <div className="aff-wrap">
