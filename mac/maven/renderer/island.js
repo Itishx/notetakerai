@@ -31,10 +31,18 @@ function paintWave() {
 /* Edge light: a point with a fading tail travels round the capsule's outline. */
 const edge = island.querySelector(".edge");
 const ectx = edge.getContext("2d");
-let edgeT = 0;
+let edgeT = 0, doneAt = 0, warm = 1, tail = 26, fade = 1;
 function paintEdge() {
   const W = 58, H = 30, r = H / 2, L = W - H, per = 2 * L + Math.PI * H, k = 2; // canvas is 2x the 100x60 box
-  edgeT += 0.004 + level * 0.022;
+  const done = island.classList.contains("done");
+  if (done && !doneAt) doneAt = performance.now();
+  if (!done) doneAt = 0;
+  const since = doneAt ? performance.now() - doneAt : 0;
+  // warm (listening) -> green (pasted), and the tail grows into a full ring, all eased
+  warm += ((done ? 0 : 1) - warm) * 0.12;
+  tail += ((done ? 90 : 26) - tail) * 0.1;
+  fade = done ? Math.max(0, 1 - Math.max(0, since - 450) / 350) : 1;
+  edgeT += done ? 0.006 : 0.004 + level * 0.022;
   const cx = 50, cy = 30;
   const at = (d) => {
     d = ((d % per) + per) % per;
@@ -45,15 +53,17 @@ function paintEdge() {
   };
   ectx.setTransform(k, 0, 0, k, 0, 0);
   ectx.clearRect(0, 0, 100, 60);
-  ectx.shadowColor = "rgba(255,190,150,1)"; ectx.shadowBlur = 8;
-  const head = (edgeT % 1) * per;
-  for (let i = 0; i < 26; i++) {
-    const [x, y] = at(head - i * 2);
-    ectx.fillStyle = `rgba(255,236,220,${(1 - i / 26) * (0.6 + 0.4 * level)})`;
+  const mix = (a, b) => Math.round(b + (a - b) * warm); // warm peach -> green
+  const R = mix(255, 120), G = mix(236, 235), B = mix(220, 160), gR = mix(255, 70), gG = mix(190, 220), gB = mix(150, 120);
+  ectx.shadowColor = `rgba(${gR},${gG},${gB},1)`; ectx.shadowBlur = 8;
+  const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : 0.6 + 0.4 * level;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = at(head - i * (per / 90));
+    ectx.fillStyle = `rgba(${R},${G},${B},${(1 - (i / n) * (done ? 0.35 : 1)) * bright * fade})`;
     ectx.beginPath(); ectx.arc(x, y, 1.6 - i * 0.04, 0, Math.PI * 2); ectx.fill();
   }
 }
-function loop() { paint(); paintWave(); paintEdge(); anim = island.classList.contains("listening") ? requestAnimationFrame(loop) : 0; }
+function loop() { paint(); paintWave(); paintEdge(); anim = island.classList.contains("listening") || island.classList.contains("done") ? requestAnimationFrame(loop) : 0; }
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
 function scheduleBlink() {
@@ -84,7 +94,7 @@ window.maven.onState(({ state, note: text }) => {
   }
   note.classList.remove("on");
   if (state === "listening") { setState("listening"); if (!anim) anim = requestAnimationFrame(loop); return; }
-  if (state === "done") { setState("done"); return; }
+  if (state === "done") { setState("done"); if (!anim) anim = requestAnimationFrame(loop); return; }
   // idle, hidden, thinking: the resting face (the listening state is gone the moment you press)
   setState("idle");
   level = 0;

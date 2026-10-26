@@ -657,7 +657,7 @@ async function finishDictation(reason, discard, mySession = session_) {
     printDictation({ audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
     if (session_ === mySession) {
-      if (pasted.ok) { islandShow("done"); islandHide(700); } // a quick happy squint
+      if (pasted.ok) { islandShow("done"); islandHide(850); } // green edge light, then rest // a quick happy squint
       else { islandShow("note", { note: "Copied. No box." }); islandHide(2200); }
     }
   } catch (error) {
