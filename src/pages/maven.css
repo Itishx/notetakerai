@@ -243,3 +243,21 @@
 .mv-honest2 .mv-honest-sub { font-size: clamp(22px, 2.6vw, 30px); }
 .mv-honest2 .mv-honest-body { font-size: 19px !important; }
 .mv-honest2-viz { background: none; border: 0; padding: 0; }
+
+/* ── Maven footer ── */
+.mv-foot2 { border-top: 1px solid var(--a-line); padding: clamp(56px, 7vw, 96px) 0 28px; overflow: hidden; }
+.mv-foot2-top { display: grid; grid-template-columns: 1.2fr 2fr; gap: 40px; }
+.mv-foot2-brand .mv-mark { margin-bottom: 18px; }
+.mv-foot2-name { margin: 0; font-family: var(--a-display); font-size: 40px; letter-spacing: -.02em; color: var(--a-ink); }
+.mv-foot2-means { margin: 6px 0 0; font-size: 15px; letter-spacing: .04em; color: var(--a-ink-soft); }
+.mv-foot2-means b { color: var(--a-ink); font-weight: 700; }
+.mv-foot2-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.mv-foot2-cols h4 { margin: 0 0 12px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); font-weight: 500; }
+.mv-foot2-cols a { display: block; margin: 0 0 9px; font-size: 15px; color: var(--a-ink); text-decoration: none; }
+.mv-foot2-cols a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mv-foot2-word { margin: clamp(40px, 6vw, 80px) 0 0; font-family: var(--a-display); font-size: clamp(110px, 24vw, 340px); line-height: .8; letter-spacing: -.05em; text-align: center;
+  background: linear-gradient(180deg, var(--a-ink) 0%, color-mix(in srgb, var(--a-ink) 8%, transparent) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; user-select: none; }
+.mv-foot2-base { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--a-line); font-size: 13px; color: var(--a-ink-soft); }
+.mv-foot2-base a { color: inherit; margin-left: 14px; }
+.mv-foot2-base span:first-child a { margin: 0; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 760px) { .mv-foot2-top { grid-template-columns: 1fr; } .mv-foot2-cols { grid-template-columns: 1fr 1fr; } }

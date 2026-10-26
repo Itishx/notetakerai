@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
-import { AffNav, AffFooter, useAffReveal } from "@/components/affPage";
+import { AffNav, useAffReveal } from "@/components/affPage";
 import { AppLogo } from "@/components/AppLogo";
 import { MacMenuBar, Viz } from "./aff-figures";
 import "./affectiveos-page.css";
@@ -526,7 +526,28 @@ export default function Maven() {
       </section>
 
       </>}
-      <AffFooter />
+      {/* Maven's own footer (2026-10-26): the name, and what it stands for. */}
+      <footer className="mv-foot2">
+        <div className="aff-wrap">
+          <div className="mv-foot2-top">
+            <div className="mv-foot2-brand">
+              <MavenMark size={64} />
+              <p className="mv-foot2-name">Maven</p>
+              <p className="mv-foot2-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
+            </div>
+            <nav className="mv-foot2-cols" aria-label="Footer">
+              <div><h4>Maven</h4><a href="#see">What it does</a><a href="#face">The face</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a></div>
+              <div><h4>Read</h4><a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a><Link to="/trust">Trust &amp; privacy</Link></div>
+              <div><h4>Get it</h4><a href={DOWNLOAD}>Download for Mac</a><Link to="/contact">Contact</Link></div>
+            </nav>
+          </div>
+          <p className="mv-foot2-word" aria-hidden="true">Maven</p>
+          <div className="mv-foot2-base">
+            <span>© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru</span>
+            <span><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
