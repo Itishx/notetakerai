@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, useAffReveal } from "@/components/affPage";
-import { Viz } from "./aff-figures";
+import { AppLogo } from "@/components/AppLogo";
+import { MacMenuBar, Viz } from "./aff-figures";
 import "./affectiveos-page.css";
 import "./braino-page.css";
 import "./affective.css";
@@ -236,12 +237,10 @@ function MavenLetter() {
 }
 
 
-/* ── The product page (2026-10-27): rebuilt on the approved copy, laid out
-   like a calm long-form product page: huge serif headline, a ribbon demo,
-   one dark speed band, tiles, a closing panel and a giant wordmark. ── */
-
-const MESSY = "um so can you tell rahul the the deck is done and uh numbers by five no wait six";
-const CLEAN = "Can you tell Rahul the deck is done? Numbers by 6, and the budget is ₹25,000.";
+/* ── The product page (2026-10-27, final): the approved copy and its best
+   moments (ribbon, before/after, speed band, tiles, closing panel, giant
+   wordmark), dressed in the Affective look: warm light paper, serif display,
+   the home page's hero, strip, boxes and FAQ. ── */
 
 function useCalm() {
   const [calm, setCalm] = useState(false);
@@ -255,8 +254,60 @@ function useCalm() {
   return calm;
 }
 
-/* Slides text along an SVG path forever: the text is repeated, and the
-   offset loops by exactly one copy's length, so it never jumps. */
+function useOnScreen<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || on) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [on]);
+  return [ref, on] as const;
+}
+
+/* The hero film in code: a real Mac, an empty email, Maven listening in the
+   bottom-right corner, then the words land at the cursor and it glows green. */
+const FILM_WORDS = ["Hey Neha,", "Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.", "Thanks,", "Itish"];
+function MvSceneFilm() {
+  const calm = useCalm();
+  const [step, setStep] = useState<"listen" | "happy" | "rest">("listen");
+  useEffect(() => {
+    if (calm) { setStep("rest"); return; }
+    const next = { listen: "happy", happy: "rest", rest: "listen" } as const;
+    const t = window.setTimeout(() => setStep(next[step]), step === "listen" ? 3200 : step === "happy" ? 1100 : 3400);
+    return () => clearTimeout(t);
+  }, [step, calm]);
+  return (
+    <div className="mv-mac" aria-label="Maven listening, then typing an email where the cursor is">
+      <MacMenuBar app="Mail" menus={["File", "Edit", "View", "Mailbox", "Message", "Format", "Window", "Help"]} />
+      <div className="mv-desk">
+        <div className="mv-mail">
+          <div className="mv-mail-bar">
+            <span className="mv-lights"><i /><i /><i /></span>
+            <span className="mv-mail-title">New Message</span>
+            <span className="mv-mail-send" aria-hidden="true">➤</span>
+          </div>
+          <div className="mv-mail-row"><span>To:</span><b className="mv-chip">Neha Sharma</b></div>
+          <div className="mv-mail-row"><span>Subject:</span>Tomorrow</div>
+          <div className="mv-mail-body">
+            {step !== "listen"
+              ? <div className="mv-landed">{FILM_WORDS.map((w, i) => <p key={i}>{w}{i === FILM_WORDS.length - 1 && <span className="mv-caret" />}</p>)}</div>
+              : <p><span className="mv-caret" /></p>}
+          </div>
+        </div>
+        <div className="mv-film-corner"><MavenFace mood={step === "listen" ? "listening" : step === "happy" ? "happy" : "idle"} /></div>
+      </div>
+    </div>
+  );
+}
+
+/* The ribbon: messy speech curves into the capsule, clean text rides out on
+   the dark band. Text is repeated and the offset loops by one copy's length. */
+const MESSY = "um so can you tell rahul the the deck is done and uh numbers by five no wait six";
+const CLEAN = "Can you tell Rahul the deck is done? Numbers by 6, and the budget is ₹25,000.";
+
 function useFlow(copies: number, pxPerSec: number, calm: boolean) {
   const ref = useRef<SVGTextPathElement>(null);
   useEffect(() => {
@@ -303,12 +354,138 @@ function Ribbon() {
 const STRIKE = new Set(["um", "the the", "uh", "five no wait"]);
 const SAID_PARTS = ["um", " so can you tell rahul ", "the the", " deck is done and ", "uh", " numbers by ", "five no wait", " six"];
 
+/* What it does: plain scenes on a real Mac. raw is what you said; ~word~ is
+   what Maven took out; out is what lands. */
+type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[] };
+const SCENES: MvScene[] = [
+  { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
+    title: "Talk the way you talk. It writes it neatly.", p: "It drops the ums, adds the full stops, and if you change your mind halfway, it keeps the final version. Money and numbers come out the way you'd type them.",
+    out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."] },
+  { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
+    title: "Answer a message without typing.", p: "Neha asks if Friday still works. You say “reply to this” and your answer. Maven reads her message, writes yours in the reply box, and leaves the sending to you.",
+    out: ["Yes, Friday works. See you at 8!"] },
+  { group: "write", app: "Notes", field: "Launch list", raw: "add ~uh~ record the maven film to my launch list",
+    title: "Add to your lists by voice.", p: "Say “add this to my launch list” and it lands in the right list. It also remembers names, spellings and your details, so you only say them once.",
+    out: ["- Send the deck to Rahul", "- Book the venue", "- Record the Maven film"] },
+  { group: "do", app: "Chrome", field: "New tab", raw: "maven could you please open youtube",
+    title: "Open any app, tab or website.", p: "Say where you want to go and you're there. No hunting through the dock or forty open tabs.",
+    out: ["youtube.com", "YouTube is open in a new tab."], reply: "YouTube. Open." },
+  { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
+    title: "Send a message, after you say yes.", p: "On WhatsApp, Slack or Mail. It finds the person and writes the message, then waits. Nothing goes out until you say yes.",
+    out: ["The deck is done."], reply: "Drafted. Send?" },
+  { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
+    title: "Fill a form in one sentence.", p: "Your name, address, email and phone number, filled in from what it already knows. It stops before Submit so you can check.",
+    form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
+];
+
+function Raw({ text }: { text: string }) {
+  return <>{text.split(/(~[^~]+~)/).filter(Boolean).map((t, i) => t.startsWith("~") ? <s key={i}>{t.slice(1, -1)}</s> : <span key={i}>{t}</span>)}</>;
+}
+
+/* Side tabs: the two groups on the left, one big Mac window on the right.
+   It moves on slowly until you click. */
+function MvSwitcher() {
+  const calm = useCalm();
+  const [ref, on] = useOnScreen<HTMLDivElement>();
+  const [group, setGroup] = useState<"write" | "do">("write");
+  const list = SCENES.filter((x) => x.group === group);
+  const [at, setAt] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!on) return;
+    if (calm) { setPhase(1); return; }
+    setPhase(0);
+    const a = window.setTimeout(() => setPhase(1), 1600);
+    const b = held ? 0 : window.setTimeout(() => {
+      if (at + 1 < list.length) setAt(at + 1);
+      else { setGroup((g) => (g === "write" ? "do" : "write")); setAt(0); }
+    }, 9000);
+    return () => { clearTimeout(a); if (b) clearTimeout(b); };
+  }, [on, at, held, group, calm, list.length]);
+  const s = list[at] || list[0];
+  const groups = [{ k: "write" as const, label: "It writes" }, { k: "do" as const, label: "It does" }];
+  return (
+    <div ref={ref} className="mv-side">
+      <nav className="mv-side-nav" aria-label="What Maven does">
+        {groups.map((g) => (
+          <div key={g.k} className={"mv-side-g" + (group === g.k ? " on" : "")}>
+            <button type="button" className="mv-side-gb" aria-expanded={group === g.k} onClick={() => { setGroup(g.k); setAt(0); setHeld(true); }}>{g.label}</button>
+            {group === g.k && (
+              <ul>
+                {SCENES.filter((x) => x.group === g.k).map((x, i) => (
+                  <li key={x.title}><button type="button" className={i === at ? "on" : ""} aria-current={i === at} onClick={() => { setAt(i); setHeld(true); }}>{x.title}</button></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </nav>
+      <div className="mv-side-main">
+        <MvSceneWindow s={s} phase={phase} key={group + at} />
+        <div className="mv-one-cap" key={"c" + group + at}>
+          <h3 className="mv-one-t">{s.title}</h3>
+          <p className="mv-one-p">{s.p}</p>
+          <p className="mv-one-said"><span>You said</span>“<Raw text={s.raw} />”</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MvSceneWindow({ s, phase }: { s: MvScene; phase: number }) {
+  return (
+    <div className="mv-mac mv-scene-mac">
+      <MacMenuBar app={s.app} />
+      <div className="mv-desk">
+        <div className="mv-mail">
+          <div className="mv-mail-bar">
+            <span className="mv-lights"><i /><i /><i /></span>
+            <span className="mv-mail-title">{s.app}</span>
+          </div>
+          <div className="mv-mail-row"><span>{s.app === "Chrome" ? "Form" : s.app === "Slack" ? "To" : "Note"}</span>{s.field}</div>
+          {s.form ? (
+            <div className="mv-mail-body mv-form">
+              {s.form.map((label, i) => (
+                <label key={label} className="mv-fieldbox">
+                  <span>{label}</span>
+                  <span className={"mv-input" + (!phase && i === 0 ? " is-focus" : "")}>
+                    {phase ? <em style={{ animationDelay: `${i * 0.28}s` }}>{s.out[i]}</em> : i === 0 ? <span className="mv-caret" /> : null}
+                  </span>
+                </label>
+              ))}
+              <div className="mv-form-foot">
+                <span className="mv-submit">Submit</span>
+                {phase && s.wait ? <span className="mv-wait">{s.wait}</span> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="mv-mail-body">
+              {phase
+                ? <div className="mv-landed">{s.out.map((l, i) => <p key={l}>{l}{i === s.out.length - 1 && <span className="mv-caret" />}</p>)}</div>
+                : <p><span className="mv-caret" /></p>}
+            </div>
+          )}
+          {/* Maven sits on the bottom edge of the window, like in the app. */}
+          <div className={"mv-winedge" + (phase && !s.reply ? " is-gone" : "")}>
+            <MavenFace mood={phase ? "happy" : "listening"} />
+            {phase && s.reply ? <span className="mv-winedge-reply">{s.reply}</span> : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const FEATURES = [
   { t: "Writes like you write", p: "Lists, ₹, lakh and crore, phone numbers, and the correction you made halfway." },
   { t: "Knows your words", p: "Add names and jargon to your Dictionary once. They come out right every time." },
   { t: "Snippets", p: "Say “my calendar link”, get the link. Same for your address, email or bio." },
   { t: "Does the next thing", p: "“Open Notes.” “Tell Neha I'm running late.” “Fill in my address.” One small job, and it never sends or submits without your yes.", only: true },
 ];
+
+const BEYOND_THEM = ["Clean, punctuated text", "Lists, ₹ and numbers done right"];
+const BEYOND_US = ["Replies to what's on screen", "Opens apps, tabs and websites", "Sends a message, with your yes", "Fills forms from what it knows", "Remembers your names and lists"];
 
 const FAQ = [
   { q: "Will it work in my apps?", a: "Yes. Anywhere you can type: WhatsApp, Gmail, Slack, Notes, ChatGPT, Claude, Cursor, your code editor." },
@@ -329,35 +506,59 @@ export default function Maven() {
   const show = (v: "product" | "letter") => { setView(v); window.history.replaceState(null, "", v === "letter" ? "#letter" : window.location.pathname); window.scrollTo({ top: 0 }); };
   const root = useAffReveal([view]); // re-arm the reveal when coming back from the letter, or the page stays blank
   useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
+  const toProduct = () => { if (view === "letter") show("product"); };
 
   return (
     <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
         links={[]} go={["Download for Mac", "/maven#download"]} />
 
-      {/* The page, or the letter that introduces it (2026-10-26). */}
       <div className="mv-tabs" role="tablist" aria-label="View">
         <button type="button" role="tab" aria-selected={view === "product"} className={view === "product" ? "on" : ""} onClick={() => show("product")}>Maven</button>
         <button type="button" role="tab" aria-selected={view === "letter"} className={view === "letter" ? "on" : ""} onClick={() => show("letter")}>The announcement</button>
       </div>
       {view === "letter" ? <MavenLetter /> : <>
-      {/* 1. Hero */}
-      <header className="mv-hero">
-        <div className="aff-wrap mv-hero-in">
-          <p className="mv-eyebrow">MAVEN · AGENTIC DICTATION</p>
-          <h1 className="mv-big">Say it once.<br /><em>It's already written.</em></h1>
-          <p className="mv-sub">Maven turns what you say into clean writing wherever you type. Then it does the small thing that comes next.</p>
-          <a href={DOWNLOAD} className="aff-cta mv-cta">Get Maven for Mac</a>
-          <p className="mv-note">Mac only for now. Windows is next.</p>
+      {/* 1. Hero: the home page's */}
+      <header className="aff-hero">
+        <div className="aff-wrap">
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1 mv-h1">
+              <span className="aff-h1-line">Say it once.</span>
+              <b>It's already written.</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="ah-kicker">Agentic Dictation</p>
+              <p className="aff-hero-one">Maven turns what you say into clean writing wherever you type. Then it does the small thing that comes next.</p>
+              <div className="aff-hero-cta">
+                <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
+                <a href="#see" className="aff-cta aff-cta-ghost">See it work</a>
+              </div>
+              <p className="mv-note">Mac only for now. Windows is next.</p>
+            </div>
+          </div>
         </div>
-        <Ribbon />
+        <figure className="aff-hero-shot mv-film" data-grow><MvSceneFilm /></figure>
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p className="aff-strip-label">Works wherever you type</p>
+            <ul className="aff-strip-names aff-strip-logos">
+              {(["Gmail", "WhatsApp", "Slack", "Chrome", "Notes", "Mail"] as const).map((n) => (
+                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </header>
 
       <main>
-        {/* 2. Before and after */}
-        <section className="mv-sec" id="see">
+        {/* 2. The ribbon, then before and after */}
+        <section className="mv-sec mv-demo" id="see">
           <div className="aff-wrap">
-            <div className="mv-ba">
+            <p className="ah-kicker mv-center aff-reveal">Say it messy. Get it clean.</p>
+          </div>
+          <Ribbon />
+          <div className="aff-wrap">
+            <div className="mv-ba aff-reveal">
               <div className="mv-ba-col">
                 <p className="mv-k">You said</p>
                 <p className="mv-ba-said">“{SAID_PARTS.map((p, i) => STRIKE.has(p) ? <s key={i}>{p}</s> : <span key={i}>{p}</span>)}”</p>
@@ -367,17 +568,30 @@ export default function Maven() {
                 <p className="mv-ba-out">{CLEAN}</p>
               </div>
             </div>
-            <ul className="mv-tags">
+            <ul className="mv-tags aff-reveal">
               {["Filler removed", "Repeat removed", "Kept six, not five", "₹ written right"].map((t) => <li key={t}>{t}</li>)}
             </ul>
           </div>
         </section>
 
-        {/* 3. Speed: the one dark band */}
+        {/* 3. What Maven is, in one breath */}
+        <section className="mv-sec mv-what-sec">
+          <div className="aff-wrap">
+            <div className="mv-what aff-reveal">
+              <p className="ah-kicker">What is Maven?</p>
+              <p className="mv-what-line">Maven is a small AI buddy that writes what you say, properly, wherever you type. Ask, and it does the small job that comes next. It doesn't talk back. It just does it.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Speed: the one dark band */}
         <section className="mv-speed">
           <div className="aff-wrap">
-            <h2 className="mv-big mv-speed-h">Your voice is faster<br /><em>than your fingers.</em></h2>
-            <p className="mv-sub">Most people type about 40 words a minute and speak about 150. Maven lets you write at the speed you think.</p>
+            <h2 className="aff-h1 mv-speed-h aff-reveal">
+              <span className="aff-h1-line">Your voice is faster</span>
+              <b>than your fingers.</b>
+            </h2>
+            <p className="mv-speed-sub">Most people type about 40 words a minute and speak about 150. Maven lets you write at the speed you think.</p>
             <div className="mv-race">
               <div className="mv-lane is-type">
                 <p className="mv-lane-k"><b>Typing</b><span>~40 wpm</span></p>
@@ -394,56 +608,79 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* 4. How it works */}
-        <section className="mv-sec">
+        {/* 5. What it does: side tabs on a real Mac */}
+        <section className="mv-sec" id="does">
           <div className="aff-wrap">
-            <h2 className="mv-h2 mv-center">How it works</h2>
-            <ol className="mv-steps">
-              <li><span>1</span><p>Press <kbd>⌃⌥</kbd></p></li>
-              <li><span>2</span><p>Talk like you would to a friend</p></li>
-              <li><span>3</span><p>Press <kbd>⌃⌥</kbd> again. The words are where your cursor is.</p></li>
-            </ol>
+            <div className="mv-does-head aff-reveal">
+              <p className="ah-kicker">What it does</p>
+              <h2 className="aff-h1 mv-does-h">
+                <span className="aff-h1-line">You say it.</span>
+                <b>Maven does it.</b>
+              </h2>
+            </div>
+            <MvSwitcher />
           </div>
         </section>
 
-        {/* 5. What Maven does */}
-        <section className="mv-sec" id="does">
+        {/* 6. The details, in the home page's box */}
+        <section className="mv-sec mv-tiles-sec">
           <div className="aff-wrap">
-            <h2 className="mv-h2 mv-center">What Maven does</h2>
-            <div className="mv-tiles">
-              {FEATURES.map((f) => (
-                <article key={f.t} className="mv-tile">
-                  <h3>{f.t}{f.only && <span className="mv-only">Only Maven</span>}</h3>
-                  <p>{f.p}</p>
-                </article>
-              ))}
-              <article className="mv-tile is-wide">
-                <div className="mv-tile-txt">
+            <div className="hb6-box aff-reveal">
+              <p className="ah-kicker">The details</p>
+              <ul className="hb6-jobs mv-jobs">
+                {FEATURES.map((f) => (
+                  <li key={f.t} className={f.only ? "is-key" : undefined}>
+                    {f.only && <small>Only Maven</small>}
+                    <h3>{f.t}</h3>
+                    <p>{f.p}</p>
+                  </li>
+                ))}
+              </ul>
+              <div className="mv-remember">
+                <div className="mv-remember-txt">
                   <h3>Remembers you</h3>
                   <p>Every dictation, by day, searchable. Mark one “Wrong?” and it learns.</p>
                 </div>
                 <MvHub />
-              </article>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* 6. Privacy */}
-        <section className="mv-sec mv-private">
+        {/* 7. Beyond dictation */}
+        <section className="mv-beyond" id="beyond">
           <div className="aff-wrap">
+            <h2 className="mv-h2 mv-beyond-h aff-reveal">Other apps stop at typing.<br />Maven keeps going.</h2>
+            <div className="mv-cmp aff-reveal">
+              <div className="mv-cmp-them">
+                <p className="mv-cmp-k">Every dictation app</p>
+                <p className="mv-cmp-line">{BEYOND_THEM.join(" · ")}</p>
+              </div>
+              <div className="mv-cmp-div" aria-hidden="true"><MavenMark size={44} /></div>
+              <div className="mv-cmp-us">
+                <p className="mv-cmp-k">Only Maven</p>
+                <ul>{BEYOND_US.map((k) => <li key={k}>{k}</li>)}</ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 8. Privacy */}
+        <section className="mv-sec mv-private">
+          <div className="aff-wrap aff-reveal">
             <h2 className="mv-h2">Your voice stays yours.</h2>
             <p>Audio is never kept. Your history stays on your Mac. Nothing is sent, posted or submitted without your yes.</p>
           </div>
         </section>
 
-        {/* 7. Pricing */}
-        <section className="mv-sec" id="pricing">
+        {/* 9. Pricing */}
+        <section className="mv-sec mv-price-sec" id="pricing">
           <div className="aff-wrap">
-            <div className="mv-price-head">
+            <div className="mv-price-head aff-reveal">
               <p className="ah-kicker">Pricing</p>
               <h2 className="mv-h2">Start free. Go Pro when you can't stop talking.</h2>
             </div>
-            <div className="mv-ptable" role="table" aria-label="Free and Pro">
+            <div className="mv-ptable aff-reveal" role="table" aria-label="Free and Pro">
               <div className="mv-pt-row mv-pt-head" role="row">
                 <span role="columnheader" />
                 {PLANS.map((pl) => (
@@ -466,11 +703,11 @@ export default function Maven() {
         </section>
       </main>
 
-      {/* 8. Questions: the home page's */}
+      {/* 10. Questions: the home page's */}
       <section className="hb2-faq" id="faq">
         <div className="aff-wrap hb2-faq-split">
           <div className="hb2-faq-side">
-            <h3 className="hb2-faq-h">Questions</h3>
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
             <p>The short answers.</p>
           </div>
           <div className="hb2-faq-list">
@@ -484,31 +721,42 @@ export default function Maven() {
         </div>
       </section>
 
-      {/* 9. Closing */}
+      {/* 11. Closing: the warm Affective plate */}
       <section className="mv-close-sec" id="download">
-        <div className="mv-close">
-          <h2 className="mv-big">You already know what you want to say.<br /><em>Now just say it.</em></h2>
+        <div className="mv-close aff-reveal">
+          <h2 className="aff-h1 mv-close-h">
+            <span className="aff-h1-line">You already know what you want to say.</span>
+            <b>Now just say it.</b>
+          </h2>
           <div className="mv-close-cta">
-            <a href={DOWNLOAD} className="aff-cta mv-cta">Get Maven for Mac</a>
+            <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
             <MavenFace mood="happy" />
           </div>
         </div>
       </section>
       </>}
 
-      {/* 10. Footer: links, then a giant wordmark with Maven watching you. */}
+      {/* 12. Footer: a giant wordmark with Maven watching you, then the name's
+          meaning, the links and one quiet line. */}
       <footer className="mv-foot">
         <div className="aff-wrap">
-          <nav className="mv-foot-links" aria-label="Footer">
-            <a href="#does" onClick={() => view === "letter" && show("product")}>What it does</a>
-            <a href="#pricing" onClick={() => view === "letter" && show("product")}>Pricing</a>
-            <a href="#faq" onClick={() => view === "letter" && show("product")}>Questions</a>
-            <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
-            <Link to="/trust">Privacy</Link><a href={DOWNLOAD}>Download for Mac</a>
-          </nav>
           <div className="mv-foot-word">
             <span>Maven</span>
             <MavenFace mood="idle" follow />
+          </div>
+          <div className="mv-foot-row">
+            <div className="mv-foot-brand">
+              <MavenMark size={44} />
+              <p className="mv-foot-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
+            </div>
+            <nav className="mv-foot-links" aria-label="Footer">
+              <a href="#does" onClick={toProduct}>What it does</a>
+              <a href="#pricing" onClick={toProduct}>Pricing</a>
+              <a href="#faq" onClick={toProduct}>Questions</a>
+              <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
+              <Link to="/trust">Privacy</Link>
+              <a href={DOWNLOAD}>Download for Mac</a>
+            </nav>
           </div>
           <p className="mv-foot-base">© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
         </div>
