@@ -5,21 +5,40 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <link rel="stylesheet" href="island.css">
 </head>
-<body>
+<body class="a-right">
   <!-- Maven's presence (2026-10-26): a small capsule with two eyes. Resting it
-       blinks, listening the eyes become the voice, done they squint happily. -->
+       blinks, listening a warm light runs round it, done it turns green.
+       2026-10-27: Do mode. When there are words to see (a draft, a choice), the
+       capsule grows into the island card right where it sits, then folds back. -->
   <div id="island" class="on idle" aria-label="Maven">
     <button type="button" class="x" aria-label="Cancel">✕</button>
     <div class="face">
       <span class="eye"><i></i><i></i><i></i><i></i></span>
       <span class="eye"><i></i><i></i><i></i><i></i></span>
-      <!-- Listening: the eyes melt into one glowing waveform. -->
       <canvas class="edge" width="200" height="120" aria-hidden="true"></canvas>
       <span class="wave" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span>
     </div>
     <button type="button" class="ok" aria-label="Done">✓</button>
   </div>
   <div id="note" role="status" aria-live="polite"></div>
+
+  <div id="cardwrap">
+    <div id="card" role="dialog" aria-live="polite">
+      <div class="ceyes" aria-hidden="true"><span></span><span></span></div>
+      <div class="body">
+        <div class="lbl"><b class="title"></b><span class="right"></span></div>
+        <div class="preview"></div>
+        <textarea class="editor" rows="3" spellcheck="true"></textarea>
+        <div class="opts"></div>
+        <div class="acts">
+          <button type="button" class="yes"><span class="ptxt">Send</span><kbd>⏎</kbd></button>
+          <button type="button" class="edit">Edit</button>
+          <button type="button" class="no">Cancel<kbd>esc</kbd></button>
+        </div>
+      </div>
+      <div class="sentlbl"></div>
+    </div>
+  </div>
   <script src="island.js"></script>
 </body>
 </html>

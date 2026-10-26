@@ -32,6 +32,7 @@ function paintWave() {
 const edge = island.querySelector(".edge");
 const ectx = edge.getContext("2d");
 let edgeT = 0, doneAt = 0, warm = 1, tail = 26, fade = 1;
+let tint = "warm"; // "warm" for Write (dictation), "blue" for Do (2026-10-27)
 function paintEdge() {
   const W = 58, H = 30, r = H / 2, L = W - H, per = 2 * L + Math.PI * H, k = 2; // canvas is 2x the 100x60 box
   const done = island.classList.contains("done");
@@ -42,7 +43,8 @@ function paintEdge() {
   warm += ((done ? 0 : 1) - warm) * 0.12;
   tail += ((done ? 90 : 26) - tail) * 0.1;
   fade = done ? Math.max(0, 1 - Math.max(0, since - 450) / 350) : 1;
-  edgeT += done ? 0.006 : 0.004 + level * 0.022;
+  const thinking = island.classList.contains("thinking");
+  edgeT += done ? 0.006 : thinking ? 0.0016 : 0.004 + level * 0.022;
   const cx = 50, cy = 30;
   const at = (d) => {
     d = ((d % per) + per) % per;
@@ -53,10 +55,11 @@ function paintEdge() {
   };
   ectx.setTransform(k, 0, 0, k, 0, 0);
   ectx.clearRect(0, 0, 100, 60);
-  const mix = (a, b) => Math.round(b + (a - b) * warm); // warm peach -> green
-  const R = mix(255, 120), G = mix(236, 235), B = mix(220, 160), gR = mix(255, 70), gG = mix(190, 220), gB = mix(150, 120);
+  const mix = (a, b) => Math.round(b + (a - b) * warm); // warm peach (or Do's blue) -> green
+  const blue = tint === "blue";
+  const R = mix(blue ? 207 : 255, 120), G = mix(blue ? 227 : 236, 235), B = mix(blue ? 255 : 220, 160), gR = mix(blue ? 90 : 255, 70), gG = mix(blue ? 150 : 190, 220), gB = mix(blue ? 255 : 150, 120);
   ectx.shadowColor = `rgba(${gR},${gG},${gB},1)`; ectx.shadowBlur = 8;
-  const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : 0.6 + 0.4 * level;
+  const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : thinking ? 0.45 : 0.6 + 0.4 * level;
   for (let i = 0; i < n; i++) {
     const [x, y] = at(head - i * (per / 90));
     ectx.fillStyle = `rgba(${R},${G},${B},${(1 - (i / n) * (done ? 0.35 : 1)) * bright * fade})`;
@@ -66,7 +69,7 @@ function paintEdge() {
 function loop() {
   // A drawing error must never stop the animation for good.
   try { paint(); paintWave(); paintEdge(); } catch (_) {}
-  anim = island.classList.contains("listening") || island.classList.contains("done") ? requestAnimationFrame(loop) : 0;
+  anim = ["listening", "done", "thinking"].some((c) => island.classList.contains(c)) ? requestAnimationFrame(loop) : 0;
 }
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
@@ -83,33 +86,54 @@ function scheduleBlink() {
 }
 scheduleBlink();
 
-function setState(name) {
+const FACES = ["idle", "listening", "done", "open", "thinking", "again", "nope", "curious", "wake"];
+function setState(name, face) {
   island.classList.add("on");
-  island.classList.remove("idle", "listening", "done", "open");
+  island.classList.remove(...FACES);
   island.classList.add(name);
+  if (face) island.classList.add(face);
 }
+const startLoop = () => { if (!anim) anim = requestAnimationFrame(loop); };
+let wakeTimer = 0;
 
-window.maven.onState(({ state, note: text }) => {
-  if (state === "note") {
-    setState("idle");
+window.maven.onState((p) => {
+  const { state, note: text } = p || {};
+  if (state !== "sent" && state !== "ask" && card.isOpen()) card.close();
+  if (state === "ask") { note.classList.remove("on"); card.open(p.card || {}); return; }
+  if (state === "sent") { card.sent(String(p.text || "Sent.")); return; }
+  if (state === "note" || state === "reply") {
+    // The 3-word reply beside the pill, with the face that goes with it.
+    const face = { again: "again", nope: "nope", curious: "curious" }[p.face] || "";
+    if (p.face === "done") { setState("done"); warm = 1; startLoop(); } else setState("idle", face);
     note.textContent = String(text || "");
     note.classList.add("on");
     return;
   }
   note.classList.remove("on");
-  if (state === "listening") { setState("listening"); warm = 1; tail = 26; fade = 1; doneAt = 0; if (!anim) anim = requestAnimationFrame(loop); return; } // always starts warm, never green
-  if (state === "done") { setState("done"); if (!anim) anim = requestAnimationFrame(loop); return; }
-  // idle, hidden, thinking: the resting face (the listening state is gone the moment you press)
+  if (state === "wake") {
+    clearTimeout(wakeTimer);
+    setState("wake");
+    wakeTimer = setTimeout(() => { if (island.classList.contains("wake")) setState("idle"); }, 1150);
+    return;
+  }
+  if (state === "listening") { tint = p.mode === "do" ? "blue" : "warm"; document.body.classList.toggle("do", tint === "blue"); setState("listening"); warm = 1; tail = 26; fade = 1; doneAt = 0; startLoop(); return; } // always starts warm (or blue), never green
+  if (state === "thinking") { tint = "blue"; setState("thinking"); warm = 1; tail = 26; fade = 1; doneAt = 0; level = 0; startLoop(); return; }
+  if (state === "done") { setState("done"); startLoop(); return; }
+  // idle, hidden: the resting face (the listening state is gone the moment you press)
   setState("idle");
   level = 0;
   window.maven.hover(false);
+});
+window.maven.onAnchor(({ spot }) => {
+  document.body.classList.remove("a-left", "a-centre", "a-right");
+  document.body.classList.add(spot === "bottom-left" ? "a-left" : spot === "bottom-centre" ? "a-centre" : "a-right");
 });
 window.maven.onLevel(({ v }) => {
   const x = Math.max(0, Math.min(1, Number(v) || 0));
   level = level * 0.55 + x * 0.45;
 });
 
-// Click-through everywhere except the capsule and its buttons.
+// Click-through everywhere except the capsule, its buttons and the open card.
 island.addEventListener("mouseenter", () => { island.classList.add("open"); window.maven.hover(true); });
 island.addEventListener("mouseleave", () => { if (dragging) return; island.classList.remove("open"); window.maven.hover(false); });
 
@@ -135,3 +159,127 @@ window.addEventListener("blur", endDrag);
 island.querySelector(".face").addEventListener("dblclick", () => { endDrag(); window.maven.action("hub"); });
 island.querySelector(".x").addEventListener("click", () => window.maven.action("cancel"));
 island.querySelector(".ok").addEventListener("click", () => window.maven.action("done"));
+
+
+/* ---------- the island card (Do mode, 2026-10-27) ----------
+   One element, revealed by one clip-path: it starts as exactly the pill's
+   rect (same colour, same radius), springs open to the card, the content fades
+   in a beat later. Closing is the reverse, a little faster. Only clip-path,
+   transform and opacity move. */
+const card = (() => {
+  const el = document.getElementById("card");
+  const wrap = document.getElementById("cardwrap");
+  const eyes = el.querySelector(".ceyes");
+  const $ = (s) => el.querySelector(s);
+  const CW = 300, PW = 58, PH = 30;
+  let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
+  const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
+  const rectX = (w) => anchor() === "left" ? 0 : anchor() === "right" ? CW - w : (CW - w) / 2;
+  function clip(w, h, r) {
+    const x = rectX(w);
+    el.style.setProperty("--clip", `inset(${ch - h}px ${CW - w - x}px 0px ${x}px round ${r}px)`);
+  }
+  function eyesAt(cx, cy, s = 1, rot = 0) { eyes.style.transform = `translate(${cx - 8}px, ${cy - 5.5}px) scale(${s}) rotate(${rot}deg)`; }
+  const eyesOnPill = () => eyesAt(rectX(PW) + PW / 2, ch - PH / 2, 1.25);
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  function fill(c) {
+    kind = String(c.kind || "send");
+    el.className = `k-${kind}` + (kind === "choose" ? " curious" : "");
+    $(".title").textContent = String(c.title || "");
+    $(".right").textContent = String(c.right || "");
+    $(".preview").textContent = String(c.preview || "");
+    $(".editor").value = String(c.preview || "");
+    $(".ptxt").textContent = String(c.primary || "Send");
+    const opts = $(".opts"); opts.replaceChildren(); sel = 0;
+    (c.options || []).slice(0, 3).forEach((o, i) => {
+      const b = document.createElement("button"); b.type = "button";
+      const n = document.createElement("span"); n.textContent = String(o.name || o);
+      const m = document.createElement("small"); m.textContent = o.meta ? String(o.meta) : String(i + 1);
+      b.append(n, m); if (i === 0) b.classList.add("sel");
+      b.addEventListener("click", () => choose(i));
+      opts.append(b);
+    });
+  }
+  async function openCard(c) {
+    clearTimeout(closeTimer);
+    const wasOpen = open;
+    fill(c);
+    // Measure the natural height with the content laid out (still invisible).
+    el.style.height = "auto";
+    const body = $(".body");
+    ch = Math.min(206, Math.max(96, Math.ceil(body.scrollHeight)));
+    el.style.setProperty("--ch", ch + "px"); el.style.height = "";
+    if (!wasOpen) {
+      // Start as the pill, exactly, with no transition; then spring open.
+      el.classList.remove("anim", "closing");
+      clip(PW, PH, PH / 2); eyesOnPill();
+      el.classList.add("live");
+      island.classList.add("away");
+      await frame();
+    }
+    el.classList.add("anim", "open");
+    clip(CW, ch, 20);
+    eyesAt(22, 21.5, 1, kind === "choose" ? -6 : 0);
+    open = true;
+    window.maven.hover(true);
+    setTimeout(() => { const b = kind === "choose" ? $(".opts button") : $(".yes"); if (b && open) b.focus({ preventScroll: true }); }, 60);
+  }
+  function closeCard() {
+    if (!el.classList.contains("live")) return;
+    open = false;
+    el.classList.remove("open", "editing", "sent");
+    el.classList.add("anim", "closing");
+    clip(PW, PH, PH / 2); eyesOnPill();
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      island.classList.remove("away");
+      el.classList.remove("live", "anim", "closing");
+      window.maven.hover(false);
+    }, 370);
+  }
+  function sent(text) {
+    if (!el.classList.contains("live")) { note.textContent = text; note.classList.add("on"); setState("done"); startLoop(); return; }
+    el.classList.remove("open", "editing", "closing");
+    el.classList.add("anim", "sent");
+    const w = 120, h = 44;
+    clip(w, h, h / 2);
+    const x = rectX(w);
+    eyesAt(x + 22, ch - h / 2, 1.1);
+    const lbl = $(".sentlbl"); lbl.textContent = text; lbl.style.left = (x + 44) + "px";
+    closeTimer = setTimeout(closeCard, 900);
+  }
+  function primary() {
+    if (!open) return;
+    if (kind === "choose") return choose(sel);
+    window.maven.card({ do: "primary", text: el.classList.contains("editing") ? $(".editor").value : undefined });
+  }
+  function choose(i) { if (open) window.maven.card({ do: "choose", choice: i }); }
+  function cancel() { if (open) window.maven.card({ do: "cancel" }); }
+  function edit() {
+    el.classList.add("editing");
+    const ed = $(".editor"); ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length);
+    window.maven.card({ do: "activity" });
+  }
+  $(".yes").addEventListener("click", primary);
+  $(".no").addEventListener("click", cancel);
+  $(".edit").addEventListener("click", edit);
+  $(".editor").addEventListener("input", () => window.maven.card({ do: "activity" }));
+  document.addEventListener("keydown", (e) => {
+    if (!open) return;
+    if (e.key === "Escape") { e.preventDefault(); cancel(); return; }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); primary(); return; }
+    if (kind === "choose") {
+      const bs = [...el.querySelectorAll(".opts button")];
+      if (/^[1-3]$/.test(e.key) && bs[+e.key - 1]) { e.preventDefault(); choose(+e.key - 1); return; }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        sel = (sel + (e.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length;
+        bs.forEach((b, i) => b.classList.toggle("sel", i === sel)); bs[sel].focus({ preventScroll: true });
+      }
+    }
+  });
+  wrap.addEventListener("mouseenter", () => { if (open) window.maven.hover(true); });
+  wrap.addEventListener("mouseleave", () => { if (open && !document.hasFocus()) window.maven.hover(false); });
+  return { open: openCard, close: closeCard, sent, isOpen: () => open };
+})();

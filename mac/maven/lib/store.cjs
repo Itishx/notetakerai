@@ -110,4 +110,36 @@ function expandSnippet(text) {
   return hit ? hit.text : text;
 }
 
-module.exports = { init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };
+
+/* ---------- my details (for "fill in my address") ---------- */
+const DETAIL_KEYS = ["name", "email", "phone", "address"];
+function getDetails() {
+  const v = readJson(p("details.json"), {});
+  const out = {};
+  for (const k of DETAIL_KEYS) out[k] = String((v && v[k]) || "");
+  return out;
+}
+function saveDetails(d) {
+  const out = {};
+  for (const k of DETAIL_KEYS) out[k] = String((d && d[k]) || "").trim().slice(0, 2000);
+  writeJson(p("details.json"), out);
+  return getDetails();
+}
+
+/* ---------- memory ("remember Riya is spelled R-I-Y-A") ---------- */
+function getMemories() { const v = readJson(p("memories.json"), []); return Array.isArray(v) ? v.filter((m) => m && m.fact) : []; }
+function addMemory(fact, word = "") {
+  const f = String(fact || "").trim().slice(0, 1000);
+  if (!f) return false;
+  writeJson(p("memories.json"), [...getMemories(), { fact: f, at: new Date().toISOString() }]);
+  const w = String(word || "").trim();
+  if (w && !getDictionary().some((e) => e.word.toLowerCase() === w.toLowerCase() && !e.from)) saveDictionary([...getDictionary(), { word: w, from: "" }]);
+  return true;
+}
+
+/* ---------- the record of every Do command ---------- */
+function appendCommand(row) {
+  try { fs.mkdirSync(p("training"), { recursive: true }); fs.appendFileSync(p("training", "commands.jsonl"), JSON.stringify(row) + "\n"); } catch (_) {}
+}
+
+module.exports = { getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };

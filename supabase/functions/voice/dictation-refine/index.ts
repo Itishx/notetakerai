@@ -76,6 +76,64 @@ NEVER
 - Answer, summarise, or translate. Keep Hindi or Hinglish words as spoken.
 - Change names, emails, URLs, handles, code or product names except as above.`;
 
+
+/* Maven "Do" (2026-10-27): one spoken command -> ONE action. Same function on
+   purpose (the project is at its edge-function cap). Fixed prompt first so it
+   caches; only the command changes per call. */
+const INTENT_PROMPT = `You turn one spoken command into ONE action for a Mac assistant. Return one JSON object, nothing else:
+{"action": "open_app"|"open_url"|"switch_app"|"send_message"|"reply"|"fill"|"add_to_list"|"remember"|"none", "app"?: string, "url"?: string, "person"?: string, "message"?: string, "subject"?: string, "list"?: string, "item"?: string, "detail"?: "name"|"email"|"phone"|"address", "fact"?: string, "word"?: string, "reply3": string}
+
+ACTIONS
+- open_app: "open Slack" -> {"action":"open_app","app":"Slack","reply3":"Slack. Open."}. Only real Mac apps.
+- switch_app: "go to WhatsApp", "switch to Chrome" -> {"action":"switch_app","app":"WhatsApp","reply3":"There."}.
+- open_url: a website or web app: "open YouTube" -> {"action":"open_url","app":"YouTube","url":"https://www.youtube.com","reply3":"YouTube. Open."}. Gmail, Notion, X, LinkedIn, GitHub and other sites are open_url. A full URL said aloud becomes url.
+- send_message: "tell Rahul the deck is done", "message Neha on WhatsApp that I'm late", "email Priya the invoice is sent" -> person, message, app ("WhatsApp" by default, "Mail" when they say email or mail), subject only for Mail (3 to 6 words). reply3 "Drafted. Send?".
+- reply: "reply to this, Friday works", "reply saying sounds good" -> {"action":"reply","message":"Friday works.","reply3":"Written. Send?"}.
+- fill: "fill in my address", "put my email here" -> {"action":"fill","detail":"address","reply3":"Filled. Your call."}.
+- add_to_list: "add milk to my grocery list" -> {"action":"add_to_list","list":"Grocery","item":"Milk","reply3":"Added."}. list is the list's name without the word "list", capitalised.
+- remember: "remember Riya is spelled R-I-Y-A" -> {"action":"remember","fact":"Riya is spelled Riya.","word":"Riya","reply3":"Got it."}. word only when the fact is how a name or word is written.
+- none: anything else, anything with more than one step, questions, chit-chat, or when unsure -> {"action":"none","reply3":"Not my job."}. Empty or garbled speech -> {"action":"none","reply3":"Again?"}.
+
+RULES
+- One step only. Never plan.
+- If unsure, action is "none".
+- Never invent a person, a number, an address or a URL path. person is exactly the name that was said ("Rahul", "my mom"), never a guess.
+- message is the words to send, cleaned like dictation: fillers and false starts removed, punctuation and capitals added, nothing added or reworded, written in first person as the speaker would type it ("tell Rahul I'll be late" -> "I'll be late.").
+- reply3 is at most 3 words. No em dashes.`;
+
+async function intentFor(transcript: string, openaiKey: string | undefined) {
+  const messages = [{ role: "system", content: INTENT_PROMPT }, { role: "user", content: transcript }];
+  const groqKey = Deno.env.get("GROQ_API_KEY");
+  const call = (url: string, key: string, m: string) => fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: m, temperature: 0, response_format: { type: "json_object" }, messages, ...(m.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
+  }).catch(() => null);
+  let response: Response | null = null, provider = "groq", model = "";
+  if (groqKey) {
+    for (const m of [GROQ_SPARE_MODEL, GROQ_MODEL]) {
+      model = m;
+      response = await call(GROQ_ENDPOINT, groqKey, m);
+      if (response?.ok) break;
+      if (response) console.error("groq intent failed", m, response.status);
+    }
+  }
+  if ((!response || !response.ok) && openaiKey) {
+    provider = "openai"; model = DICTATION_REFINEMENT_MODEL;
+    response = await call(OPENAI_ENDPOINT, openaiKey, model);
+  }
+  if (!response || !response.ok) return { error: "Intent request failed", status: response?.status || 503 };
+  const data = await response.json().catch(() => ({}));
+  let parsed: Record<string, unknown> = {};
+  try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* none below */ }
+  const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "none"];
+  const intent: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed)) if (typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
+  if (!ACTIONS.includes(intent.action)) intent.action = "none";
+  intent.reply3 = (intent.reply3 || (intent.action === "none" ? "Not my job." : "Done.")).split(/\s+/).slice(0, 3).join(" ");
+  return { intent, provider, model, cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0 };
+}
+
 type Example = { c: string; i: string; o: string };
 const FILLER = new Set(["um", "uh", "hmm", "like", "you", "know", "i", "mean", "so", "okay", "right", "er", "the", "a", "is", "to", "and"]);
 const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
@@ -121,6 +179,12 @@ serve(async (req) => {
     if (!transcript) return json({ error: "No transcript provided" }, 400);
     if (transcript.length > MAX_TRANSCRIPT_CHARS) {
       return json({ error: "Transcript is too long" }, 413);
+    }
+    if (body?.mode === "intent") {
+      const t0 = Date.now();
+      const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"));
+      if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
+      return json({ ...r, durationMs: Date.now() - t0 });
     }
     // "rules" leaves the examples out (used by the eval to measure each layer).
     const mode = body?.mode === "rules" ? "rules" : "examples";

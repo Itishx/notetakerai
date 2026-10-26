@@ -48,3 +48,5 @@ textarea:focus { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .capsule .eye { width: 10px; height: 22px; border-radius: 6px; background: #f6f3ea; transition: transform .1s ease; }
 .capsule.blink .eye { transform: scaleY(.12); }
 @keyframes breathe { 0%, 100% { scale: 1; } 50% { scale: 1.04; } }
+/* fn + Control (Do), shown small under the dictation keys */
+.do-key kbd { width: auto; min-width: 28px; height: 24px; padding: 0 6px; font-size: 12px; border-radius: 6px; vertical-align: middle; }

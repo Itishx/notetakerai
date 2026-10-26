@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("maven", {
   saveSnippets: (l) => inv("hub:snip:save", l),
   getSettings: () => inv("hub:settings:get"),
   setSetting: (k, v) => inv("hub:settings:set", k, v),
+  getDetails: () => inv("hub:details:get"),
+  saveDetails: (d) => inv("hub:details:save", d),
   openDataFolder: () => inv("hub:openData"),
   deleteHistory: () => inv("hub:deleteHistory"),
   showOnboarding: () => inv("hub:onboarding"),

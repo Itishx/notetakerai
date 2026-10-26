@@ -63,3 +63,7 @@ textarea { width: 100%; min-height: 70px; padding: 9px 12px; border: 1px solid v
 .row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .row em { font-style: normal; color: var(--muted); }
 .danger { color: var(--danger) !important; }
+/* My details (2026-10-27) */
+.subhead { font-size: 18px; margin: 32px 0 4px; }
+#details-form .row input, #details-form .row textarea { width: 60%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; font: inherit; color: inherit; resize: vertical; outline: none; }
+#details-status { color: var(--muted); }

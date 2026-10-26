@@ -109,9 +109,20 @@ listPage({ form: "#snip-form", list: "#snip-list", get: api.getSnippets, save: a
 /* ---------- settings ---------- */
 api.getSettings().then((s) => {
   $("#set-shortcut").textContent = s.shortcut;
+  $("#set-do").textContent = s.doShortcut || "fn ⌃";
   $("#set-mic").textContent = s.microphone;
   $("#set-version").textContent = `version ${s.version}`;
   $("#set-login").checked = s.launchAtLogin;
+});
+/* My details */
+api.getDetails().then((d) => { const f = $("#details-form"); for (const k of ["name", "email", "phone", "address"]) f[k].value = (d && d[k]) || ""; });
+$("#details-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, d = {};
+  for (const k of ["name", "email", "phone", "address"]) d[k] = f[k].value;
+  await api.saveDetails(d);
+  $("#details-status").textContent = "Saved.";
+  setTimeout(() => ($("#details-status").textContent = ""), 1500);
 });
 $("#set-login").addEventListener("change", (e) => api.setSetting("launchAtLogin", e.target.checked));
 $("#set-onboard").addEventListener("click", () => api.showOnboarding());

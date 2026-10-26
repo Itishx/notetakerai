@@ -59,7 +59,7 @@ Maven does two things. Everything sits in one of them.
 **Rules:**
 - **When unsure, it types.** Typing the wrong thing is cheap. Doing the wrong thing isn't.
 - **Command verbs:** open, go to, switch to, tell, message, send, reply, fill, add … to my list, remember.
-- **Option for v1:** a second hotkey for Do, so we're never wrong. Auto-detection comes in v1.1 once we have data.
+- **Option for v1:** a second hotkey for Do, so we're never wrong. ✅ built 27 Oct: **fn + Control**, press to start, press again to stop. Auto-detection comes in v1.1 once we have data.
 - **Built on:** a small, fast classifier call (or rules, then a classifier). It must add under 150 ms.
 
 ---
@@ -107,21 +107,22 @@ Maven does two things. Everything sits in one of them.
 
 Every job is one step. Anything that sends, submits or deletes **waits for your yes**.
 
-| Job | Example | Reply | Asks first? | Free | Pro |
-|---|---|---|---|---|---|
-| Open an app | "open Slack" | "Slack. Open." | No | ✓ | ✓ |
-| Switch to an app or window | "go to WhatsApp" | "There." | No | ✓ | ✓ |
-| Open a website | "open YouTube" | "YouTube. Open." | No | ✓ | ✓ |
-| Switch to a tab | "go to my Gmail tab" | "Gmail." | No | ✓ | ✓ |
-| Write and send a message | "tell Rahul the deck is done" | "Drafted. Send?" | **Yes** | 10/day | ∞ |
-| Reply to what's on screen | "reply to this, Friday works" | "Written. Send?" | **Yes** | — | ✓ |
-| Fill a form | "fill in my address" | "Filled. Your call." | **Yes** | 3/month | ∞ |
-| Add to a list | "add milk to my grocery list" | "Added." | No | ✓ | ✓ |
-| Remember something | "remember Riya is spelled R-I-Y-A" | "Got it." | No | basic | full |
+| Job | Example | Reply | Asks first? | Free | Pro | Status |
+|---|---|---|---|---|---|---|
+| Open an app | "open Slack" | "Slack. Open." | No | ✓ | ✓ | ✅ built |
+| Switch to an app or window | "go to WhatsApp" | "There." | No | ✓ | ✓ | ✅ built (apps) |
+| Open a website | "open YouTube" | "YouTube. Open." | No | ✓ | ✓ | ✅ built |
+| Switch to a tab | "go to my Gmail tab" | "Gmail." | No | ✓ | ✓ | ⬜ not yet |
+| Write and send a message | "tell Rahul the deck is done" | "Drafted. Send?" | **Yes** | 10/day | ∞ | ✅ built (WhatsApp, Mail) |
+| Reply to what's on screen | "reply to this, Friday works" | "Written. Send?" | **Yes** | — | ✓ | 🟡 pastes into the focused box |
+| Fill a form | "fill in my address" | "Filled. Your call." | **Yes** | 3/month | ∞ | ✅ built (one detail) |
+| Add to a list | "add milk to my grocery list" | "Added." | No | ✓ | ✓ | ✅ built (Apple Notes) |
+| Remember something | "remember Riya is spelled R-I-Y-A" | "Got it." | No | basic | full | ✅ built |
 
 **Apps for v1:** WhatsApp (Mac app first, web only if no app), Slack, Gmail (in Chrome), Mail, Notes, Chrome.
 
-**Can't do it:** reply "Not my job." and do nothing.
+**Can't do it:** reply "Not my job." and do nothing. ✅
+**Built 27 Oct 2026:** fn + Control → transcribe → one intent call (dictation-refine, mode "intent", Groq gpt-oss-20b, ~0.5 s) → one action. Sends and fills wait in the island card (Enter = yes, Esc = no, folds after 20 s with the draft on the clipboard). Same-name contacts ask "Which Riya?". Every command is logged to training/commands.jsonl.
 **Didn't hear:** reply "Again?".
 
 ---
@@ -147,12 +148,12 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 | Moment | Face | Reply (≤ 3 words) |
 |---|---|---|
 | Listening | Two bars, the voice wave moving through both | — |
-| Thinking | Still, bars slightly closer | — |
+| Thinking | Eyes drift up and to the side, slow dim light ✅ | — |
 | Done (Write) | Small hop, then folds away | — |
 | Done (Do) | Small hop | "YouTube. Open." |
-| Waiting for a yes | Still | "Drafted. Send?" |
-| Can't do it | Small tilt | "Not my job." |
-| Didn't hear | Small tilt | "Again?" |
+| Waiting for a yes | The pill grows into the island card ✅ | "Drafted. Send?" |
+| Can't do it | Looks away, small tilt ✅ | "Not my job." |
+| Didn't hear | Tilts, one eye lower ✅ | "Again?" |
 
 **Where:** the face appears in place (top-right corner, by the menu bar) and is never a panel or a window. **Personality:** dry, short, never chatty.
 
@@ -177,7 +178,7 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 | Open and switch | ✓ | ✓ |
 | Send a message, with your yes | 10/day | Unlimited |
 | Fill a form, with your yes | 3/month | Unlimited |
-| Reply to what's on screen | — | ✓ |
+| Reply to what's on screen | — | ✓ | 🟡 pastes into the focused box |
 | Memory | Names and basic details | Lists, details, your way of writing |
 | Hinglish | — | ✓ (when built) |
 
@@ -208,7 +209,7 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 ### v1: the first usable Maven (target: 2 weeks)
 1. **Split Maven out of Braino Mac** into its own app, name, icon and installer *(3 days)*
 2. **Write mode polished**: the island, the corner face, settings, word counting *(2 days)*
-3. **Do mode, one-step jobs**: open, switch, website, tab, send with yes, fill with yes *(4 days)*
+3. **Do mode, one-step jobs**: open, switch, website, tab, send with yes, fill with yes *(4 days)* 🟡 built 27 Oct except switching to a browser tab
 4. **Memory v1**: names, details, lists, and a Settings page to view them *(2 days)*
 5. **Free/Pro limits and Polar checkout** *(1 day)*
 6. **Signed installer and tester release** *(1 day)*

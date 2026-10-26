@@ -1,8 +1,10 @@
 "use strict";
-/* Maven (Memory And Voice ENgine), part 1: dictation only.
+/* Maven (Memory And Voice ENgine): Write (dictation) and Do (one small job).
  *
  * Press Control+Option, talk, press again: the words are cleaned up and typed
- * where your cursor is. Lives in the menu bar. Shows a small capsule with eyes at the bottom
+ * where your cursor is. Press fn+Control instead and ask for one job ("open
+ * YouTube", "tell Neha I'm late"): Maven works out the one action, does it, and
+ * anything that sends or fills waits for your yes in the island. Lives in the menu bar. Shows a small capsule with eyes at the bottom
  * while listening. Never speaks. Audio stays in memory only.
  *
  * Pipeline (the same cloud path the Braino Mac app proved out):
@@ -133,6 +135,7 @@ function buildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open Maven", click: () => openHub() },
     { label: "Start dictation (⌃⌥)", click: () => toggleDictation("menu") },
+    { label: "Ask Maven to do something (fn⌃)", click: () => toggleDictation("menu", "do") },
     { label: "Open last dictation", click: () => { const p = lastDictationPath(); if (fs.existsSync(p)) shell.openPath(p); } },
     { label: "Show onboarding again", click: () => onboarding && onboarding.show() },
     { type: "separator" },
@@ -144,8 +147,15 @@ function buildTray() {
    2026-10-26 (Itish): never the top, never "anywhere". Bottom-left,
    bottom-centre or bottom-right of its display. Drag it and three faint spots
    show; let go and it glides to the nearest one and stays there. */
-const ISLAND_W = 150, ISLAND_H = 96;
-const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 26; // capsule inside the window: centred, 14px from the bottom
+/* 2026-10-27: the window is a fixed, generous 380x240 so the island can grow
+   into its card without the window ever resizing mid-animation. The capsule
+   sits at the window's bottom edge, on the side matching its spot (left spot:
+   left side), so the card grows up and toward the screen centre. Everything
+   outside the visible shape is click-through. */
+const ISLAND_W = 380, ISLAND_H = 240;
+const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 26, CAP_SIDE = 26; // capsule inside the window
+let anchorSpot = "bottom-right"; // which side of the window the capsule is drawn on
+const capOffsetX = (spot) => spot === "bottom-left" ? CAP_SIDE : spot === "bottom-centre" ? (ISLAND_W - CAP_W) / 2 : ISLAND_W - CAP_SIDE - CAP_W;
 const SPOT_MARGIN = 16;
 const SPOTS = ["bottom-left", "bottom-centre", "bottom-right"];
 const islandPosPath = () => path.join(app.getPath("userData"), "island.json");
@@ -161,22 +171,29 @@ function saveSpot(spot, displayId) {
   try { fs.mkdirSync(path.dirname(islandPosPath()), { recursive: true }); fs.writeFileSync(islandPosPath(), JSON.stringify({ spot, displayId })); } catch (_) {}
 }
 function displayById(id) { return screen.getAllDisplays().find((d) => d.id === id) || screen.getPrimaryDisplay(); }
-/* The window bounds that put the capsule SPOT_MARGIN in from the work area edges. */
-function spotBounds(display, spot) {
+/* Where the capsule itself goes: SPOT_MARGIN in from the work area edges. */
+function capRect(display, spot) {
   const wa = display.workArea;
-  const capY = wa.y + wa.height - SPOT_MARGIN - CAP_H;
-  const capX = spot === "bottom-left" ? wa.x + SPOT_MARGIN
+  const y = wa.y + wa.height - SPOT_MARGIN - CAP_H;
+  const x = spot === "bottom-left" ? wa.x + SPOT_MARGIN
     : spot === "bottom-centre" ? wa.x + Math.round((wa.width - CAP_W) / 2)
     : wa.x + wa.width - SPOT_MARGIN - CAP_W;
-  return { x: Math.round(capX - (ISLAND_W - CAP_W) / 2), y: Math.round(capY - (ISLAND_H - CAP_BOTTOM - CAP_H)), width: ISLAND_W, height: ISLAND_H };
+  return { x, y };
 }
+/* The window bounds that put the capsule there, drawn on the side `anchor` says. */
+function spotBounds(display, spot, anchor = spot) {
+  const c = capRect(display, spot);
+  return { x: Math.round(c.x - capOffsetX(anchor)), y: Math.round(c.y - (ISLAND_H - CAP_BOTTOM - CAP_H)), width: ISLAND_W, height: ISLAND_H };
+}
+function setAnchor(spot) { anchorSpot = spot; sendIsland("maven:anchor", { spot }); }
 function placeIsland() {
   if (!island || island.isDestroyed() || drag) return;
   const s = savedSpot();
+  setAnchor(s.spot);
   island.setBounds(spotBounds(displayById(s.displayId), s.spot));
 }
 let glideTimer = 0;
-function glideIsland(to, ms = 180) {
+function glideIsland(to, ms = 180, after = null) {
   clearInterval(glideTimer);
   if (!island || island.isDestroyed()) return;
   const from = island.getBounds();
@@ -186,14 +203,21 @@ function glideIsland(to, ms = 180) {
     const k = Math.min(1, (Date.now() - t0) / ms);
     const e = 1 - Math.pow(1 - k, 3); // ease out
     island.setBounds({ x: Math.round(from.x + (to.x - from.x) * e), y: Math.round(from.y + (to.y - from.y) * e), width: ISLAND_W, height: ISLAND_H });
-    if (k >= 1) clearInterval(glideTimer);
+    if (k >= 1) { clearInterval(glideTimer); if (after) after(); }
   }, 16);
 }
 function setIslandAllowed(on) {
   islandAllowed = Boolean(on);
   if (!island || island.isDestroyed()) return;
-  if (islandAllowed) { placeIsland(); island.showInactive(); sendIsland("maven:state", { state: "idle" }); }
+  if (islandAllowed) { placeIsland(); island.showInactive(); sendRest(); }
   else island.hide();
+}
+/* The first time the pill is on screen (launch, or after onboarding places
+   it) it wakes up: fades in with its eyes shut, opens them, blinks once. */
+let woke = false;
+function sendRest() {
+  if (islandAllowed && !woke && island && !island.isDestroyed() && !island.webContents.isLoading()) { woke = true; sendIsland("maven:state", { state: "wake" }); return; }
+  sendIsland("maven:state", { state: "idle" });
 }
 function createIsland() {
   island = new BrowserWindow({
@@ -206,8 +230,7 @@ function createIsland() {
   island.setIgnoreMouseEvents(true, { forward: true }); // click-through, except the capsule (see maven:hover)
   island.loadFile(path.join(__dirname, "renderer", "island.html"));
   placeIsland();
-  island.once("ready-to-show", () => { if (islandAllowed) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
-  island.webContents.once("did-finish-load", () => { if (islandAllowed && !island.isVisible()) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
+  island.webContents.once("did-finish-load", () => { setAnchor(anchorSpot); if (islandAllowed && !island.isVisible()) island.showInactive(); sendRest(); });
   island.on("closed", () => { island = null; });
 }
 
@@ -240,8 +263,8 @@ function drawTargets(display, active) {
   const cur = t.getBounds();
   if (cur.x !== b.x || cur.y !== b.y || cur.width !== b.width || cur.height !== b.height) t.setBounds(b);
   const spots = SPOTS.map((name) => {
-    const w = spotBounds(display, name);
-    return { name, x: w.x + (ISLAND_W - CAP_W) / 2 - 8 - b.x, y: w.y + (ISLAND_H - CAP_BOTTOM - CAP_H) - 8 - b.y };
+    const c = capRect(display, name);
+    return { name, x: c.x - 8 - b.x, y: c.y - 8 - b.y };
   });
   const js = `window.draw && window.draw(${JSON.stringify(spots)}, ${JSON.stringify(active)})`;
   if (t.webContents.isLoading()) t.webContents.once("did-finish-load", () => t.webContents.executeJavaScript(js).catch(() => {}));
@@ -252,8 +275,8 @@ function drawTargets(display, active) {
 function nearestSpot(display, capCx, capCy) {
   let best = SPOTS[2], bestD = Infinity;
   for (const name of SPOTS) {
-    const w = spotBounds(display, name);
-    const d = Math.hypot(w.x + ISLAND_W / 2 - capCx, w.y + ISLAND_H - CAP_BOTTOM - CAP_H / 2 - capCy);
+    const c = capRect(display, name);
+    const d = Math.hypot(c.x + CAP_W / 2 - capCx, c.y + CAP_H / 2 - capCy);
     if (d < bestD) { bestD = d; best = name; }
   }
   return best;
@@ -262,9 +285,9 @@ function nearestSpot(display, capCx, capCy) {
 /* Manual dragging: app-region drag gives no start/end, so main moves the
    window with the cursor at ~60 fps while the button is down. */
 let drag = null;
-function capsuleCentre(b) { return { x: b.x + ISLAND_W / 2, y: b.y + ISLAND_H - CAP_BOTTOM - CAP_H / 2 }; }
+function capsuleCentre(b) { return { x: b.x + capOffsetX(anchorSpot) + CAP_W / 2, y: b.y + ISLAND_H - CAP_BOTTOM - CAP_H / 2 }; }
 function dragStart() {
-  if (!island || island.isDestroyed() || drag) return;
+  if (!island || island.isDestroyed() || drag || doAsk) return;
   clearInterval(glideTimer);
   const p = screen.getCursorScreenPoint();
   const b = island.getBounds();
@@ -299,7 +322,8 @@ function dragEnd() {
   const c = capsuleCentre(island.getBounds());
   const spot = nearestSpot(display, c.x, c.y);
   saveSpot(spot, display.id);
-  glideIsland(spotBounds(display, spot));
+  // Glide with the capsule where it is drawn now, then switch sides in one step.
+  glideIsland(spotBounds(display, spot, anchorSpot), 180, () => { setAnchor(spot); if (island && !island.isDestroyed()) island.setBounds(spotBounds(display, spot)); });
   log("island.spot", { spot, display: display.id });
   if (onboarding) onboarding.placed(spot);
 }
@@ -323,9 +347,11 @@ function islandHide(delay = 0) {
 }
 ipcMain.on("maven:hover", (_e, over) => {
   if (drag) return; // keep the mouse while dragging
+  if (doAsk && !over) return; // the card is asking: it keeps the mouse until answered
   if (island && !island.isDestroyed()) island.setIgnoreMouseEvents(!over, { forward: true });
 });
 ipcMain.on("maven:drag", (_e, what) => { if (what === "start") dragStart(); else dragEnd(); });
+ipcMain.on("maven:card", (_e, a) => { void onCard(a || {}); });
 ipcMain.on("maven:action", (_e, action) => {
   if (action === "cancel") stopDictation("island cancel", { discard: true });
   else if (action === "done") stopDictation("island done");
@@ -381,6 +407,7 @@ async function startKeys() {
       if (!t) continue;
       if (t === "pasted" || t.startsWith("pasted\t")) { const w = pasteWaiters.shift(); if (w) w(t.split("\t")[1] || ""); continue; }
       if (t.startsWith("dictate-hold-")) { onChord(t.slice("dictate-hold-".length)); continue; }
+      if (t.startsWith("do-hold-")) { onChord(t.slice("do-hold-".length), "do"); continue; }
       if (t === "ready") setKeysReady(true);
       log("keys.status", { line: t });
     }
@@ -424,30 +451,35 @@ let session_ = 0;
 /* Hands-free: press Control+Option to start, press again to stop and paste.
    Letting go does nothing. Another key within 1.5 s of starting means the
    chord was a shortcut: the take is thrown away. */
-function onChord(kind) {
+/* fn+Control is the same, for Do (one small job): press, ask, press again. */
+let takeMode = "write"; // what the current recording is for: "write" or "do"
+function onChord(kind, mode = "write") {
   if (kind === "end") return;
   if (kind === "cancel") {
-    if ((phase === "starting" || phase === "listening") && Date.now() - startedAt < 1500) stopDictation("chord was a shortcut", { discard: true });
+    if ((phase === "starting" || phase === "listening") && takeMode === mode && Date.now() - startedAt < 1500) stopDictation("chord was a shortcut", { discard: true });
     return;
   }
   if (kind === "start") {
-    if (onboarding && onboarding.onChord()) return; // the shortcut step only checks the keys
-    toggleDictation("Control+Option");
+    if (mode === "write" && onboarding && onboarding.onChord()) return; // the shortcut step only checks the keys
+    if (mode === "do" && doAsk) return; // the island is asking: answer it first (Enter / Esc)
+    toggleDictation(mode === "do" ? "fn+Control" : "Control+Option", mode);
   }
 }
-function toggleDictation(source) {
+function toggleDictation(source, mode = "write") {
   // A press while the last one is still pasting starts a new one; it is never ignored.
-  if (phase === "idle" || phase === "finishing") void startDictation(source);
+  if (phase === "idle" || phase === "finishing") void startDictation(source, mode);
   else if (phase === "starting" || phase === "listening") stopDictation(source);
 }
 
 let phaseTimer = 0, phaseJobs = [];
-async function startDictation(source) {
+async function startDictation(source, mode = "write") {
+  if (doAsk) void endAsk("interrupted by a new take");
   phase = "starting";
+  takeMode = mode;
   startedAt = Date.now();
   stopQueued = null;
   session_ += 1;
-  islandShow("listening");
+  islandShow("listening", { mode });
   // Wake the transcriber while you talk (an OPTIONS call: no model, no cost).
   fetch(`${SUPABASE_URL}/functions/v1/transcribe-and-notes`, { method: "OPTIONS" }).catch(() => {});
   const r = await hera().start().catch((error) => ({ ok: false, error: String(error?.message || error) }));
@@ -472,8 +504,9 @@ function stopDictation(reason, opts = {}) {
   if (phase === "starting") { stopQueued = { reason, opts }; return; }
   if (phase !== "listening") return;
   phase = "finishing";
-  islandHide(); // the moment you press, the listening state goes; the text follows
-  void finishDictation(reason, Boolean(opts.discard), session_);
+  if (takeMode === "do" && !opts.discard) islandShow("thinking"); // eyes drift, slow dim light, while it works out the job
+  else islandHide(); // the moment you press, the listening state goes; the text follows
+  void finishDictation(reason, Boolean(opts.discard), session_, takeMode);
 }
 
 /* ---------- transcription ---------- */
@@ -625,7 +658,7 @@ async function insertText(text) {
   }
 }
 
-async function finishDictation(reason, discard, mySession = session_) {
+async function finishDictation(reason, discard, mySession = session_, mode = "write") {
   const t0 = Date.now();
   clearInterval(phaseTimer); phaseTimer = 0;
   const audio = await hera().stop();
@@ -636,13 +669,18 @@ async function finishDictation(reason, discard, mySession = session_) {
     return;
   }
   try {
-    if (!audio?.audioBase64) { log("dictation.empty", { reason, error: audio?.error || "" }); islandHide(); return; }
+    if (!audio?.audioBase64) { log("dictation.empty", { reason, error: audio?.error || "" }); if (mode === "do") { islandShow("reply", { note: "Again?", face: "again" }); islandHide(1600); } else islandHide(); return; }
     const phased = await collectPhases(audio);
     const heard = phased && phased.length >= Math.max(12, (audio.ms || 0) / 120)
       ? { ok: true, transcript: phased, provider: "phases" }
       : await transcribeAudio({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "maven.webm" }).catch((e) => ({ ok: false, error: String(e?.message || e) }));
     const textMs = Date.now() - t0;
-    if (!heard.ok || !heard.transcript) { log("dictation.nothing_heard", { reason, error: heard.error || "" }); islandShow("note", { note: "Heard nothing." }); islandHide(1400); return; }
+    if (!heard.ok || !heard.transcript) {
+      log("dictation.nothing_heard", { reason, error: heard.error || "" });
+      if (mode === "do") islandShow("reply", { note: "Again?", face: "again" }); else islandShow("note", { note: "Heard nothing." });
+      islandHide(1400); return;
+    }
+    if (mode === "do") { await runDo({ raw: heard.transcript.trim(), heard, audio, t0, textMs }); return; }
     const raw = spokenNumbersToDigits(heard.transcript.trim());
     const quick = quickTidy(raw);
     const c0 = Date.now();
@@ -667,6 +705,260 @@ async function finishDictation(reason, discard, mySession = session_) {
     // Only if no new dictation started meanwhile.
     if (session_ === mySession) phase = "idle";
   }
+}
+
+/* ---------- Do mode (2026-10-27): one spoken command, one step ----------
+   record -> transcribe (same as dictation) -> intent (dictation-refine,
+   mode "intent": one action JSON) -> act. Opening things just happens; anything
+   that sends or fills shows the island card and waits for Enter / Send.
+   Esc cancels. The island takes key focus only while it asks, and gives it back
+   to the app you were in. After 20 s it folds and leaves the draft on the clipboard. */
+const actions = require(path.join(__dirname, "lib", "actions.cjs"));
+const whatsapp = require(path.join(__dirname, "lib", "whatsapp.cjs"));
+const CHAT_APPS = /^(WhatsApp|Slack|Messages|Telegram|Discord|Signal|Microsoft Teams)$/i;
+const DETAIL_WORDS = { name: "name", email: "email", phone: "phone number", address: "address" };
+
+async function intentFor(raw) {
+  if (!SUPABASE_ANON_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ mode: "intent", transcript: raw }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.intent?.action) { log("do.intent_failed", { status: res.status }); return null; }
+    return { intent: data.intent, model: `${data.provider || "?"} ${data.model || ""}`.trim() };
+  } catch (error) {
+    log("do.intent_failed", { error: error?.name === "AbortError" ? "timeout" : String(error?.message || error) });
+    return null;
+  } finally { clearTimeout(timer); }
+}
+
+function reply(text, face = "done", ms = 1700) {
+  islandShow("reply", { note: text, face });
+  islandHide(ms);
+}
+
+/* ---------- the island asking ---------- */
+let doAsk = null; // { spec, rec, draft, front, onYes, onChoose, timer }
+function takeFocus() {
+  if (!island || island.isDestroyed()) return;
+  try { island.setFocusable(true); island.setIgnoreMouseEvents(false); app.focus({ steal: true }); island.focus(); } catch (_) {}
+}
+async function giveFocusBack(front) {
+  if (!island || island.isDestroyed()) return;
+  try { island.blur(); island.setFocusable(false); island.setIgnoreMouseEvents(true, { forward: true }); } catch (_) {}
+  if (front && front !== "Electron" && front !== "Maven") await actions.activate(front);
+}
+function armFold() {
+  if (!doAsk) return;
+  clearTimeout(doAsk.timer);
+  doAsk.timer = setTimeout(() => void endAsk("folded after 20s"), 20000);
+}
+async function ask(spec, rec, handlers) {
+  const front = doAsk ? doAsk.front : await actions.frontApp();
+  if (doAsk) clearTimeout(doAsk.timer);
+  doAsk = { spec, rec, draft: String(spec.preview || ""), front, ...handlers };
+  islandShow("ask", { card: spec });
+  takeFocus();
+  armFold();
+}
+/* Ends the question without doing it: cancelled, folded, or interrupted. */
+async function endAsk(why) {
+  const job = doAsk;
+  if (!job) return;
+  doAsk = null;
+  clearTimeout(job.timer);
+  const keep = /folded/.test(why) && job.draft && job.spec.kind !== "choose";
+  if (keep) clipboard.writeText(job.draft);
+  islandShow("idle");
+  await giveFocusBack(job.front);
+  if (keep) reply("On your clipboard.", "nope", 1800);
+  job.rec.result = why + (keep ? ", draft on clipboard" : "");
+  finishDo(job.rec);
+}
+async function onCard(a) {
+  const job = doAsk;
+  if (!job) return;
+  if (a.do === "activity") { armFold(); return; }
+  if (a.do === "cancel") { await endAsk("cancelled"); return; }
+  if (a.do === "choose" && job.onChoose) { clearTimeout(job.timer); await job.onChoose(Number(a.choice) || 0); return; }
+  if (a.do === "primary" && job.onYes) {
+    const text = typeof a.text === "string" && a.text.trim() ? a.text.trim() : job.draft;
+    doAsk = null;
+    clearTimeout(job.timer);
+    const a0 = Date.now();
+    try { job.rec.result = await job.onYes(text, job); }
+    catch (error) { job.rec.result = `failed: ${String(error?.message || error).slice(0, 160)}`; islandShow("idle"); reply("Not my job.", "nope"); }
+    job.rec.sendMs = Date.now() - a0;
+    if (text !== job.draft) job.rec.edited = text;
+    finishDo(job.rec);
+  }
+}
+
+/* ---------- the actions ---------- */
+async function sendFlow(intent, rec) {
+  const person = String(intent.person || "").trim();
+  const message = String(intent.message || "").trim();
+  if (!person || !message) { reply("Again?", "again"); return "no person or message"; }
+  const viaMail = /mail|gmail|email/i.test(String(intent.app || ""));
+  if (viaMail) {
+    const to = await actions.emailFor(person);
+    await ask({ kind: "send", title: `To ${person}${to ? "" : " (no email saved)"}`, right: "Drafted. Send?", preview: message, primary: "Send" }, rec, {
+      onYes: async (text) => {
+        islandShow("sent", { text: "In Mail." });
+        await giveFocusBack("");
+        await shell.openExternal(actions.mailto(to, intent.subject || "", text));
+        islandHide(1400);
+        return `mail compose opened${to ? "" : " (no address)"}`;
+      },
+    });
+    return "asking";
+  }
+  if (!whatsapp.installed()) { clipboard.writeText(message); reply("No WhatsApp app.", "nope", 2000); return "no WhatsApp app, draft on clipboard"; }
+  const found = await whatsapp.resolve(person).catch(() => ({ ok: false }));
+  const sendCard = async (who) => ask({ kind: "send", title: `To ${who.name}`, right: "Drafted. Send?", preview: message, primary: "Send" }, rec, {
+    onYes: async (text, job) => {
+      await giveFocusBack(""); // WhatsApp takes the front itself
+      const r = await whatsapp.send({ phone: who.phone, text, openExternal: (u) => shell.openExternal(u), log });
+      if (r.ok) { islandShow("sent", { text: "Sent." }); islandHide(1500); return `sent on WhatsApp to ${who.name}`; }
+      clipboard.writeText(text);
+      islandShow("idle");
+      await actions.activate(job.front);
+      reply("Not sent. Copied.", "nope", 2200);
+      return `not sent (${r.why}), draft on clipboard`;
+    },
+  });
+  if (found.ok) { await sendCard(found); return "asking"; }
+  if (found.choices?.length) {
+    // Two people with that name is always a question, never a guess.
+    const first = person.split(/\s+/)[0];
+    await ask({ kind: "choose", title: `Which ${first}?`, right: "Pick one", options: found.choices.map((c) => ({ name: c.name, meta: c.chats ? `${c.chats} msgs` : "" })) }, rec, {
+      onChoose: async (i) => { const pick = found.choices[i] || found.choices[0]; rec.chose = pick.name; await sendCard(pick); },
+    });
+    return "asking";
+  }
+  clipboard.writeText(message);
+  reply(`Can't find ${person}.`, "nope", 2200);
+  return `can't find ${person}, draft on clipboard`;
+}
+
+async function pasteInto(front, text) {
+  await giveFocusBack(front);
+  await new Promise((r) => setTimeout(r, 180));
+  clipboard.writeText(text);
+  const pasted = await nativePaste();
+  return pasted !== null;
+}
+
+async function doAction(intent, rec) {
+  mavenStore.init(app.getPath("userData"));
+  const act = intent.action;
+  if (act === "open_app" || act === "switch_app") {
+    const found = actions.findApp(intent.app);
+    if (!found) {
+      const site = act === "open_app" ? actions.siteFor(intent.app, intent.url) : null;
+      if (site && intent.app && !/\s/.test(String(intent.app).trim())) { await shell.openExternal(site.href); reply(`${site.label}. Open.`); return `no app, opened ${site.href}`; }
+      reply(`Can't find ${intent.app || "that"}.`, "nope"); return "app not found";
+    }
+    await actions.openApp(found);
+    reply(act === "open_app" ? `${found.name}. Open.` : "There.");
+    return `opened ${found.name}`;
+  }
+  if (act === "open_url") {
+    const site = actions.siteFor(intent.app || "", intent.url);
+    if (!site) { reply("Again?", "again"); return "no site"; }
+    await shell.openExternal(site.href);
+    reply(`${site.label}. Open.`);
+    return `opened ${site.href}`;
+  }
+  if (act === "send_message") return sendFlow(intent, rec);
+  if (act === "reply") {
+    const message = String(intent.message || "").trim();
+    if (!message) { reply("Again?", "again"); return "no message"; }
+    const front = await actions.frontApp();
+    await ask({ kind: "reply", title: `Reply in ${front || "this app"}`, right: "Written. Send?", preview: message, primary: "Send" }, rec, {
+      onYes: async (text, job) => {
+        islandShow("idle");
+        const ok = await pasteInto(job.front, text);
+        if (ok && CHAT_APPS.test(job.front)) { await new Promise((r) => setTimeout(r, 120)); await actions.pressReturn(); reply("Sent."); return `pasted and sent in ${job.front}`; }
+        reply(ok ? "Written." : "Copied. No box.", ok ? "done" : "nope");
+        return ok ? `pasted in ${job.front}` : "no text box, copied";
+      },
+    });
+    return "asking";
+  }
+  if (act === "fill") {
+    const key = Object.keys(DETAIL_WORDS).includes(intent.detail) ? intent.detail : "";
+    const value = key ? mavenStore.getDetails()[key] : "";
+    if (!key) { reply("Not my job.", "nope"); return "unknown detail"; }
+    if (!value) { reply(`No ${DETAIL_WORDS[key]} saved.`, "nope", 2200); return `no ${key} saved`; }
+    await ask({ kind: "fill", title: `Fill your ${DETAIL_WORDS[key]}`, right: "Your call.", preview: value, primary: "Fill" }, rec, {
+      onYes: async (text, job) => {
+        islandShow("idle");
+        const ok = await pasteInto(job.front, text); // never presses Submit
+        reply(ok ? "Filled. Your call." : "Copied. No box.", ok ? "done" : "nope", 2000);
+        return ok ? `filled ${key} in ${job.front}` : "no text box, copied";
+      },
+    });
+    return "asking";
+  }
+  if (act === "add_to_list") {
+    if (!intent.item) { reply("Again?", "again"); return "no item"; }
+    const list = String(intent.list || "List").replace(/\s+list$/i, "").trim() || "List";
+    const r = await actions.addToNote(list, intent.item);
+    reply("Added.");
+    return `${r} note "${list}"`;
+  }
+  if (act === "remember") {
+    if (!mavenStore.addMemory(intent.fact, intent.word)) { reply("Again?", "again"); return "no fact"; }
+    reply("Got it.");
+    return intent.word ? `remembered, "${intent.word}" in the dictionary` : "remembered";
+  }
+  const again = /again/i.test(String(intent.reply3 || ""));
+  reply(again ? "Again?" : "Not my job.", again ? "again" : "nope");
+  return again ? "didn't hear" : "not my job";
+}
+
+async function runDo({ raw, heard, audio, t0, textMs }) {
+  const rec = { t0, at: new Date().toISOString(), heard: raw, heardBy: heard.provider || "", spokenSec: +((audio?.ms || 0) / 1000).toFixed(1), textMs, intentMs: 0, actMs: 0, sendMs: 0, intent: null, model: "", result: "" };
+  const i0 = Date.now();
+  const r = await intentFor(raw);
+  rec.intentMs = Date.now() - i0;
+  if (!r) { reply("Again?", "again"); rec.result = "intent failed"; finishDo(rec); return; }
+  rec.intent = r.intent; rec.model = r.model;
+  const a0 = Date.now();
+  try { rec.result = await doAction(r.intent, rec); }
+  catch (error) { rec.result = `failed: ${String(error?.message || error).slice(0, 160)}`; reply("Not my job.", "nope"); }
+  rec.actMs = Date.now() - a0;
+  if (rec.result !== "asking") finishDo(rec);
+}
+
+/* One terminal block per Do command, like the dictation one, and a JSON line
+   in userData/training/commands.jsonl. Seconds to one decimal. */
+function finishDo(rec) {
+  const totalMs = Date.now() - rec.t0;
+  const i = rec.intent || {};
+  console.log([
+    "",
+    `[MAVEN DO] ── ${i.action || "none"} · ${rec.result} · total ${sec(totalMs)}`,
+    `  heard   (${rec.heardBy || "?"}, ${sec(rec.textMs)}): "${rec.heard}"`,
+    `  intent  (${rec.model || "failed"}, ${sec(rec.intentMs)}): ${JSON.stringify(rec.intent || {})}`,
+    `  action  ${i.action || "none"}${i.app ? ` · ${i.app}` : ""}${i.person ? ` · to ${i.person}` : ""}${rec.chose ? ` (chose ${rec.chose})` : ""}${rec.edited ? " · edited" : ""}`,
+    `  result  ${rec.result}`,
+    `  time    text ${sec(rec.textMs)} · intent ${sec(rec.intentMs)} · act ${sec(rec.actMs)}${rec.sendMs ? ` · send ${sec(rec.sendMs)}` : ""} · total ${sec(totalMs)}`,
+  ].join("\n"));
+  log("do.done", { action: i.action || "none", result: rec.result, intentMs: rec.intentMs, totalMs });
+  mavenStore.init(app.getPath("userData"));
+  mavenStore.appendCommand({
+    at: rec.at, spokenSec: rec.spokenSec, heardBy: rec.heardBy, heard: rec.heard, intent: rec.intent, model: rec.model,
+    action: i.action || "none", result: rec.result, chose: rec.chose || "", edited: rec.edited || "",
+    textSec: +(rec.textMs / 1000).toFixed(1), intentSec: +(rec.intentMs / 1000).toFixed(1), actSec: +(rec.actMs / 1000).toFixed(1), sendSec: +((rec.sendMs || 0) / 1000).toFixed(1), totalSec: +(totalMs / 1000).toFixed(1),
+  });
 }
 
 /* ---------- lifecycle ---------- */

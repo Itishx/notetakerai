@@ -1,6 +1,23 @@
+/* What we took from Apple (HIG "Live Activities" / Dynamic Island, and SwiftUI's
+   spring animations), 27 Oct 2026:
+   - The expanded island is the compact one grown, never a new popup: the card is
+     revealed by animating ONE clip-path from the pill's exact rect to the card's,
+     and its layout "expands predictably" from where the pill sits (it grows up and
+     toward the screen centre, never jumps).
+   - Corners stay concentric: card radius 20, inner preview 20 - 12 padding = 8,
+     buttons full pills; the pill (15) and "Sent." (22) are capsules.
+   - Shape first, then content: the shape runs on a spring (SwiftUI default
+     response ~0.55 / damping ~0.75; we use response .42, damping .78, a "snappy"
+     small bounce), content fades and scales up from .96 about 120 ms later.
+     Collapse is the reverse and faster (response .32, critically damped "smooth").
+   - Content never overflows mid-morph: the clip hides everything outside the
+     current shape, and only transform / opacity / clip-path animate (60 fps; the
+     window itself is a fixed 380x240 and never resizes).
+   - Keep it brief and glanceable: a title, one muted 3-word status, one preview,
+     at most three actions; it opens only when there are words to see. */
 html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
-body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
-#island { position: absolute; left: 50%; bottom: 26px; width: 58px; height: 30px; margin-left: -29px; display: flex; align-items: center; justify-content: center;
+body { width: 380px; height: 240px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+#island { position: absolute; bottom: 26px; width: 58px; height: 30px; display: flex; align-items: center; justify-content: center;
   opacity: 0; transform: scale(.85); transition: opacity .14s ease, transform .2s cubic-bezier(.34,1.3,.45,1); }
 #island.on { opacity: 1; transform: scale(1); }
 
@@ -36,7 +53,7 @@ body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemF
 .ok { right: -22px; background: #000; color: #fff; }
 #island.listening.open .x, #island.listening.open .ok { opacity: 1; pointer-events: auto; }
 
-#note { position: absolute; left: 50%; transform: translateX(-50%); bottom: 64px; padding: 3px 9px; border-radius: 999px; background: #0d0d0c; color: #f6f3ea; white-space: nowrap;
+#note { position: absolute; bottom: 29px; padding: 3px 9px; border-radius: 999px; background: #0d0d0c; color: #f6f3ea; white-space: nowrap;
   opacity: 0; transition: opacity .15s ease; box-shadow: 0 0 0 .5px rgba(255,255,255,.15); }
 #note.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -73,3 +90,91 @@ body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemF
 /* Done (2026-10-26): no smile. The edge light turns green and wraps the capsule, then fades. */
 #island.done .eye { height: 13px; width: 6px; background: #f6f3ea; border: 0; border-radius: 4px; transform: none; }
 #island.done .edge { opacity: 1; }
+
+/* ── Do mode (2026-10-27) ── */
+:root {
+  --spring: linear(0, 0.038, 0.131, 0.25, 0.378, 0.503, 0.616, 0.715, 0.797, 0.862, 0.913, 0.952, 0.979, 0.998, 1.009, 1.016, 1.019, 1.02, 1.019, 1.017, 1.014, 1.012, 1.009, 1.007, 1.005, 1.004, 1);
+  --settle: linear(0, 0.06, 0.187, 0.331, 0.468, 0.588, 0.686, 0.765, 0.826, 0.872, 0.907, 0.933, 0.952, 0.966, 0.976, 0.983, 0.988, 0.992, 1);
+  --ink: #f6f3ea; --card: #0d0d0c;
+}
+/* Where Maven sits decides which way everything grows: toward the screen centre. */
+body.a-left #island { left: 26px; } body.a-right #island { right: 26px; } body.a-centre #island { left: 50%; margin-left: -29px; }
+body.a-left #note { left: 92px; } body.a-right #note { right: 92px; } body.a-centre #note { left: calc(50% + 37px); }
+body.a-left #cardwrap { left: 26px; } body.a-right #cardwrap { right: 26px; } body.a-centre #cardwrap { left: 50%; margin-left: -150px; }
+
+/* The 3-word reply chip, beside the pill. */
+#note { font-weight: 600; font-size: 12.5px; padding: 4px 11px; translate: 0 2px; transition: opacity .16s ease, translate .3s var(--spring); }
+#note.on { translate: 0 0; }
+
+/* Thinking: eyes drift up and to the side, a slow dim light. */
+#island.thinking .eye { height: 10px; translate: 3px -3px; animation: drift 3s ease-in-out infinite; }
+@keyframes drift { 50% { translate: -2px -3px; } }
+#island.thinking .edge { opacity: .55; }
+.face { rotate: 0deg; transition: width .2s cubic-bezier(.34,1.3,.45,1), rotate .35s var(--spring); }
+.eye { translate: 0 0; transition: height .14s ease, width .14s ease, border-radius .14s ease, background .14s ease, transform .16s ease, opacity .12s ease, translate .3s var(--spring); }
+/* Again?: tilt, one eye lower.  Not my job.: looks away, small tilt.  Curious: for "Which Riya?". */
+#island.again .face { rotate: 7deg; } #island.again .eye:nth-of-type(2) { translate: 0 2px; height: 10px; }
+#island.nope .face { rotate: -4deg; } #island.nope .eye { translate: -4px 0; height: 9px; }
+#island.curious .face { rotate: -6deg; } #island.curious .eye { translate: 3px 0; } #island.curious .eye:first-of-type { height: 9px; }
+
+/* Waking up (app launch, or the first time the pill appears): fades and scales
+   in with the eyes shut, they open on a soft spring, one slow blink, then rest. */
+#island.wake .face { animation: wakeIn 1050ms var(--settle) both; }
+#island.wake .eye { animation: wakeEyes 1050ms ease both; transform-origin: 50% 60%; }
+@keyframes wakeIn { 0% { opacity: 0; scale: .72; } 32% { opacity: 1; scale: 1.03; } 48%, 100% { opacity: 1; scale: 1; } }
+@keyframes wakeEyes { 0%, 38% { transform: scaleY(.12); } 56% { transform: scaleY(1.08); } 64%, 76% { transform: scaleY(1); } 83% { transform: scaleY(.12); } 92%, 100% { transform: scaleY(1); } }
+
+/* The pill hides the instant the card takes over (they are the same shape there). */
+#island.away { opacity: 0; transition: none; pointer-events: none; }
+
+/* ── the island card: the pill, grown ── */
+#cardwrap { position: absolute; bottom: 26px; width: 300px; pointer-events: none;
+  filter: drop-shadow(0 0 .5px rgba(255,255,255,.55)) drop-shadow(0 10px 22px rgba(0,0,0,.32)); }
+#card { position: relative; width: 300px; height: var(--ch, 150px); background: var(--card); color: var(--ink); visibility: hidden;
+  clip-path: var(--clip); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+#card.live { visibility: visible; }
+#card.anim { transition: clip-path 520ms var(--spring), box-shadow .3s ease; }
+#card.anim.closing { transition: clip-path 360ms var(--settle), box-shadow .2s ease; }
+#card.open, #card.sent { pointer-events: auto; }
+#cardwrap:has(#card.open), #cardwrap:has(#card.sent) { pointer-events: auto; }
+
+.ceyes { position: absolute; left: 0; top: 0; width: 16px; height: 11px; display: flex; gap: 6px; transform-origin: 50% 50%; will-change: transform; }
+.ceyes span { width: 5px; height: 11px; border-radius: 3px; background: var(--ink); transition: height .2s ease, translate .3s var(--spring); }
+#card.anim .ceyes { transition: transform 520ms var(--spring); }
+#card.anim.closing .ceyes { transition: transform 360ms var(--settle); }
+#card.curious .ceyes span:first-child { height: 8px; } #card.curious .ceyes span { translate: 2px 0; }
+
+.body { position: absolute; inset: 0; padding: 12px 12px 12px 44px; display: grid; gap: 8px; align-content: start;
+  opacity: 0; transform: scale(.96) translateY(4px); transform-origin: 0 100%; transition: opacity 110ms ease, transform 110ms ease; }
+body.a-right .body { transform-origin: 100% 100%; } body.a-centre .body { transform-origin: 50% 100%; }
+#card.open .body { opacity: 1; transform: none; transition: opacity 220ms ease 130ms, transform 440ms var(--spring) 110ms; }
+.lbl { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12.5px; padding-top: 3px; }
+.lbl .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbl .right { color: rgba(246,243,234,.55); font-weight: 500; white-space: nowrap; flex: none; }
+.preview, .editor { background: rgba(255,255,255,.07); border-radius: 8px; padding: 8px 10px; color: rgba(246,243,234,.92); }
+.preview { max-height: 76px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; white-space: pre-wrap; word-break: break-word; }
+.editor { display: none; resize: none; border: 0; outline: none; font: inherit; margin: 0; height: 64px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+#card.editing .preview { display: none; } #card.editing .editor { display: block; } #card.editing .edit { display: none; }
+.preview:empty, .opts:empty { display: none; }
+.opts { display: grid; gap: 4px; }
+.opts button { all: unset; display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.07); cursor: pointer; font-size: 12.5px; }
+.opts button small { color: rgba(246,243,234,.5); }
+.opts button.sel, .opts button:hover { background: rgba(255,255,255,.16); }
+.acts { display: flex; gap: 6px; }
+.acts button { all: unset; cursor: pointer; font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif; padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,.12); color: var(--ink); }
+.acts button:hover { background: rgba(255,255,255,.2); }
+.acts .yes { background: var(--ink); color: #0d0d0c; } .acts .yes:hover { background: #fff; }
+.acts kbd { font: 10px ui-monospace, Menlo, monospace; opacity: .6; margin-left: 5px; }
+.acts button:focus-visible, .opts button:focus-visible { outline: 2px solid rgba(255,190,150,.9); outline-offset: 1px; }
+#card.k-choose .yes, #card.k-choose .edit, #card.k-fill .edit { display: none; }
+
+/* Sent: green edge ring, "Sent.", then it folds back to the pill. */
+.sentlbl { position: absolute; bottom: 0; height: 44px; display: flex; align-items: center; font-weight: 600; font-size: 13px; opacity: 0; transition: opacity .18s ease; }
+#card.sent .sentlbl { opacity: 1; transition-delay: .12s; }
+#card.sent { box-shadow: inset 0 0 0 1.5px #8ff0b0, inset 0 0 14px rgba(60,200,120,.45); }
+#cardwrap:has(#card.sent) { filter: drop-shadow(0 0 3px rgba(80,220,130,.9)) drop-shadow(0 0 10px rgba(60,200,120,.55)) drop-shadow(0 10px 22px rgba(0,0,0,.3)); }
+
+/* Do mode is blue (2026-10-27, Itish): listening and thinking light, and the
+   island's glow. Write (dictation) keeps the warm light; done is green for both. */
+body.do #cardwrap { filter: drop-shadow(0 0 .5px rgba(207,227,255,.75)) drop-shadow(0 0 8px rgba(90,150,255,.45)) drop-shadow(0 10px 22px rgba(0,0,0,.32)); }
+body.do .acts button:focus-visible, body.do .opts button:focus-visible { outline-color: rgba(120,170,255,.95); }

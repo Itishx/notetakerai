@@ -55,12 +55,24 @@
   <section id="settings" class="page">
     <header class="head"><h1>Settings</h1></header>
     <div class="rows">
-      <div class="row"><span>Shortcut</span><kbd id="set-shortcut">⌃⌥</kbd></div>
+      <div class="row"><span>Write (dictation)</span><kbd id="set-shortcut">⌃⌥</kbd></div>
+      <div class="row"><span>Do (one small job)</span><kbd id="set-do">fn ⌃</kbd></div>
       <div class="row"><span>Microphone</span><em id="set-mic">System default</em></div>
       <label class="row"><span>Launch at login</span><input type="checkbox" id="set-login"></label>
       <div class="row"><span>Onboarding</span><button id="set-onboard">Show again</button></div>
       <div class="row"><span>Your data</span><button id="set-data">Open folder</button></div>
       <div class="row"><span>History</span><button id="set-delete" class="danger">Delete all history</button></div>
+    </div>
+    <h2 class="subhead">My details</h2>
+    <p class="sub">For "fill in my address". Maven pastes one into the box you're in, after you say yes. It never presses Submit. Kept on this Mac.</p>
+    <form class="rows" id="details-form">
+      <label class="row"><span>Name</span><input name="name" autocomplete="off"></label>
+      <label class="row"><span>Email</span><input name="email" type="email" autocomplete="off"></label>
+      <label class="row"><span>Phone</span><input name="phone" autocomplete="off"></label>
+      <label class="row"><span>Address</span><textarea name="address" rows="2"></textarea></label>
+      <div class="row"><span id="details-status"></span><button>Save</button></div>
+    </form>
+    <div class="rows">
       <div class="row"><span>About</span><em>Maven by Affective · <span id="set-version"></span></em></div>
     </div>
   </section>

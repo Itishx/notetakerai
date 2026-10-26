@@ -17,10 +17,12 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
   handle("hub:snip:get", () => store.getSnippets());
   handle("hub:snip:save", (l) => store.saveSnippets(l));
   handle("hub:settings:get", () => ({
-    shortcut: "⌃⌥", microphone: "System default", version: app.getVersion(),
+    shortcut: "⌃⌥", doShortcut: "fn ⌃", microphone: "System default", version: app.getVersion(),
     launchAtLogin: Boolean(app.getLoginItemSettings().openAtLogin),
   }));
   handle("hub:settings:set", (k, v) => { if (k === "launchAtLogin") app.setLoginItemSettings({ openAtLogin: Boolean(v) }); return true; });
+  handle("hub:details:get", () => store.getDetails());
+  handle("hub:details:save", (d) => store.saveDetails(d));
   handle("hub:openData", () => shell.openPath(store.dataDir()));
   handle("hub:deleteHistory", async () => {
     const r = await dialog.showMessageBox(win, { type: "warning", buttons: ["Delete", "Cancel"], defaultId: 1, cancelId: 1, message: "Delete all history?", detail: "Every past dictation will be removed from this Mac. This cannot be undone." });

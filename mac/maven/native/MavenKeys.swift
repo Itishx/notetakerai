@@ -3,15 +3,16 @@ import Cocoa
 import Foundation
 
 /* Maven's key watcher (trimmed from the Braino Mac key watcher, 26 Oct 2026).
-   Listens only. It reports the Control+Option chord and takes one command on
+   Listens only. It reports the Control+Option chord (Write) and the
+   fn+Control chord (Do, 27 Oct 2026) and takes one command on
    stdin, "paste", which sends a real Cmd+V.
    stdout: maven-keys-ready, ready (event tap enabled), needs-accessibility,
-           event-tap-unavailable, dictate-hold-start / -end / -cancel,
+           event-tap-unavailable, dictate-hold-start / -end / -cancel, do-hold-start / -end / -cancel,
            pasted<TAB><front app> */
 final class MavenKeys {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
-  private var chordHeld = false
+  private var chordHeld = "" // "", "dictate" or "do"
   private var lastUnavailableLogAt: TimeInterval = 0
 
   private var saidNeedsAccessibility = false
@@ -66,16 +67,18 @@ final class MavenKeys {
 
   private func handle(_ type: CGEventType, _ event: CGEvent) {
     if type == .keyDown {
-      // A real key while the chord is down: it was a shortcut, not speech.
-      if chordHeld { printLine("dictate-hold-cancel"); chordHeld = false }
+      // A real key while a chord is down: it was a shortcut, not speech.
+      if !chordHeld.isEmpty { printLine("\(chordHeld)-hold-cancel"); chordHeld = "" }
       return
     }
     let f = event.flags
     let ctrl = f.contains(.maskControl), opt = f.contains(.maskAlternate), fn = f.contains(.maskSecondaryFn)
     let extra = f.contains(.maskCommand) || f.contains(.maskShift)
-    let want = !extra && ctrl && opt && !fn
+    // Same rule as the Braino key tap: Control+Option = dictate, fn+Control = do.
+    let want: String = extra ? "" : (ctrl && opt && !fn ? "dictate" : (ctrl && fn && !opt ? "do" : ""))
     if want != chordHeld {
-      printLine(want ? "dictate-hold-start" : "dictate-hold-end")
+      if !chordHeld.isEmpty { printLine("\(chordHeld)-hold-end") }
+      if !want.isEmpty { printLine("\(want)-hold-start") }
       chordHeld = want
     }
   }
