@@ -329,6 +329,7 @@ ipcMain.on("maven:drag", (_e, what) => { if (what === "start") dragStart(); else
 ipcMain.on("maven:action", (_e, action) => {
   if (action === "cancel") stopDictation("island cancel", { discard: true });
   else if (action === "done") stopDictation("island done");
+  else if (action === "hub") openHub();
 });
 
 /* ---------- key watcher ----------

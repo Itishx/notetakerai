@@ -92,5 +92,7 @@ function endDrag() {
 }
 window.addEventListener("mouseup", endDrag);
 window.addEventListener("blur", endDrag);
+// Double-click Maven to open the app, like Braino.
+island.querySelector(".face").addEventListener("dblclick", () => { endDrag(); window.maven.action("hub"); });
 island.querySelector(".x").addEventListener("click", () => window.maven.action("cancel"));
 island.querySelector(".ok").addEventListener("click", () => window.maven.action("done"));
