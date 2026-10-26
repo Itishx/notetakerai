@@ -360,3 +360,49 @@
 .mv-pt-head .aff-cta { margin-top: 8px; }
 .mv-pt-head > .is-pro { flex-direction: column; align-items: flex-start; }
 @media (max-width: 700px) { .mv-pt-row { grid-template-columns: 1.1fr 1fr 1fr; } .mv-pt-row > span { padding: 12px 8px; font-size: 13.5px; } .mv-pt-head em { font-size: 28px; } }
+
+/* ── Round 8 ── */
+/* What is Maven: two halves at a glance */
+.mv-halves { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: clamp(30px, 4vw, 48px); }
+.mv-half-k { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
+.mv-half-card { padding: 22px 24px; border-radius: 20px; background: var(--a-surface); border: 1px solid var(--a-line); min-height: 170px; }
+.mv-half-raw { margin: 0; font-size: 16px; color: var(--a-ink-soft); }
+.mv-half-raw s { color: #c0392b; opacity: .8; }
+.mv-half-arrow { margin: 8px 0; color: var(--a-ink-faint); }
+.mv-half-out { margin: 0; font-size: 18px; font-weight: 500; color: var(--a-ink); }
+.mv-half-do { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mv-half-do span { font-size: 15px; color: var(--a-ink-soft); }
+.mv-half-do b { padding: 4px 10px; border-radius: 999px; background: var(--a-ink); color: var(--a-bg); font-size: 12.5px; font-weight: 600; }
+@media (max-width: 700px) { .mv-halves { grid-template-columns: 1fr; } }
+
+/* Features: tabs, chips, one big window, the words under it */
+.mv-stage2 { max-width: 980px; margin: 0 auto; }
+.mv-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 22px; }
+.mv-chips button { position: relative; overflow: hidden; font: inherit; font-size: 14.5px; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--a-line); background: none; color: var(--a-ink-soft); cursor: pointer; }
+.mv-chips button.on { color: var(--a-ink); border-color: var(--a-ink); }
+.mv-chip-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--a-ink); transform-origin: left; animation: mvBar 6.5s linear both; }
+.mv-cap2 { max-width: 680px; margin: 26px auto 0; text-align: center; animation: mvLand .3s ease both; }
+.mv-cap2 .mv-said { text-align: center; }
+.mv-cap2 .mv-fixed { justify-content: center; }
+
+/* Beyond dictation: a track, not a table */
+.mv-beyond-head .mv-h2 { line-height: .98; }
+.mv-track { list-style: none; margin: 0; padding: 0; position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; }
+.mv-track::before { content: ""; position: absolute; left: 0; right: 0; top: 34px; height: 2px; background: linear-gradient(90deg, var(--a-line-strong) 0 28.5%, var(--a-ink) 28.5% 100%); }
+.mv-track li { position: relative; padding: 26px 10px 0 0; animation: mvLand .4s ease both; }
+.mv-track li i { position: relative; z-index: 1; display: block; width: 18px; height: 18px; border-radius: 50%; margin-bottom: 16px; background: var(--a-bg); border: 2px solid var(--a-line-strong); }
+.mv-track li.is-us i { background: var(--a-ink); border-color: var(--a-ink); }
+.mv-track li span { display: block; font-size: 15.5px; line-height: 1.35; color: var(--a-ink); font-weight: 500; }
+.mv-track li.is-both span { color: var(--a-ink-soft); font-weight: 400; }
+.mv-track li small { display: block; margin-top: 6px; font-size: 12px; color: var(--a-ink-faint); }
+.mv-track-stop { position: absolute; left: -14px; top: -8px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--a-line-strong); color: var(--a-ink-soft); background: var(--a-bg); }
+.mv-track li.is-us:nth-child(3)::after { content: ""; position: absolute; left: -12px; top: 18px; height: 34px; border-left: 2px dashed var(--a-line-strong); }
+@media (max-width: 860px) {
+  .mv-track { grid-template-columns: 1fr; }
+  .mv-track::before { left: 8px; right: auto; top: 0; bottom: 0; width: 2px; height: auto; background: linear-gradient(180deg, var(--a-line-strong) 0 28.5%, var(--a-ink) 28.5% 100%); }
+  .mv-track li { display: grid; grid-template-columns: 34px 1fr; padding: 10px 0; }
+  .mv-track li i { margin: 2px 0 0; }
+  .mv-track li span, .mv-track li small { grid-column: 2; }
+  .mv-track-stop { position: static; transform: none; grid-column: 2; justify-self: start; margin-bottom: 8px; }
+  .mv-track li.is-us:nth-child(3)::after { display: none; }
+}
