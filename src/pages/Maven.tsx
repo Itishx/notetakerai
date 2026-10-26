@@ -111,6 +111,44 @@ const PRICE_ROWS = [
   { k: "Hinglish", free: "—", pro: "Coming soon" },
 ];
 
+/* Value for money (2026-10-27): a quiet, factual comparison. Only things we can
+   stand behind; competitor prices from their own sites, Oct 2026. Sarvam is a
+   developer API (about ₹30 an audio hour), not a dictation app, so it isn't here. */
+const COMPARE = [
+  { k: "Price for unlimited", maven: "$10 a month", wispr: "$15 a month ($12 yearly)", apple: "Free" },
+  { k: "Free plan", maven: "2,000 words a week", wispr: "2,000 words a week", apple: "Unlimited, basic" },
+  { k: "Removes ums, adds punctuation", maven: "Yes", wispr: "Yes", apple: "Partly" },
+  { k: "Writes ₹, lakh, crore and Indian phone numbers", maven: "Built for it", wispr: "General", apple: "No" },
+  { k: "Does the next step (open, send, fill)", maven: "Yes, with your yes", wispr: "No", apple: "No" },
+  { k: "Remembers your names and words", maven: "Yes", wispr: "Yes", apple: "No" },
+];
+function PriceTabs() {
+  const [tab, setTab] = useState<"plans" | "compare">("plans");
+  useEffect(() => {
+    document.querySelectorAll<HTMLElement>("[data-ptab]").forEach((el) => { el.hidden = el.dataset.ptab !== tab; });
+  }, [tab]);
+  return (
+    <>
+      <div className="mv-tabs mv-tabs-inline mv-ptabs" role="tablist" aria-label="Pricing view">
+        <button type="button" role="tab" aria-selected={tab === "plans"} className={tab === "plans" ? "on" : ""} onClick={() => setTab("plans")}>Plans</button>
+        <button type="button" role="tab" aria-selected={tab === "compare"} className={tab === "compare" ? "on" : ""} onClick={() => setTab("compare")}>Value for money</button>
+      </div>
+      <div className="mv-compare" data-ptab="compare" hidden>
+        <p className="mv-compare-lead">More for less: a third cheaper than Wispr Flow, the same free plan, and it does the next step for you.</p>
+        <div className="mv-compare-scroll">
+          <table className="mv-ctable">
+            <thead><tr><th scope="col" /><th scope="col" className="is-us">Maven</th><th scope="col">Wispr Flow</th><th scope="col">Apple Dictation</th></tr></thead>
+            <tbody>{COMPARE.map((r) => (
+              <tr key={r.k}><th scope="row">{r.k}</th><td className="is-us">{r.maven}</td><td>{r.wispr}</td><td>{r.apple}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <p className="mv-compare-note">Prices from each company's own site, October 2026. Wispr Flow also has Windows and phone apps; Maven is Mac only for now.</p>
+      </div>
+    </>
+  );
+}
+
 const PLANS = [
   { name: "Free", price: "$0", per: "", line: "Dictation, plus Maven doing one thing at a time on your Mac.", gets: ["Dictation in any app, 2,000 words a week", "Open and switch apps, tabs and websites", "Write and send a message, with your yes, 10 a day", "Fill a form from your details, with your yes, 5 a day", "Remembers your names and basic details"], cta: "Download for Mac", pro: false },
   { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation, sending and form filling", "Acts on what's on your screen: “reply to this”", "Full memory: your lists, your details, your way of writing", "Hinglish, coming soon"], cta: "Get Pro", pro: true },
@@ -685,7 +723,8 @@ export default function Maven() {
           <SecHead pill="Pricing" side={<a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>}>
             <h2 className="mv-h2">Start free. Go Pro when you can't stop <em className="mv-it">talking</em>.</h2>
           </SecHead>
-          <div className="mv-ptable-wrap aff-reveal">
+          <PriceTabs />
+          <div className="mv-ptable-wrap aff-reveal" data-ptab="plans">
           <div className="mv-ptable" role="table" aria-label="Free and Pro">
             <div className="mv-pt-row mv-pt-head" role="row">
               <span role="columnheader" />
