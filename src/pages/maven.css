@@ -384,3 +384,34 @@
   .mv-ba-face { top: 14px; right: 14px; }
   .mv-pt-row { grid-template-columns: 1.1fr 1fr 1fr; } .mv-pt-row > span { padding: 12px 8px; font-size: 13.5px; } .mv-pt-head em { font-size: 28px; }
 }
+
+/* Polish (2026-10-27): tidy scene sub lines, the Notes checklist, equal
+   scene windows, identical cards, a clean FAQ list. */
+.mv-acc-body .mv-acc-p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--a-ink-soft); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mv-acc-body .mv-acc-said { margin: 0 0 16px; font-size: 13.5px !important; line-height: 1.5; color: var(--a-ink-faint) !important; }
+.mv-acc-said span { display: block; margin-bottom: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.mv-acc-said q { quotes: none; font-style: italic; }
+.mv-acc-said s { color: var(--a-braino); opacity: .85; text-decoration-thickness: 1.5px; }
+.mv-scene-mac .mv-mail-body { box-sizing: border-box; height: 250px; min-height: 0; overflow: hidden; margin: 0; }
+.mv-check { list-style: none; padding: 10px 18px; }
+.mv-check li { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-bottom: 1px solid #efefef; border-radius: 8px; font-size: 15px; color: #1d1d1f; }
+.mv-check li i { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #c7c7cc; }
+.mv-check li.is-new { background: #fdebe0; border-bottom-color: transparent; animation: mvSlide .45s cubic-bezier(.22,1,.36,1) both; }
+.mv-check li.is-new i { border-color: #f0a483; }
+.mv-check li.is-empty { border-bottom: 0; }
+@keyframes mvSlide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.mv-card-top { height: 190px; min-height: 0; box-sizing: border-box; }
+.mv-card:nth-child(2) .mv-card-top { filter: none; }
+.mv-snip-face { padding: 8px 16px 8px 10px; border-radius: 999px; gap: 12px; color: var(--a-ink); font-size: 14px; }
+.mv-snip-face .mv-face { --k: .8; }
+.mv-snip:not(.mv-snip-face) { padding: 10px 18px; border-radius: 999px; color: var(--a-ink); font-size: 14px; }
+.mv-card h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.mv-card-tag { font-family: var(--ao-sf); font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--mv-peach-2); color: var(--mv-ink); }
+.mv-faq-list { border-top: 1px solid var(--a-line); }
+.mv-faq-list details { border-bottom: 1px solid var(--a-line); }
+.mv-faq-list summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px 0; font-weight: 600; font-size: clamp(16px, 1.4vw, 19px); color: var(--a-ink); }
+.mv-faq-list summary::-webkit-details-marker { display: none; }
+.mv-faq-list summary i { flex: none; font-style: normal; font-weight: 400; font-size: 22px; color: var(--a-ink-soft); transition: transform .25s ease; }
+.mv-faq-list details[open] summary i { transform: rotate(45deg); }
+.mv-faq-list details p { margin: -6px 0 22px; padding-left: clamp(0px, 2vw, 24px); max-width: 66ch; font-size: 16px; line-height: 1.6; color: var(--a-ink-soft); }
+@media (prefers-reduced-motion: reduce) { .mv-check li.is-new, .mv-faq-list summary i { animation: none !important; transition: none !important; } }
