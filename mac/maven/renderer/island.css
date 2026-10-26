@@ -1,33 +1,41 @@
-/* The Maven mark: two slanted bars fading ink to light, the voice as white
-   dots in both. ✕ and ✓ show on hover. */
 html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
 body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
-#island { position: absolute; right: 24px; top: 6px; width: 64px; height: 60px; display: flex; align-items: center; justify-content: center;
+#island { position: absolute; right: 30px; top: 14px; display: flex; align-items: center; justify-content: center;
   opacity: 0; transform: scale(.85); transition: opacity .14s ease, transform .2s cubic-bezier(.34,1.3,.45,1); }
 #island.on { opacity: 1; transform: scale(1); }
-.bars { display: flex; gap: 7px; transform: rotate(41deg); }
-.bar { position: relative; width: 15px; height: 56px; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(180deg, #000 0%, #111 45%, rgba(0,0,0,.18) 100%);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 6px 16px rgba(0,0,0,.28); }
-.bar::after { content: ""; position: absolute; inset: -50% 0; background: linear-gradient(180deg, transparent 35%, rgba(255,255,255,.22) 50%, transparent 65%); animation: shimmer 1.6s linear infinite; pointer-events: none; }
-#island.thinking .bar::after { animation-duration: .8s; }
-.dots { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.dots i { display: block; width: 2.5px; height: 2.5px; border-radius: 2px; background: #fff; transform: scaleX(var(--d, 1)); transition: transform .04s linear; box-shadow: 0 0 4px rgba(255,255,255,.7); }
-@keyframes shimmer { from { transform: translateY(-60%); } to { transform: translateY(60%); } }
-.x, .ok { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border: 0; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 800; cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 2; }
-.x { left: -16px; background: rgba(0,0,0,.55); color: #fff; }
-.ok { right: -16px; background: #000; color: #fff; }
-#island.open.on .x, #island.open.on .ok { opacity: 1; }
-#note { position: absolute; right: 8px; top: 70px; padding: 3px 9px; border-radius: 999px; background: #000; color: #f6f3ea; white-space: nowrap;
+
+/* the capsule, dragged anywhere */
+.face { -webkit-app-region: drag; cursor: grab; display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 58px; height: 30px; border-radius: 15px; background: #0d0d0c;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 8px 20px rgba(0,0,0,.28);
+  transition: width .2s cubic-bezier(.34,1.3,.45,1); }
+#island.listening .face { width: 66px; }
+
+/* the eyes: soft white pills */
+.eye { position: relative; width: 6px; height: 13px; border-radius: 4px; background: #f6f3ea; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  transform-origin: 50% 50%; transition: height .14s ease, width .14s ease, border-radius .14s ease, background .14s ease, transform .1s ease; }
+.eye i { display: none; width: 2.5px; height: 2.5px; border-radius: 2px; background: #f6f3ea; transform: scaleX(var(--d, 1)); }
+
+/* resting: a slow breath and a blink now and then */
+#island.idle .face { animation: breathe 4.2s ease-in-out infinite; }
+#island.blink .eye { transform: scaleY(.12); }
+@keyframes breathe { 0%, 100% { scale: 1; } 50% { scale: 1.04; } }
+
+/* listening: the eyes open into the voice */
+#island.listening .eye { background: transparent; height: 16px; width: 8px; }
+#island.listening .eye i { display: block; }
+
+/* done: a happy squint, like ^ ^ */
+#island.done .eye { height: 6px; width: 9px; background: transparent; border: 2px solid #f6f3ea; border-bottom: 0; border-radius: 8px 8px 0 0; transform: translateY(2px); }
+
+/* the buttons, only while listening, on hover */
+.x, .ok { -webkit-app-region: no-drag; position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border: 0; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s ease; z-index: 2; }
+.x { left: -22px; background: rgba(0,0,0,.6); color: #fff; }
+.ok { right: -22px; background: #000; color: #fff; }
+#island.listening.open .x, #island.listening.open .ok { opacity: 1; pointer-events: auto; }
+
+#note { position: absolute; right: 18px; top: 52px; padding: 3px 9px; border-radius: 999px; background: #0d0d0c; color: #f6f3ea; white-space: nowrap;
   opacity: 0; transition: opacity .15s ease; box-shadow: 0 0 0 .5px rgba(255,255,255,.15); }
 #note.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-
-/* Always on screen (idle): the mark only, dots resting, no shimmer. Drag it by the bars. */
-#island.idle .dots { opacity: 0; }
-#island.idle .bar::after { animation: none; opacity: 0; }
-.dots { transition: opacity .15s ease; }
-.bars { -webkit-app-region: drag; cursor: grab; }
-.x, .ok { -webkit-app-region: no-drag; }
-#island.idle.open .x, #island.idle.open .ok { opacity: 0; pointer-events: none; }

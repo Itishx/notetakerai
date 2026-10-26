@@ -6,11 +6,13 @@
 <link rel="stylesheet" href="island.css">
 </head>
 <body>
-  <div id="island" aria-label="Dictation">
+  <!-- Maven's presence (2026-10-26): a small capsule with two eyes. Resting it
+       blinks, listening the eyes become the voice, done they squint happily. -->
+  <div id="island" class="on idle" aria-label="Maven">
     <button type="button" class="x" aria-label="Cancel">✕</button>
-    <div class="bars" aria-hidden="true">
-      <div class="bar"><div class="dots"><i></i><i></i><i></i><i></i><i></i></div></div>
-      <div class="bar"><div class="dots"><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="face">
+      <span class="eye"><i></i><i></i><i></i><i></i></span>
+      <span class="eye"><i></i><i></i><i></i><i></i></span>
     </div>
     <button type="button" class="ok" aria-label="Done">✓</button>
   </div>
