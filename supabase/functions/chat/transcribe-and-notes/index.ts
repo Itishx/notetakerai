@@ -454,29 +454,6 @@ async function transcribeSegment({
 
   /* Dictation goes to Groq first (Whisper large v3 turbo, ~0.3-0.5 s for a
      phase vs ~1-2 s) when its key is set; any failure falls through to OpenAI. */
-  /* Hinglish: Sarvam (saaras:v3, mode "translit" = Roman-script output) when its
-     key is set. WebM and WAV are accepted as they are. Any failure (no key, a take
-     longer than its sync limit) falls through to Groq Whisper with no language lock. */
-  if (dictation && dictationLanguage === "hinglish") {
-    const sarvamKey = Deno.env.get("SARVAM_API_KEY");
-    if (sarvamKey) {
-      try {
-        const sf = new FormData();
-        sf.append("file", new Blob([decodeBase64(segment.audioBase64)], { type: segment.mimeType }), segment.fileName);
-        sf.append("model", "saaras:v3");
-        sf.append("mode", "translit");
-        sf.append("language_code", "hi-IN");
-        const sarvamStart = Date.now();
-        const sr = await fetch("https://api.sarvam.ai/speech-to-text", { method: "POST", headers: { "api-subscription-key": sarvamKey }, body: sf });
-        if (sr.ok) {
-          const sd = await sr.json();
-          const text = typeof sd.transcript === "string" ? sd.transcript.trim() : "";
-          console.log("sarvam transcription", { ms: Date.now() - sarvamStart, chars: text.length });
-          if (text) return { text, entries: [] as TranscriptEntry[], provider: "sarvam", groqMs: Date.now() - sarvamStart };
-        } else console.error("sarvam transcription failed", sr.status, (await sr.text().catch(() => "")).slice(0, 200));
-      } catch (error) { console.error("sarvam transcription error", error); }
-    }
-  }
   /* Hindi in Devanagari asks gpt-4o-transcribe for Hindi; Hinglish leaves the
      OpenAI fallback unlocked so the Roman prompt can steer it. */
   if (dictationLanguage === "hi") form.set("language", "hi");
