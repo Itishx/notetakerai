@@ -92,13 +92,27 @@ function useOnScreen<T extends HTMLElement>() {
   return [ref, on] as const;
 }
 
-type MvScene = { app: string; ask: string; title: string; p: string; out: string[]; field: string; wait?: string };
+/* raw: what you actually said; ~word~ is what Maven took out. fixed: what it
+   did, in plain words. That before/after is the whole point of the section. */
+type MvScene = { app: string; raw: string; title: string; p: string; out: string[]; field: string; fixed: string[]; wait?: string };
 const SCENES: MvScene[] = [
-  { app: "Slack", field: "Message #launch", ask: "Tell Rahul the deck is done, numbers by five.", title: "Type", p: "Hold a key, talk, and clean, formatted text shows up in any app you use. Punctuation in, filler out, names spelled right.", out: ["@Rahul the deck is done. Numbers by 5 PM."] },
-  { app: "Notes", field: "Groceries", ask: "I need eggs, mango, strawberries, peanut butter and oat milk.", title: "Lists that look like lists", p: "Say four things and you get a list, not a run-on sentence. Rupees, lakhs and phone numbers come out the way you write them.", out: ["I need:", "- Eggs", "- Mango", "- Strawberries", "- Peanut butter", "- Oat milk"] },
-  { app: "Chrome", field: "Shipping address", ask: "Fill in my address.", title: "Do", p: "Open an app. Switch a tab. Fill a form. Small jobs on your Mac, by voice. It stops before anything is sent.", out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit" },
-  { app: "Notes", field: "Launch list", ask: "Add that to my launch list.", title: "Remember", p: "Your names, your lists, your way of writing. Say it once, and Maven keeps it.", out: ["- Record the Maven film", "- Send the deck to Rahul ✓ added"] },
+  { app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done and the numbers by ~five no wait~ six",
+    title: "Talk messy. It writes clean.", p: "You don't have to speak like a newsreader. Ums go, half-sentences join up, and when you change your mind, it keeps the last thing you said.",
+    out: ["The deck is done. Numbers by 6 PM."], fixed: ["Took out \u201cum\u201d and \u201cuh\u201d", "Kept six, not five", "Added the full stops"] },
+  { app: "Notes", field: "Groceries", raw: "i need eggs mango strawberries peanut butter and oat milk",
+    title: "Say a list. Get a list.", p: "Name four things and you get bullet points, not one long sentence. Say steps and you get them numbered.",
+    out: ["I need:", "- Eggs", "- Mango", "- Strawberries", "- Peanut butter", "- Oat milk"], fixed: ["Turned it into a list", "Capitalised each item"] },
+  { app: "Mail", field: "To: Divya · Payment", raw: "~hey so~ the payment is twenty five thousand rupees call me on nine eight four five ~zero~ one two three four five six",
+    title: "Writes it how you'd write it.", p: "Money, numbers, emails and phone numbers come out the way you'd type them, not the way you said them.",
+    out: ["The payment is \u20b925,000. Call me on 98450 12345."], fixed: ["\u201ctwenty five thousand rupees\u201d became \u20b925,000", "Grouped the phone number"] },
+  { app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
+    title: "Ask, and it's done.", p: "Not everything is dictation. Ask it to fill a form, open an app or send a message, and it does that one thing. It stops before anything is sent.",
+    out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], fixed: ["Filled 3 fields from what it knows", "Didn't press Submit"], wait: "Waiting for your yes to submit" },
 ];
+
+function Raw({ text }: { text: string }) {
+  return <>{text.split(/(~[^~]+~)/).filter(Boolean).map((t, i) => t.startsWith("~") ? <s key={i}>{t.slice(1, -1)}</s> : <span key={i}>{t}</span>)}</>;
+}
 
 function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
   const [ref, on] = useOnScreen<HTMLDivElement>();
@@ -114,7 +128,11 @@ function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
         <div className="bs-meta"><span className="bs-n">{String(n).padStart(2, "0")}</span><span className="bs-app-tag">{s.app}</span></div>
         <h3>{s.title}</h3>
         <p className="bs-p">{s.p}</p>
-        <p className="bs-said">You say <b>{"\u201c"}{s.ask}{"\u201d"}</b></p>
+        <div className="mv-said">
+          <p className="mv-said-k">What you said</p>
+          <p className="mv-said-raw">{"\u201c"}<Raw text={s.raw} />{"\u201d"}</p>
+          <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{s.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
+        </div>
       </div>
       <div className="mv-mac mv-scene-mac">
         <MacMenuBar app={s.app} />
@@ -384,7 +402,7 @@ export default function Maven() {
           <div className="bs-wrap">
             <div className="bs-head is-in">
               <h2 className="aff-h1 bs-h">You say it.<br /><em>Maven does it.</em></h2>
-              <p>Four things it does today, in the apps you already use.</p>
+              <p>Talk the way you talk. Here\u2019s what it does with it.</p>
             </div>
             {SCENES.map((x, i) => <MvSceneRow key={x.title} s={x} n={i + 1} flip={i % 2 === 1} />)}
           </div>
