@@ -33,7 +33,7 @@ export function MavenMark({ size = 120 }: { size?: number }) {
    with two white eyes. Resting it breathes and blinks; listening, the eyes
    look up and a warm light races round its edge; done, the light turns green
    and wraps the capsule (matches the app, 2026-10-26). */
-type Mood = "idle" | "listening" | "happy";
+type Mood = "idle" | "listening" | "happy" | "sleepy";
 
 export function MavenFace({ mood, follow = false }: { mood: Mood; follow?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -519,12 +519,12 @@ export default function Maven() {
       </div>
       {view === "letter" ? <MavenLetter /> : <>
       {/* 1. Hero: the home page's */}
-      <header className="aff-hero">
+      <header className="aff-hero mv-hero">
         <div className="aff-wrap">
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1 mv-h1">
               <span className="aff-h1-line">Say it once.</span>
-              <b>It's already written.</b>
+              <b>It's <em className="mv-it">already</em> written.</b>
             </h1>
             <div className="aff-hero-side">
               <p className="ah-kicker">Agentic Dictation</p>
@@ -566,6 +566,7 @@ export default function Maven() {
               <div className="mv-ba-col is-out">
                 <p className="mv-k">Maven wrote</p>
                 <p className="mv-ba-out">{CLEAN}</p>
+                <span className="mv-ba-face"><MavenFace mood="happy" /></span>
               </div>
             </div>
             <ul className="mv-tags aff-reveal">
@@ -575,10 +576,10 @@ export default function Maven() {
         </section>
 
         {/* 3. What Maven is, in one breath */}
-        <section className="mv-sec mv-what-sec">
+        <section className="mv-sec mv-what-sec mv-band mv-butter">
           <div className="aff-wrap">
             <div className="mv-what aff-reveal">
-              <p className="ah-kicker">What is Maven?</p>
+              <p className="ah-kicker mv-what-k">What is Maven? <MavenFace mood="idle" follow /></p>
               <p className="mv-what-line">Maven is a small AI buddy that writes what you say, properly, wherever you type. Ask, and it does the small job that comes next. It doesn't talk back. It just does it.</p>
             </div>
           </div>
@@ -589,7 +590,7 @@ export default function Maven() {
           <div className="aff-wrap">
             <h2 className="aff-h1 mv-speed-h aff-reveal">
               <span className="aff-h1-line">Your voice is faster</span>
-              <b>than your fingers.</b>
+              <b>than your <em className="mv-it">fingers</em>.</b>
             </h2>
             <p className="mv-speed-sub">Most people type about 40 words a minute and speak about 150. Maven lets you write at the speed you think.</p>
             <div className="mv-race">
@@ -609,7 +610,7 @@ export default function Maven() {
         </section>
 
         {/* 5. What it does: side tabs on a real Mac */}
-        <section className="mv-sec" id="does">
+        <section className="mv-sec mv-band mv-sage mv-does-sec" id="does">
           <div className="aff-wrap">
             <div className="mv-does-head aff-reveal">
               <p className="ah-kicker">What it does</p>
@@ -633,6 +634,7 @@ export default function Maven() {
                     {f.only && <small>Only Maven</small>}
                     <h3>{f.t}</h3>
                     <p>{f.p}</p>
+                    {f.only && <span className="mv-tile-face"><MavenFace mood="happy" /><span className="mv-winedge-reply">YouTube. Open.</span></span>}
                   </li>
                 ))}
               </ul>
@@ -648,15 +650,15 @@ export default function Maven() {
         </section>
 
         {/* 7. Beyond dictation */}
-        <section className="mv-beyond" id="beyond">
+        <section className="mv-beyond mv-band mv-sky" id="beyond">
           <div className="aff-wrap">
-            <h2 className="mv-h2 mv-beyond-h aff-reveal">Other apps stop at typing.<br />Maven keeps going.</h2>
+            <h2 className="mv-h2 mv-beyond-h aff-reveal">Other apps stop at typing.<br />Maven <em className="mv-it">keeps going</em>.</h2>
             <div className="mv-cmp aff-reveal">
               <div className="mv-cmp-them">
                 <p className="mv-cmp-k">Every dictation app</p>
                 <p className="mv-cmp-line">{BEYOND_THEM.join(" · ")}</p>
               </div>
-              <div className="mv-cmp-div" aria-hidden="true"><MavenMark size={44} /></div>
+              <div className="mv-cmp-div" aria-hidden="true"><span className="mv-peek"><MavenFace mood="idle" follow /></span><MavenMark size={44} /></div>
               <div className="mv-cmp-us">
                 <p className="mv-cmp-k">Only Maven</p>
                 <ul>{BEYOND_US.map((k) => <li key={k}>{k}</li>)}</ul>
@@ -666,9 +668,10 @@ export default function Maven() {
         </section>
 
         {/* 8. Privacy */}
-        <section className="mv-sec mv-private">
+        <section className="mv-sec mv-private mv-band mv-sage">
           <div className="aff-wrap aff-reveal">
-            <h2 className="mv-h2">Your voice stays yours.</h2>
+            <div className="mv-sleep"><MavenFace mood="sleepy" /><span>Audio is never kept</span></div>
+            <h2 className="mv-h2">Your voice stays <em className="mv-it">yours</em>.</h2>
             <p>Audio is never kept. Your history stays on your Mac. Nothing is sent, posted or submitted without your yes.</p>
           </div>
         </section>
@@ -678,7 +681,7 @@ export default function Maven() {
           <div className="aff-wrap">
             <div className="mv-price-head aff-reveal">
               <p className="ah-kicker">Pricing</p>
-              <h2 className="mv-h2">Start free. Go Pro when you can't stop talking.</h2>
+              <h2 className="mv-h2">Start free. Go Pro when you can't stop <em className="mv-it">talking</em>.</h2>
             </div>
             <div className="mv-ptable aff-reveal" role="table" aria-label="Free and Pro">
               <div className="mv-pt-row mv-pt-head" role="row">
@@ -726,7 +729,7 @@ export default function Maven() {
         <div className="mv-close aff-reveal">
           <h2 className="aff-h1 mv-close-h">
             <span className="aff-h1-line">You already know what you want to say.</span>
-            <b>Now just say it.</b>
+            <b>Now just <em className="mv-it">say</em> it.</b>
           </h2>
           <div className="mv-close-cta">
             <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
