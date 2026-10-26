@@ -437,3 +437,26 @@
 .mv-ctable .is-us { color: var(--a-ink); font-weight: 600; background: color-mix(in srgb, var(--mv-peach, #f6d3bf) 45%, transparent); }
 .mv-ctable thead .is-us { color: var(--a-ink); letter-spacing: 0; text-transform: none; font-size: 15px; }
 .mv-compare-note { margin: 0; font-size: 13px; color: var(--a-ink-faint); }
+
+/* ── Readability pass (2026-10-27): more air everywhere ── */
+.mv p, .mv li { line-height: 1.6; }
+.mv .mv-cell { padding-block: clamp(64px, 8vw, 112px); }
+/* the scene list */
+.mv-acc-list > li { padding-block: 18px; }
+.mv-acc-list button { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.35; padding-block: 4px; }
+.mv-acc-body { padding-top: 10px; display: grid; gap: 14px; }
+.mv-acc-p { font-size: 16px; line-height: 1.6; max-width: 46ch; margin: 0; }
+.mv-acc-steps { gap: 14px; margin-top: 4px; }
+.mv-acc-steps li { gap: 5px; font-size: 15.5px; line-height: 1.55; padding-left: 14px; border-left: 2px solid var(--a-line); max-width: 48ch; }
+.mv-acc-steps li:last-child { border-left-color: var(--mv-peach-2, #f0a483); }
+.mv-acc-steps li span { font-size: 11.5px; letter-spacing: .14em; }
+.mv-acc-bar { margin-top: 6px; }
+/* comparison table */
+.mv-ctable { font-size: 16px; line-height: 1.5; }
+.mv-ctable th, .mv-ctable td { padding: 18px 20px; }
+.mv-compare { gap: 20px; }
+.mv-compare-lead { line-height: 1.35; max-width: 34ch; }
+/* tiles, cards, faq */
+.mv .mv-tile p, .mv .mv-card p, .mv .mv-faq p { font-size: 16px; line-height: 1.65; }
+.mv .mv-faq li > button, .mv .mv-faq summary { padding-block: 22px; font-size: 17px; }
+@media (max-width: 700px) { .mv .mv-cell { padding-block: 56px; } .mv-acc-steps li { max-width: none; } }
