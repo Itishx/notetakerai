@@ -19,6 +19,9 @@ const electron = require("electron");
 const { app, BrowserWindow, Tray, Menu, nativeImage, clipboard, screen, ipcMain, shell, session, systemPreferences } = electron;
 const { createOnboarding } = require(path.join(__dirname, "lib", "onboarding.cjs"));
 const { createHera } = require(path.join(__dirname, "lib", "hera.cjs"));
+const mavenStore = require(path.join(__dirname, "lib", "store.cjs"));
+let hub = null;
+function openHub() { if (!hub) { mavenStore.init(app.getPath("userData")); hub = require(path.join(__dirname, "lib", "hub.cjs")).createHub({ app, BrowserWindow, ipcMain, shell, dialog: electron.dialog, showOnboarding: () => onboarding && onboarding.show(), log }); } hub.open(); }
 const { assessDictationEdit, normalizeDictationSession, spokenNumbersToDigits } = require(path.join(__dirname, "lib", "dictation.cjs"));
 
 const execFileP = promisify(execFile);
@@ -128,6 +131,7 @@ function buildTray() {
   tray = new Tray(trayIcon());
   tray.setToolTip("Maven");
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Open Maven", click: () => openHub() },
     { label: "Start dictation (⌃⌥)", click: () => toggleDictation("menu") },
     { label: "Open last dictation", click: () => { const p = lastDictationPath(); if (fs.existsSync(p)) shell.openPath(p); } },
     { label: "Show onboarding again", click: () => onboarding && onboarding.show() },
@@ -643,7 +647,8 @@ async function finishDictation(reason, discard, mySession = session_) {
     const c0 = Date.now();
     const cleaned = quick || await refine(raw, Math.min(7000, 2500 + raw.length * 8));
     const cleanMs = Date.now() - c0;
-    const finalText = gate(raw, cleaned) || raw;
+    mavenStore.init(app.getPath("userData"));
+    const finalText = mavenStore.expandSnippet(mavenStore.applyDictionary(gate(raw, cleaned) || raw));
     const p0 = Date.now();
     const pasted = await insertText(finalText);
     const pasteMs = Date.now() - p0;
@@ -664,7 +669,8 @@ async function finishDictation(reason, discard, mySession = session_) {
 }
 
 /* ---------- lifecycle ---------- */
-app.on("second-instance", () => {});
+app.on("second-instance", () => { if (app.isReady()) openHub(); });
+app.on("activate", () => { if (app.isReady()) openHub(); });
 app.on("window-all-closed", (e) => { if (!quitting) e.preventDefault?.(); });
 app.on("before-quit", () => {
   quitting = true;

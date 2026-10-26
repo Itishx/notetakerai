@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Maven</title>
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+<aside class="side">
+  <div class="brand"><span class="mark"><i></i><i></i></span><span>Maven</span></div>
+  <nav>
+    <button data-page="home" class="on">Home</button>
+    <button data-page="dictionary">Dictionary</button>
+    <button data-page="snippets">Snippets</button>
+  </nav>
+  <nav class="bottom"><button data-page="settings">Settings</button></nav>
+</aside>
+<main>
+  <section id="home" class="page on">
+    <header class="head">
+      <h1>Welcome back</h1>
+      <p class="sub"><span id="total">0</span> words written with Maven. Press <kbd>⌃⌥</kbd> to start, press again to stop.</p>
+    </header>
+    <div class="stats">
+      <div><b id="s-week">0</b><span>words this week</span></div>
+      <div><b id="s-wpm">0</b><span>words per minute</span></div>
+      <div><b id="s-streak">0</b><span>day streak</span></div>
+      <div><b id="s-count">0</b><span>dictations</span></div>
+    </div>
+    <input id="search" class="search" type="search" placeholder="Search your history">
+    <div id="history"></div>
+  </section>
+
+  <section id="dictionary" class="page">
+    <header class="head"><h1>Dictionary</h1><p class="sub">Words and names Maven should know. Add a "heard as" to fix how something is written.</p></header>
+    <form class="add" id="dict-form">
+      <input name="word" placeholder="Write it as (Riya)" required>
+      <input name="from" placeholder="When heard as (riya), optional">
+      <button>Add</button>
+    </form>
+    <ul class="list" id="dict-list"></ul>
+  </section>
+
+  <section id="snippets" class="page">
+    <header class="head"><h1>Snippets</h1><p class="sub">Say the trigger on its own and Maven types the text.</p></header>
+    <form class="add" id="snip-form">
+      <input name="trigger" placeholder="Trigger (my calendar link)" required>
+      <input name="text" placeholder="Text (https://cal.com/you)" required>
+      <button>Add</button>
+    </form>
+    <ul class="list" id="snip-list"></ul>
+  </section>
+
+  <section id="settings" class="page">
+    <header class="head"><h1>Settings</h1></header>
+    <div class="rows">
+      <div class="row"><span>Shortcut</span><kbd id="set-shortcut">⌃⌥</kbd></div>
+      <div class="row"><span>Microphone</span><em id="set-mic">System default</em></div>
+      <label class="row"><span>Launch at login</span><input type="checkbox" id="set-login"></label>
+      <div class="row"><span>Onboarding</span><button id="set-onboard">Show again</button></div>
+      <div class="row"><span>Your data</span><button id="set-data">Open folder</button></div>
+      <div class="row"><span>History</span><button id="set-delete" class="danger">Delete all history</button></div>
+      <div class="row"><span>About</span><em>Maven by Affective · <span id="set-version"></span></em></div>
+    </div>
+  </section>
+</main>
+<script src="hub.js"></script>
+</body>
+</html>
