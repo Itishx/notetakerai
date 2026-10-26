@@ -756,6 +756,14 @@ export default function Affective() {
                   <li><Link to="/braino#early-access">Join the waitlist</Link></li>
                 </ul>
               </nav>
+              <nav className="aff-foot-col aff-tree" aria-label="Maven">
+                <h4><Link to="/maven">Maven</Link></h4>
+                <ul>
+                  <li><Link to="/maven">Agentic dictation</Link></li>
+                  <li><Link to="/maven#pricing">Pricing</Link></li>
+                  <li><Link to="/maven#letter">The announcement</Link></li>
+                </ul>
+              </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
                 <Link to="/affectiveos">AffectiveOS</Link>
