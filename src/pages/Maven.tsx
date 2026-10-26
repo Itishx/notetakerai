@@ -31,54 +31,87 @@ export function MavenMark({ size = 120 }: { size?: number }) {
   );
 }
 
-/* Maven's face: the two bars are its eyes. No mouth, no body, nothing of
-   Braino. It is alive through small things only: it breathes, blinks, looks
-   at your pointer, and each mood is one change in how the bars sit. */
-type Mood = "idle" | "listening" | "thinking" | "happy" | "sleepy";
-const MOODS: { key: Mood; label: string; note: string }[] = [
-  { key: "idle", label: "Waiting", note: "Breathes, blinks now and then, and watches your pointer." },
-  { key: "listening", label: "Listening", note: "Your voice moves through both bars, the same wave in each." },
-  { key: "thinking", label: "Thinking", note: "Still, and a little closer together, while it works out what you meant." },
-  { key: "happy", label: "Done", note: "A small hop when your words land." },
-];
+/* Maven's face (2026-10-26): the capsule from the Mac app. A small dark pill
+   with two white eyes. Resting it breathes and blinks; listening, the eyes
+   give way to one glowing waveform; done, a quick happy squint. */
+type Mood = "idle" | "listening" | "happy";
+const WAVE = [0.35, 0.5, 0.62, 0.74, 0.86, 0.95, 1, 0.95, 0.86, 0.74, 0.62, 0.5, 0.35];
 
-export function MavenFace({ mood }: { mood: Mood }) {
+export function MavenFace({ mood, follow = false }: { mood: Mood; follow?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [look, setLook] = useState({ x: 0, y: 0 });
+  const [look, setLook] = useState(0);
   const [blink, setBlink] = useState(false);
   useEffect(() => {
+    if (!follow) return;
     const move = (e: PointerEvent) => {
       const r = ref.current?.getBoundingClientRect();
       if (!r) return;
-      const dx = (e.clientX - (r.left + r.width / 2)) / window.innerWidth;
-      const dy = (e.clientY - (r.top + r.height / 2)) / window.innerHeight;
-      setLook({ x: Math.max(-1, Math.min(1, dx * 2.2)), y: Math.max(-1, Math.min(1, dy * 2.2)) });
+      setLook(Math.max(-1, Math.min(1, ((e.clientX - (r.left + r.width / 2)) / window.innerWidth) * 2)));
     };
     window.addEventListener("pointermove", move);
     return () => window.removeEventListener("pointermove", move);
-  }, []);
+  }, [follow]);
   useEffect(() => {
     let t = 0;
-    const next = () => { t = window.setTimeout(() => { setBlink(true); window.setTimeout(() => setBlink(false), 140); next(); }, 2200 + Math.random() * 2800); };
+    const next = () => { t = window.setTimeout(() => { setBlink(true); window.setTimeout(() => setBlink(false), 130); next(); }, 2600 + Math.random() * 2600); };
     next();
     return () => clearTimeout(t);
   }, []);
-  const follow = mood === "idle" || mood === "listening";
   return (
-    <div ref={ref} className={`mv-face is-${mood}${blink && mood !== "sleepy" ? " is-blink" : ""}`}
-      style={{ ["--lx" as string]: follow ? look.x.toFixed(3) : 0, ["--ly" as string]: follow ? look.y.toFixed(3) : 0 }} aria-hidden="true">
-      <div className="mv-eyes">
-        {[0, 1].map((e) => (
-          <span key={e} className="mv-eye">
-            <span className="mv-wave">{[0, 1, 2, 3, 4].map((d) => <i key={d} style={{ ["--i" as string]: d }} />)}</span>
-          </span>
-        ))}
+    <div ref={ref} className={`mv-face is-${mood}${blink && mood === "idle" ? " is-blink" : ""}`}
+      style={{ ["--lx" as string]: mood === "idle" ? look.toFixed(3) : 0 }} aria-hidden="true">
+      <span className="mv-cap">
+        <span className="mv-eyes"><i className="mv-eye" /><i className="mv-eye" /></span>
+        <span className="mv-wave">{WAVE.map((h, i) => <i key={i} style={{ ["--h" as string]: h, ["--i" as string]: i }} />)}</span>
+        <svg className="mv-squint" viewBox="0 0 30 12"><path d="M3 10 L7.5 3 L12 10" /><path d="M18 10 L22.5 3 L27 10" /></svg>
+        <span className="mv-sheen" />
+      </span>
+    </div>
+  );
+}
+
+/* The three bottom spots Maven can live in. */
+function MvSpots() {
+  return (
+    <div className="mv-spots" aria-hidden="true">
+      <div className="mv-spots-screen">
+        <i className="is-l" /><i className="is-c" /><i className="is-r on" />
       </div>
     </div>
   );
 }
 
-/* Types a line once it is on screen, the way Maven pastes it. */
+/* A faithful mock of the Maven app window (Home). */
+const HUB_STATS = [["1,284", "words this week"], ["142", "words per minute"], ["6", "day streak"], ["37", "dictations"]];
+const HUB_HISTORY = [
+  ["10:42 AM", "Hey Neha, can we move tomorrow's call to 4? Thanks."],
+  ["9:15 AM", "Remind the team the deck is due Friday, and attach the latest numbers."],
+  ["Yesterday", "Pick up milk, eggs and coffee on the way home."],
+];
+function MvHub() {
+  return (
+    <div className="mv-hub" aria-label="The Maven app: Home">
+      <div className="mv-hub-bar"><span className="mv-lights"><i /><i /><i /></span></div>
+      <div className="mv-hub-in">
+        <aside className="mv-hub-side">
+          <div className="mv-hub-brand"><span className="mv-hub-cap"><i /><i /></span>Maven</div>
+          {["Home", "Dictionary", "Snippets", "Settings"].map((n, i) => <span key={n} className={"mv-hub-nav" + (i === 0 ? " on" : "")}>{n}</span>)}
+        </aside>
+        <div className="mv-hub-main">
+          <h4>Welcome back</h4>
+          <div className="mv-hub-stats">{HUB_STATS.map(([v, k]) => <div key={k}><b>{v}</b><span>{k}</span></div>)}</div>
+          <p className="mv-hub-day">Today</p>
+          <ul className="mv-hub-list">
+            {HUB_HISTORY.map(([t, x]) => (
+              <li key={t}><time>{t}</time><p>{x}</p><span className="mv-hub-act"><button type="button" tabIndex={-1}>Copy</button><button type="button" tabIndex={-1}>Wrong?</button></span></li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function useOnScreen<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [on, setOn] = useState(false);
@@ -240,7 +273,8 @@ const PLANS = [
 const FAQ = [
   { q: "Does it work in every app?", a: "If you can click into it, you can talk into it." },
   { q: "Will it send a message or submit a form without asking?", a: "No. It waits for your yes." },
-  { q: "Where is my memory kept?", a: "In your own account, where you can see it and delete it. Your voice is turned into text in the cloud, and we don't keep the recording." },
+  { q: "Where is my memory kept?", a: "Your history stays on your Mac, where you can see it and delete it. Your voice is turned into text in the cloud, and the audio is never kept." },
+  { q: "What are snippets?", a: "Short phrases you save once. Say one on its own, like “my calendar link”, and Maven pastes your saved text instead." },
   { q: "Does it work on Windows?", a: "Not yet. Tell us and we'll let you know first." },
   { q: "How is Maven different from Wispr Flow?", a: "Wispr Flow is built around dictation: you talk, it types. Maven types too. Then it goes further: it does small jobs on your Mac by voice, like opening apps, switching tabs and filling forms. It also remembers your names, lists and details, so you say them once." },
 ];
@@ -377,9 +411,10 @@ function MavenLetter() {
    moving through them, you let go, and the words land at the cursor at once. */
 const FILM_WORDS = ["Hey Neha,", "Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.", "Thanks,", "Itish"];
 function MvSceneFilm() {
-  const [step, setStep] = useState<"listen" | "landed">("listen");
+  const [step, setStep] = useState<"listen" | "happy" | "rest">("listen");
   useEffect(() => {
-    const t = window.setTimeout(() => setStep((x) => (x === "listen" ? "landed" : "listen")), step === "listen" ? 3200 : 4200);
+    const next = { listen: "happy", happy: "rest", rest: "listen" } as const;
+    const t = window.setTimeout(() => setStep(next[step]), step === "listen" ? 3200 : step === "happy" ? 1100 : 3400);
     return () => clearTimeout(t);
   }, [step]);
   return (
@@ -395,13 +430,13 @@ function MvSceneFilm() {
           <div className="mv-mail-row"><span>To:</span><b className="mv-chip">Neha Sharma</b></div>
           <div className="mv-mail-row"><span>Subject:</span>Tomorrow</div>
           <div className="mv-mail-body">
-            {step === "landed"
+            {step !== "listen"
               ? <div className="mv-landed">{FILM_WORDS.map((w, i) => <p key={i}>{w}{i === FILM_WORDS.length - 1 && <span className="mv-caret" />}</p>)}</div>
               : <p><span className="mv-caret" /></p>}
           </div>
         </div>
-        {/* Maven lives top right, where its mark sits in the menu bar. */}
-        <div className={"mv-film-corner" + (step === "landed" ? " is-done" : "")}><MavenFace mood={step === "landed" ? "happy" : "listening"} /></div>
+        {/* Maven lives in one of three bottom spots; here, bottom right. */}
+        <div className="mv-film-corner"><MavenFace mood={step === "listen" ? "listening" : step === "happy" ? "happy" : "idle"} /></div>
       </div>
     </div>
   );
@@ -410,7 +445,7 @@ function MvSceneFilm() {
 /* Plays the moods on its own once the lines have drawn in. */
 function FaceShow() {
   const [ref, on] = useOnScreen<HTMLDivElement>();
-  const order: Mood[] = ["idle", "listening", "thinking", "happy", "idle"];
+  const order: Mood[] = ["idle", "listening", "listening", "happy", "idle"];
   const [at, setAt] = useState(0);
   useEffect(() => {
     if (!on) return;
@@ -418,7 +453,7 @@ function FaceShow() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on]);
-  return <div ref={ref} className={"mv-faceshow" + (on ? " is-in" : "")}><MavenFace mood={order[at]} /></div>;
+  return <div ref={ref} className={"mv-faceshow" + (on ? " is-in" : "")}><MavenFace mood={order[at]} follow /></div>;
 }
 
 export default function Maven() {
@@ -510,6 +545,26 @@ export default function Maven() {
               <p>Two halves. Dictation that needs no cleanup, and small jobs that need no clicking.</p>
             </div>
             <MvSwitcher />
+          </div>
+        </section>
+
+        {/* ── The Maven app ── */}
+        <section className="mv-app-sec" id="app">
+          <div className="aff-wrap">
+            <div className="mv-app-head aff-reveal">
+              <p className="ah-kicker">The Maven app</p>
+              <h2 className="mv-h2">Everything you said, in one calm place.</h2>
+            </div>
+            <div className="aff-reveal"><MvHub /></div>
+            <ul className="mv-app-lines aff-reveal">
+              <li><b>History &amp; stats</b>Everything you said, by day, searchable.</li>
+              <li><b>Dictionary</b>Teach it your names and words.</li>
+              <li><b>Snippets</b>Say “my calendar link”, get the link.</li>
+            </ul>
+            <div className="mv-app-place aff-reveal">
+              <MvSpots />
+              <p>Drag Maven to a corner or the bottom. Double-click him to open the app.</p>
+            </div>
           </div>
         </section>
 
