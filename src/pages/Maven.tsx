@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import "./affective.css";
 import "./maven.css";
 
 /* Maven (2026-10-26): agentic dictation for the Mac, its own product by
@@ -11,9 +14,9 @@ export function MavenMark({ size = 120 }: { size?: number }) {
     <svg className="mv-mark" width={size} height={size * 0.625} viewBox="0 0 240 150" role="img" aria-label="Maven">
       <defs>
         <linearGradient id="mv-fade" x1="0.5" y1="0" x2="0.5" y2="1">
-          <stop offset="0" stopColor="#000" />
-          <stop offset="0.45" stopColor="#111" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.12" />
+          <stop offset="0" stopColor="currentColor" />
+          <stop offset="0.45" stopColor="currentColor" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0.12" />
         </linearGradient>
       </defs>
       <rect x="-22" y="-74" width="44" height="148" rx="22" transform="translate(72 75) rotate(41)" fill="url(#mv-fade)" />
@@ -47,7 +50,29 @@ const FAQ = [
 
 export default function Maven() {
   const [open, setOpen] = useState<number | null>(null);
+  const { theme, toggle } = useAffTheme();
+  useEffect(() => {
+    document.title = "Maven · Agentic Dictation · Affective";
+    const prev = document.body.style.background;
+    document.body.style.background = theme === "dark" ? "" : "#f4f2ec";
+    return () => { document.body.style.background = prev; };
+  }, [theme]);
   return (
+    <div className="aff" data-theme={theme}>
+    <nav className="aff-nav">
+      <div className="aff-nav-in">
+        <Link to="/" className="aff-logo" aria-label="Affective">
+          <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
+        </Link>
+        <div className="aff-nav-links">
+          <Link to="/braino">Braino</Link>
+          <Link to="/maven">Maven</Link>
+          <Link to="/affectiveos">AffectiveOS</Link>
+          <a href={DOWNLOAD} className="aff-nav-go">Download for Mac</a>
+          <AffThemeToggle theme={theme} onToggle={toggle} />
+        </div>
+      </div>
+    </nav>
     <main className="mv-page">
       <section className="mv-hero">
         <MavenMark size={200} />
@@ -109,5 +134,6 @@ export default function Maven() {
 
       <footer className="mv-foot">Maven, by Affective. Powered by AffectiveOS.</footer>
     </main>
+    </div>
   );
 }

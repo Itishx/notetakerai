@@ -1,17 +1,17 @@
 .mv-page {
-  --mv-bg: #fbf7f3;
-  --mv-ink: #0b0b0b;
-  --mv-mute: #6f6a64;
-  --mv-line: rgba(0, 0, 0, 0.08);
-  --mv-card: #fff;
+  /* The Affective site theme (affective.css), light and dark. */
+  --mv-bg: var(--a-bg);
+  --mv-ink: var(--a-ink);
+  --mv-mute: var(--a-ink-soft);
+  --mv-line: var(--a-line);
+  --mv-card: var(--a-box);
   min-height: 100vh;
   background: var(--mv-bg);
   color: var(--mv-ink);
-  font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Inter", sans-serif;
-  padding: 0 16px;
+  padding: 0 var(--a-gutter);
 }
-.mv-page h1, .mv-page h2 { font-family: "Iowan Old Style", "Charter", Georgia, serif; font-weight: 400; letter-spacing: -0.02em; }
-.mv-hero { min-height: 88vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.mv-page h1, .mv-page h2 { font-family: var(--a-display); font-weight: 400; letter-spacing: -0.02em; }
+.mv-hero { min-height: calc(100vh - 72px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .mv-mark { display: block; margin-bottom: 30px; animation: mvIn 1.1s cubic-bezier(.2, .8, .2, 1) both; }
 .mv-eyebrow { margin: 0 0 14px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mv-mute); animation: mvIn 1.1s .1s both; }
 .mv-hero h1 { font-size: clamp(42px, 8vw, 84px); line-height: 1.02; margin: 0; animation: mvIn 1.1s .16s cubic-bezier(.2, .8, .2, 1) both; }
