@@ -544,6 +544,70 @@ const FEATURES = [
   { t: "Does the next thing", p: "“Open Notes.” “Tell Neha I'm running late.” “Fill in my address.” One small job, and it never sends or submits without your yes.", only: true },
 ];
 
+/* Maven's jobs: the ONE list. The app keeps an identical copy in
+   mac/maven/lib/jobs.cjs (the site can't import from mac/). Change both together. */
+const MAVEN_JOBS = {
+  write: {
+    title: "Write",
+    shortcut: "⌃⌥",
+    how: "Control+Option, press to start, press again to stop",
+    jobs: [
+      { job: "Type anything, cleaned up", example: "the deck is done numbers by five no wait six" },
+      { job: "Lists, ₹, lakh and crore, phone numbers, emails written properly", short: "Lists, ₹, numbers, emails", example: "the budget is twenty five thousand" },
+      { job: "Snippets", example: "my calendar link" },
+    ],
+  },
+  do: {
+    title: "Do",
+    shortcut: "fn⌃",
+    how: "fn+Control, press to start, press again to stop",
+    jobs: [
+      { job: "Open an app", example: "open Slack" },
+      { job: "Open a website", example: "open YouTube" },
+      { job: "Send a message on WhatsApp or Mail, after your yes", short: "Send a message", example: "tell Neha I'm running late" },
+      { job: "Reply to the email or message on screen, after your yes", short: "Reply to what's on screen", example: "draft a reply to this email", example2: "reply to this, Friday works" },
+      { job: "Fill in your saved details", short: "Fill your details", example: "fill in my address" },
+      { job: "Add to a list in Notes", short: "Add to a list", example: "add milk to my grocery list" },
+      { job: "Remember a name or detail", short: "Remember a name", example: "remember Riya is R-I-Y-A" },
+    ],
+  },
+  not: {
+    title: "Not Maven's job",
+    jobs: ["Playing music", "Searching the web", "Shopping", "Booking", "Anything with more than one step", "Anything it would have to decide for you"],
+  },
+} as const;
+
+type MvJob = { job: string; example: string; example2?: string };
+function MvJobs() {
+  const cols = [
+    { key: "write", title: "Write", kbd: MAVEN_JOBS.write.shortcut, how: "Press to start, press again to stop.", jobs: MAVEN_JOBS.write.jobs as readonly MvJob[] },
+    { key: "do", title: "Do", kbd: MAVEN_JOBS.do.shortcut, how: "One small job. Sends only after your yes.", jobs: MAVEN_JOBS.do.jobs as readonly MvJob[] },
+  ];
+  return (
+    <div className="mv-jobs aff-reveal">
+      {cols.map((c) => (
+        <div key={c.key} className={"mv-jobs-col is-" + c.key}>
+          <h3>{c.key === "do" && <i className="mv-jobs-dot" aria-hidden="true" />}{c.title} <kbd>{c.kbd}</kbd></h3>
+          <p className="mv-jobs-how">{c.how}</p>
+          <ul>
+            {c.jobs.map((j) => (
+              <li key={j.job}>
+                <span>{j.job}</span>
+                <q>{j.example}</q>{j.example2 && <q>{j.example2}</q>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <div className="mv-jobs-col is-not">
+        <h3>Not its job</h3>
+        <p className="mv-jobs-how">It says “Not my job.” and stops.</p>
+        <ul>{MAVEN_JOBS.not.jobs.map((j) => <li key={j}><span>{j}</span></li>)}</ul>
+      </div>
+    </div>
+  );
+}
+
 const BEYOND_THEM = ["Clean, punctuated text", "Lists, ₹ and numbers done right"];
 const BEYOND_US = ["Replies to what's on screen", "Opens apps and sends, with your yes", "Fills forms from what it knows"];
 
@@ -553,6 +617,7 @@ const FAQ = [
   { q: "Does it understand my accent?", a: "It was tuned on how people in India actually speak and write." },
   { q: "What about Hindi?", a: "English today. Hinglish is coming next." },
   { q: "Noisy room or quiet voice?", a: "It works with your Mac's built-in mic. A headset helps in a noisy room." },
+  { q: "What happens if I ask Maven something it can't do?", a: "It says “Not my job.” Ask “what can you do?” and it shows you the list." },
   { q: "What are snippets?", a: "Say a short phrase on its own, like “my calendar link”, and Maven pastes your saved text instead." },
   { q: "Is it free?", a: "Yes. Free covers everyday use. Pro is $10 a month for unlimited." },
   { q: "Windows?", a: "Not yet. Tell us and you'll hear first." },
@@ -668,6 +733,14 @@ export default function Maven() {
           <MvDoes />
         </section>
         <Strip items={DOES_STRIP} />
+
+        {/* 5b. Exactly what Maven does: the one list (MAVEN_JOBS) */}
+        <section className="mv-cell" id="jobs">
+          <SecHead pill="Its jobs" side={<p className="mv-head-desc">Two shortcuts, a few small jobs. Nothing it has to guess at.</p>}>
+            <h2 className="mv-h2">Exactly what Maven does</h2>
+          </SecHead>
+          <MvJobs />
+        </section>
 
         {/* 6. The details: numbered grid around the app */}
         <section className="mv-cell mv-details">
