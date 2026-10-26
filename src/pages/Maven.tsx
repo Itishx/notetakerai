@@ -98,23 +98,23 @@ type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string
 const SCENES: MvScene[] = [
   /* It writes */
   { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
-    title: "Talk messy. It writes clean.", p: "Ums go, full stops come in, and when you change your mind it keeps the last thing you said. Four things in a row become a list, and money and phone numbers come out the way you'd type them.",
+    title: "Talk the way you talk. It writes it neatly.", p: "It drops the ums, adds the full stops, and if you change your mind halfway, it keeps the final version. Money and numbers come out the way you'd type them.",
     out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."] },
   { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
-    title: "Replies to what's on your screen.", p: "Say “reply to this” and it reads the message you're looking at, then writes your answer right in the box. You press send.",
+    title: "Answer a message without typing.", p: "Neha asks if Friday still works. You say “reply to this” and your answer. Maven reads her message, writes yours in the reply box, and leaves the sending to you.",
     out: ["Yes, Friday works. See you at 8!"] },
   { group: "write", app: "Notes", field: "Launch list", raw: "add ~uh~ record the maven film to my launch list",
-    title: "Say it once. It remembers.", p: "Your lists, the names you use and how they're spelled, your address and email. Tell it once and it knows which list you mean next time.",
+    title: "Add to your lists by voice.", p: "Say “add this to my launch list” and it lands in the right list. It also remembers names, spellings and your details, so you only say them once.",
     out: ["- Send the deck to Rahul", "- Book the venue", "- Record the Maven film"] },
   /* It does */
   { group: "do", app: "Chrome", field: "New tab", raw: "maven could you please open youtube",
-    title: "Opens and switches.", p: "Apps, tabs and websites. Say where you want to be and you're there. No hunting through the dock or forty tabs.",
+    title: "Open any app, tab or website.", p: "Say where you want to go and you're there. No hunting through the dock or forty open tabs.",
     out: ["youtube.com", "YouTube is open in a new tab."], reply: "YouTube. Open." },
   { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
-    title: "Sends messages, with your yes.", p: "WhatsApp, Slack or Mail. It finds the person, writes the message, and stops. Nothing goes out until you say so.",
+    title: "Send a message, after you say yes.", p: "On WhatsApp, Slack or Mail. It finds the person and writes the message, then waits. Nothing goes out until you say yes.",
     out: ["The deck is done."], reply: "Drafted. Send?" },
   { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
-    title: "Fills forms.", p: "Names, addresses, emails, phone numbers, from what it already knows about you. It stops before Submit so you can check.",
+    title: "Fill a form in one sentence.", p: "Your name, address, email and phone number, filled in from what it already knows. It stops before Submit so you can check.",
     form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
 ];
 
@@ -122,9 +122,9 @@ function Raw({ text }: { text: string }) {
   return <>{text.split(/(~[^~]+~)/).filter(Boolean).map((t, i) => t.startsWith("~") ? <s key={i}>{t.slice(1, -1)}</s> : <span key={i}>{t}</span>)}</>;
 }
 
-/* What it does (2026-10-26, calm rewrite): one scene at a time. A big Mac
-   window, then the title, one sentence and what you said. It moves on slowly
-   by itself; the arrows or dots take over. */
+/* What it does (2026-10-26, side tabs): the two groups on the left, each
+   opening to its scenes; one big Mac window on the right with the title,
+   one sentence and what you said. It moves on slowly until you click. */
 function MvSwitcher() {
   const [ref, on] = useOnScreen<HTMLDivElement>();
   const [group, setGroup] = useState<"write" | "do">("write");
@@ -143,26 +143,30 @@ function MvSwitcher() {
     return () => { clearTimeout(a); if (b) clearTimeout(b); };
   }, [on, at, held, group]);
   const s = list[at] || list[0];
-  const pick = (g: "write" | "do") => { setGroup(g); setAt(0); setHeld(true); };
-  const go = (d: number) => { setAt((at + d + list.length) % list.length); setHeld(true); };
+  const groups = [{ k: "write" as const, label: "It writes" }, { k: "do" as const, label: "It does" }];
   return (
-    <div ref={ref} className="mv-one">
-      <div className="mv-tabs mv-tabs-inline" role="tablist" aria-label="What Maven does">
-        <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => pick("write")}>It writes</button>
-        <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => pick("do")}>It does</button>
-      </div>
-      <MvSceneWindow s={s} phase={phase} key={group + at} />
-      <div className="mv-one-cap" key={"c" + group + at}>
-        <h3 className="mv-one-t">{s.title}</h3>
-        <p className="mv-one-p">{s.p}</p>
-        <p className="mv-one-said"><span>You said</span>“<Raw text={s.raw} />”</p>
-      </div>
-      <div className="mv-one-nav">
-        <button type="button" aria-label="Previous" onClick={() => go(-1)}>‹</button>
-        <span className="mv-one-dots">
-          {list.map((x, i) => <button key={x.title} type="button" aria-label={x.title} className={i === at ? "on" : ""} onClick={() => { setAt(i); setHeld(true); }} />)}
-        </span>
-        <button type="button" aria-label="Next" onClick={() => go(1)}>›</button>
+    <div ref={ref} className="mv-side">
+      <nav className="mv-side-nav" aria-label="What Maven does">
+        {groups.map((g) => (
+          <div key={g.k} className={"mv-side-g" + (group === g.k ? " on" : "")}>
+            <button type="button" className="mv-side-gb" aria-expanded={group === g.k} onClick={() => { setGroup(g.k); setAt(0); setHeld(true); }}>{g.label}</button>
+            {group === g.k && (
+              <ul>
+                {SCENES.filter((x) => x.group === g.k).map((x, i) => (
+                  <li key={x.title}><button type="button" className={i === at ? "on" : ""} aria-current={i === at} onClick={() => { setAt(i); setHeld(true); }}>{x.title}</button></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </nav>
+      <div className="mv-side-main">
+        <MvSceneWindow s={s} phase={phase} key={group + at} />
+        <div className="mv-one-cap" key={"c" + group + at}>
+          <h3 className="mv-one-t">{s.title}</h3>
+          <p className="mv-one-p">{s.p}</p>
+          <p className="mv-one-said"><span>You said</span>“<Raw text={s.raw} />”</p>
+        </div>
       </div>
     </div>
   );
@@ -215,15 +219,8 @@ function MvSceneWindow({ s, phase }: { s: MvScene; phase: number }) {
 
 const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
 
-const BEYOND = [
-  { k: "Clean, punctuated text in any app", them: true },
-  { k: "Lists, ₹ amounts and phone numbers written properly", them: true },
-  { k: "Replies to what's on your screen", them: false },
-  { k: "Opens apps, tabs and websites by voice", them: false },
-  { k: "Sends a message, with your yes", them: false },
-  { k: "Fills forms from what it knows", them: false },
-  { k: "Remembers your lists, names and details", them: false },
-];
+const BEYOND_THEM = ["Clean, punctuated text", "Lists, ₹ and numbers done right"];
+const BEYOND_US = ["Replies to what's on screen", "Opens apps, tabs and websites", "Sends a message, with your yes", "Fills forms from what it knows", "Remembers your names and lists"];
 
 const PRICE_ROWS = [
   { k: "Dictation in any app", free: "2,000 words a week", pro: "Unlimited" },
@@ -249,6 +246,8 @@ const FAQ = [
 ];
 
 const MAVEN_FILM = "";
+/* The 60-second demo. Empty until the recording exists; a poster drawn in code stands in. */
+const MAVEN_DEMO_VIDEO = "";
 /* "What it does" and "Beyond dictation" are off until they are redesigned from the PRD (2026-10-26). */
 const SHOW_DRAFT_SECTIONS = true;
 
@@ -422,14 +421,6 @@ function FaceShow() {
   return <div ref={ref} className={"mv-faceshow" + (on ? " is-in" : "")}><MavenFace mood={order[at]} /></div>;
 }
 
-/* Maven only ever answers in three words or fewer. */
-const REPLIES = ["YouTube. Open.", "Drafted. Send?", "Filled. Your call.", "Again?", "Not my job.", "Anytime."];
-function FootReplies() {
-  const [i, setI] = useState(0);
-  useEffect(() => { const t = window.setInterval(() => setI((x) => (x + 1) % REPLIES.length), 2000); return () => clearInterval(t); }, []);
-  return <p className="mv-foot3-reply" key={i}>{REPLIES[i]}</p>;
-}
-
 export default function Maven() {
   const { theme, toggle } = useAffTheme();
   const [view, setView] = useState<"product" | "letter">(() => (typeof window !== "undefined" && window.location.hash === "#letter" ? "letter" : "product"));
@@ -493,6 +484,23 @@ export default function Maven() {
           </div>
         </section>
 
+        {/* ── The demo video ── */}
+        <section className="mv-video-sec">
+          <div className="aff-wrap">
+            <figure className="mv-video aff-reveal">
+              {MAVEN_DEMO_VIDEO ? (
+                <video src={MAVEN_DEMO_VIDEO} controls playsInline preload="metadata" />
+              ) : (
+                <div className="mv-video-poster" aria-label="Maven demo video, coming soon">
+                  <MavenMark size={150} />
+                  <span className="mv-video-play" aria-hidden="true" />
+                </div>
+              )}
+              <figcaption>Watch Maven in 60 seconds</figcaption>
+            </figure>
+          </div>
+        </section>
+
         {SHOW_DRAFT_SECTIONS && <>
         {/* ── What it does: a switcher ── */}
         <section className="mv-does-sec" id="see">
@@ -505,22 +513,19 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* ── Beyond dictation: where Maven goes further (computer use) ── */}
+        {/* ── Beyond dictation: a five-second comparison ── */}
         <section className="mv-beyond" id="beyond">
           <div className="aff-wrap">
-            <div className="mv-beyond-head aff-reveal">
-              <p className="ah-kicker">Beyond dictation</p>
-              <h2 className="mv-h2">Other apps stop at typing.<br />Maven keeps going.</h2>
-              <p>Dictation apps are good at one thing: you talk, they type. Maven does that too. Then it uses your Mac for you, one small step at a time, and always asks before anything goes out.</p>
-            </div>
-            <div className="mv-vs aff-reveal">
-              <div className="mv-vs-col is-them">
-                <p className="mv-vs-k">Dictation apps</p>
-                <ul>{BEYOND.filter((r) => r.them).map((r) => <li key={r.k}>{r.k}</li>)}</ul>
+            <h2 className="mv-h2 mv-beyond-h aff-reveal">Other apps stop at typing.<br />Maven keeps going.</h2>
+            <div className="mv-cmp aff-reveal">
+              <div className="mv-cmp-them">
+                <p className="mv-cmp-k">Every dictation app</p>
+                <p className="mv-cmp-line">{BEYOND_THEM.join(" · ")}</p>
               </div>
-              <div className="mv-vs-col is-us">
-                <p className="mv-vs-k">Maven</p>
-                <ul>{BEYOND.map((r) => <li key={r.k} className={r.them ? "" : "is-more"}>{r.k}</li>)}</ul>
+              <div className="mv-cmp-div" aria-hidden="true"><MavenMark size={44} /></div>
+              <div className="mv-cmp-us">
+                <p className="mv-cmp-k">Only Maven</p>
+                <ul>{BEYOND_US.map((k) => <li key={k}>{k}</li>)}</ul>
               </div>
             </div>
           </div>
@@ -576,19 +581,27 @@ export default function Maven() {
       </section>
 
       </>}
-      {/* Maven's footer (2026-10-26): Maven itself, not a sitemap. The face
-          watches you, it answers in three words, and the name spells out
-          what it stands for. */}
-      <footer className="mv-foot3">
-        <div className="mv-foot3-face" id="download"><FaceShow /></div>
-        <h2 className="aff-h1 mv-foot3-word">Maven</h2>
-        <p className="mv-foot3-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
-        <nav className="mv-foot3-links" aria-label="Footer">
-          <a href="#see">What it does</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a>
-          <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
-          <Link to="/trust">Privacy</Link><a href={DOWNLOAD}>Download for Mac</a>
-        </nav>
-        <p className="mv-foot3-base">© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
+      {/* Maven's footer (2026-10-26, light): the name and what it stands for
+          on the left, a few links on the right, one quiet line below. */}
+      <footer className="mv-foot">
+        <div className="aff-wrap">
+          <div className="mv-foot-row">
+            <div className="mv-foot-brand" id="download">
+              <div className="mv-foot-word">
+                <MavenMark size={56} />
+                <span>Maven</span>
+                <FaceShow />
+              </div>
+              <p className="mv-foot-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
+            </div>
+            <nav className="mv-foot-links" aria-label="Footer">
+              <a href="#see">What it does</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a>
+              <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
+              <Link to="/trust">Privacy</Link><a href={DOWNLOAD}>Download for Mac</a>
+            </nav>
+          </div>
+          <p className="mv-foot-base">© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
+        </div>
       </footer>
     </div>
   );
