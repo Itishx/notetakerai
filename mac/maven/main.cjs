@@ -524,13 +524,15 @@ function stopDictation(reason, opts = {}) {
 }
 
 /* ---------- transcription ---------- */
+/* Language for dictation (Settings / onboarding): "en" | "hi" | "hinglish". */
+function dictationLanguage() { try { mavenStore.init(app.getPath("userData")); return mavenStore.getLanguage(); } catch (_) { return "en"; } }
 async function transcribeAudio({ audioBase64, mimeType, fileName }) {
   if (!audioBase64) return { ok: false, error: "No audio." };
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, error: "Not configured." };
   const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe-and-notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-    body: JSON.stringify({ mode: "lecture", audioBase64, fileName, mimeType, transcriptOnly: true, dictation: true, language: "en" }),
+    body: JSON.stringify({ mode: "lecture", audioBase64, fileName, mimeType, transcriptOnly: true, dictation: true, language: dictationLanguage() }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { log("transcribe.failed", { status: res.status }); return { ok: false, error: `Transcription failed (${res.status}).` }; }
@@ -560,8 +562,10 @@ async function collectPhases(audio) {
 /* ---------- clean-up ---------- */
 /* A plain dictation (up to 60 words) needs no model. Returns the tidied line, or "". */
 const NEEDS_MODEL = /\b(?:um+|uh+|er|hmm+|like|you know|i mean|actually|wait|no|scratch|sorry|or|comma|period|full stop|question mark|exclamation|new line|new paragraph|bullet|list|following|first|then|finally|steps?|percent|dot|at|underscore|rupees?|lakh|crore|thousand|hundred|am|pm|so|okay)\b|\d|@|\b(\w+) \1\b/i;
-function quickTidy(raw) {
+function quickTidy(raw, language = "en") {
+  if (language !== "en") return ""; // Hindi / Hinglish always go to the model
   const text = String(raw || "").trim();
+  if (/[\u0900-\u097F]/.test(text)) return ""; // Devanagari is never "already clean" English
   const words = text.split(/\s+/).filter(Boolean);
   if (!text || words.length > 60 || NEEDS_MODEL.test(text) || !/^[A-Z]/.test(text) || !/[.?!,]/.test(text)) return "";
   let out = text.replace(/\bi\b/g, "I").replace(/\bi'(m|ll|ve|d)\b/gi, (_m, x) => "I'" + x.toLowerCase());
@@ -570,7 +574,7 @@ function quickTidy(raw) {
   return out;
 }
 let lastRefine = {};
-async function refine(raw, timeoutMs) {
+async function refine(raw, timeoutMs, language = "en") {
   lastRefine = {};
   if (!raw || raw.length > 20000 || !SUPABASE_ANON_KEY) return null;
   const controller = new AbortController();
@@ -579,7 +583,7 @@ async function refine(raw, timeoutMs) {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ transcript: raw }),
+      body: JSON.stringify({ transcript: raw, language }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
@@ -610,7 +614,7 @@ function gate(raw, prepared) {
    is always data to train on. Stays on this Mac. */
 const sec = (ms) => `${(Math.max(0, ms || 0) / 1000).toFixed(1)}s`;
 function wordDiff(a, b) {
-  const words = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9₹'\s-]/g, " ").split(/\s+/).filter(Boolean);
+  const words = (t) => String(t || "").normalize("NFC").toLowerCase().replace(/[^\p{L}\p{M}\p{N}₹'\s-]/gu, " ").split(/\s+/).filter(Boolean);
   const A = words(a), B = words(b);
   const left = new Map(); B.forEach((w) => left.set(w, (left.get(w) || 0) + 1));
   const removed = [];
@@ -632,7 +636,7 @@ function printDictation(d) {
   const lines = [
     "",
     `[MAVEN] ── ${sec(d.audio.ms)} spoken · ${d.pasted.ok ? `pasted into ${d.pasted.app || "the front app"}` : "copied (no text box)"} · total ${sec(d.totalMs)}`,
-    `  heard   (${d.heard.provider || "?"}, ${sec(d.textMs)}): "${d.raw}"`,
+    `  heard   (${d.heard.provider || "?"}${d.language && d.language !== "en" ? ", " + d.language : ""}, ${sec(d.textMs)}): "${d.raw}"`,
     `  cleanup ${cleanLine}`,
     used ? `  final   "${d.finalText}"` : "  final   same as heard",
     `  changes removed ${diff.removed.length ? diff.removed.map((w) => `"${w}"`).join(", ") : "nothing"}${diff.added.length ? ` · added ${diff.added.map((w) => `"${w}"`).join(", ")}` : ""}`,
@@ -644,7 +648,7 @@ function printDictation(d) {
     const dir = path.join(app.getPath("userData"), "training");
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(path.join(dir, "dictations.jsonl"), JSON.stringify({
-      at: new Date().toISOString(), spokenSec: +(d.audio.ms / 1000).toFixed(1), phases: d.audio.phases || 0, heardBy: d.heard.provider || "",
+      at: new Date().toISOString(), language: d.language || "en", spokenSec: +(d.audio.ms / 1000).toFixed(1), phases: d.audio.phases || 0, heardBy: d.heard.provider || "",
       raw: d.raw, cleanup: d.quick ? "skipped" : r.verdict || "none", cleanupModel: r.model || "", candidate: r.candidate || "", refusedBecause: r.verdict === "refused" ? r.reason : "",
       final: d.finalText, removed: diff.removed, added: diff.added, keptPct: Math.round(diff.kept * 100),
       textSec: +(d.textMs / 1000).toFixed(1), cleanSec: +(d.cleanMs / 1000).toFixed(1), pasteSec: +(d.pasteMs / 1000).toFixed(1), totalSec: +(d.totalMs / 1000).toFixed(1),
@@ -695,10 +699,11 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
       islandHide(1400); return;
     }
     if (mode === "do") { await runDo({ raw: heard.transcript.trim(), heard, audio, t0, textMs }); return; }
-    const raw = spokenNumbersToDigits(heard.transcript.trim());
-    const quick = quickTidy(raw);
+    const language = dictationLanguage();
+    const raw = language === "en" ? spokenNumbersToDigits(heard.transcript.trim()) : heard.transcript.trim();
+    const quick = quickTidy(raw, language);
     const c0 = Date.now();
-    const cleaned = quick || await refine(raw, Math.min(7000, 2500 + raw.length * 8));
+    const cleaned = quick || await refine(raw, Math.min(language === "en" ? 7000 : 9000, 2500 + raw.length * 8), language);
     const cleanMs = Date.now() - c0;
     mavenStore.init(app.getPath("userData"));
     const finalText = mavenStore.expandSnippet(mavenStore.applyDictionary(gate(raw, cleaned) || raw));
@@ -706,7 +711,7 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
     const pasted = await insertText(finalText);
     const pasteMs = Date.now() - p0;
     try { fs.writeFileSync(lastDictationPath(), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${finalText}\n`); } catch (_) {}
-    printDictation({ audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
+    printDictation({ language, audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
     if (session_ === mySession) {
       if (pasted.ok) { islandShow("done"); islandHide(850); } // green edge light, then rest // a quick happy squint
@@ -741,7 +746,7 @@ async function intentFor(raw) {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ mode: "intent", transcript: raw }),
+      body: JSON.stringify({ mode: "intent", transcript: raw, language: dictationLanguage() }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));

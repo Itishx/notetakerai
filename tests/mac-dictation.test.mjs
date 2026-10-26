@@ -584,3 +584,30 @@ test("the cloud recorder page script parses (a broken page silently drops to the
   const js = html.replace(/^[\s\S]*?<script>/, "").replace(/<\/script>[\s\S]*$/, "");
   assert.doesNotThrow(() => new Function(js));
 });
+
+test("Hindi: Devanagari words stay whole tokens and a faithful cleanup passes the gate", () => {
+  for (const file of ["../mac/maven/lib/dictation.cjs", "../mac/braino-mac/dictation.cjs"]) {
+    const d = require(file);
+    // Vowel signs, viramas and nukta are combining marks: they stay inside the word.
+    assert.deepEqual(d.dictationSemanticTokens("क्या आप कल आ रहे हैं?"), ["क्या", "आप", "कल", "आ", "रहे", "हैं"]);
+    assert.deepEqual(d.dictationSemanticTokens("ठीक है। ज़रूर"), ["ठीक", "है", "ज़रूर"]);
+    assert.deepEqual(d.dictationSemanticTokens("मीटिंग‍ कल"), ["मीटिंग", "कल"]);
+    // Fillers removed, the last value of a self-correction kept, danda added.
+    const raw = "मतलब हम कल ऑफिस में मिलते हैं और प्रोजेक्ट पर बात करेंगे पांच बजे नहीं नहीं छह बजे";
+    const cleaned = d.assessDictationEdit(raw, "हम कल ऑफिस में मिलते हैं और प्रोजेक्ट पर बात करेंगे, छह बजे।");
+    assert.equal(cleaned.accepted, true, JSON.stringify(cleaned));
+    // An invented Hindi word is still refused.
+    assert.equal(d.assessDictationEdit("हम कल मिलते हैं", "हम कल ज़रूर दिल्ली में मिलते हैं।").accepted, false);
+    // Hinglish money: "do lakh rupaye" may be written "₹2 lakh".
+    assert.equal(d.assessDictationEdit("acha toh budget do lakh rupaye hai uh vendor ko WhatsApp pe bata do", "Budget ₹2 lakh hai, vendor ko WhatsApp pe bata do.").accepted, true);
+    assert.equal(d.assessDictationEdit("बजट दो लाख रुपये है और वेंडर को आज बता दो", "बजट ₹2 लाख है और वेंडर को आज बता दो।").accepted, true);
+    // Hindi words are never read as numbers.
+    assert.equal(d.spokenNumbersToDigits("मैं दो बजे आऊंगा"), "मैं दो बजे आऊंगा");
+  }
+});
+
+test("Maven skips the quick tidy for Hindi and Hinglish", () => {
+  const main = readFileSync(new URL("../mac/maven/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /if \(language !== "en"\) return "";/);
+  assert.match(main, /\[\\u0900-\\u097F\]/);
+});

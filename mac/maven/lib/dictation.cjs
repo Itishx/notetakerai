@@ -149,6 +149,8 @@ const DICTATION_NUMBER_WORDS = new Map(Object.entries({
 // tokens make the small set of permitted changes comparable: punctuation and
 // case disappear, "five p.m." and "5 PM" become the same tokens, and a spoken
 // "six o'clock" can safely become "6:00".
+// Hindi / Hinglish spellings of rupees, so "₹" reads as the word that was said.
+const DICTATION_RUPEE_WORDS = new Map(["rupaye", "rupay", "rupaiya", "rupaiye", "rupee", "rs", "रुपये", "रुपए", "रुपया", "रुपय"].map((w) => [w.normalize("NFKC"), "rupees"]));
 function dictationSemanticTokens(value) {
   // Spoken and written numbers fold to the same token here, so converting
   // "two point five" to "2.5" reads as formatting rather than as changed words.
@@ -198,12 +200,19 @@ function dictationSemanticTokens(value) {
     .replace(/\$(\d+(?:\.\d+)?)/g, "$1 dollars ")
     .replace(/£(\d+(?:\.\d+)?)/g, "$1 pounds ")
     .replace(/€(\d+(?:\.\d+)?)/g, "$1 euros ")
+    // "do lakh rupaye" written "₹2 lakh": the rupees follow the scale word.
+    .replace(/₹\s?(\d+(?:\.\d+)?)\s*(lakhs?|crores?|लाख|करोड़)/gu, "$1 $2 rupees ")
     .replace(/₹(\d+(?:\.\d+)?)/g, "$1 rupees ")
     .replace(/(\d+(?:\.\d+)?)%/g, "$1 percent ")
-    .replace(/[\p{P}\p{S}]+/gu, " ")
+    /* Letters in any script are words (2026-10-27, Hindi): Devanagari vowel
+       signs and viramas are combining marks (\p{M}) and must stay inside the
+       word, and zero-width joiners never split one. Everything else, including
+       "।", is punctuation. */
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/[^\p{L}\p{M}\p{N}\s]+/gu, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .map((token) => DICTATION_NUMBER_WORDS.get(token) || token);
+    .map((token) => DICTATION_NUMBER_WORDS.get(token) || DICTATION_RUPEE_WORDS.get(token) || token);
 }
 
 function longestCommonSubsequenceLength(left, right) {
@@ -606,6 +615,7 @@ function buildDictationTurnDetection() {
 
 module.exports = {
   spokenNumbersToDigits,
+  dictationSemanticTokens,
   stripFormatterChatter,
   assessDictationEdit,
   assessDictationRefinement,

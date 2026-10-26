@@ -102,8 +102,38 @@ RULES
 - message is the words to send, cleaned like dictation: fillers and false starts removed, punctuation and capitals added, nothing added or reworded, written in first person as the speaker would type it ("tell Rahul I'll be late" -> "I'll be late.").
 - reply3 is at most 3 words. No em dashes.`;
 
-async function intentFor(transcript: string, openaiKey: string | undefined) {
-  const messages = [{ role: "system", content: INTENT_PROMPT }, { role: "user", content: transcript }];
+/* Hindi and Hinglish dictation (Maven, 2026-10-27). Appended after the fixed
+   English rules so those stay a cached prefix. */
+const LANGUAGE_RULES: Record<string, string> = {
+  hi: `
+
+HINDI (this dictation is Hindi, written in Devanagari)
+- Keep it in Devanagari. Never translate to English, never transliterate to Roman letters.
+- English words the speaker said in English (app names, brands, technical words: WhatsApp, meeting, deck, email) stay in Latin letters exactly as said.
+- End sentences with "।" (a question ends with "?"). Use "।" consistently, never "." for Hindi sentences.
+- Remove Hindi fillers too: मतलब, हाँ तो, अच्छा तो, तो (as an opener), वो (as filler), um, uh.
+- Self-corrections keep only the last value. Markers: नहीं, नहीं नहीं, मतलब, सॉरी, actually, wait. "छह बजे नहीं नहीं सात बजे" -> "7 बजे"; "पाँच बजे नहीं नहीं छह बजे" -> "6 बजे".
+- Times, dates and money in digits: "छह बजे" -> "6 बजे", "पाँच सौ रुपये" -> "₹500". लाख and करोड़ stay words: "दो लाख" -> "₹2 लाख".
+- A spoken list (पहला, दूसरा, फिर, और) becomes bullets "- ", one per line.
+- Never add words, never reword, never summarise.`,
+  hinglish: `
+
+HINGLISH (this dictation is Hindi and English mixed, written in Roman letters)
+- Roman (Latin) letters only. Never write Devanagari, never translate Hindi words to English or English words to Hindi. Keep the speaker's spelling of Hindi words (kal, baje, karna, hai).
+- Normal sentence punctuation: ".", "?", ",". Capitalise the first letter of a sentence and names.
+- Remove fillers: matlab, haan toh, acha toh, toh (as an opener), na (as a tag filler only when meaningless), um, uh, like.
+- Self-corrections keep only the last value. Markers: nahi, nahi nahi, matlab, sorry, actually, wait. "paanch baje nahi nahi chhe baje" -> "6 baje".
+- Times, dates and money in digits: "chhe baje" -> "6 baje", "paanch sau rupaye" -> "₹500". lakh and crore stay words: "do lakh" -> "₹2 lakh".
+- A spoken list (pehla, doosra, phir, aur) becomes bullets "- ", one per line.
+- Never add words, never reword, never summarise.`,
+};
+const INTENT_LANGUAGE_NOTE = `
+
+LANGUAGE
+- The command may be in Hindi or Hinglish. Read it the same way: "YouTube kholo" / "यूट्यूब खोलो" = open YouTube, "Rahul ko bolo main late hoon" = send_message to Rahul. message stays in the language and script the speaker used. reply3 stays English.`;
+
+async function intentFor(transcript: string, openaiKey: string | undefined, language = "en") {
+  const messages = [{ role: "system", content: INTENT_PROMPT + (language !== "en" ? INTENT_LANGUAGE_NOTE : "") }, { role: "user", content: transcript }];
   const groqKey = Deno.env.get("GROQ_API_KEY");
   const call = (url: string, key: string, m: string) => fetch(url, {
     method: "POST",
@@ -174,18 +204,21 @@ async function composeFor(context: string, instruction: string, openaiKey: strin
   return { formatted, provider, model, cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0 };
 }
 
-type Example = { c: string; i: string; o: string };
+/* examples.json rows: {c, i, o} for English, {c, i, o, lang: "hi" | "hinglish"} for
+   Hindi (Devanagari) and Hinglish (Roman). Only same-language rows are retrieved;
+   a row with no lang is English. Drop Itish's Hindi / Hinglish lines in as they come. */
+type Example = { c: string; i: string; o: string; lang?: "hi" | "hinglish" };
 const FILLER = new Set(["um", "uh", "hmm", "like", "you", "know", "i", "mean", "so", "okay", "right", "er", "the", "a", "is", "to", "and"]);
-const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
+const words = (s: string) => s.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{M}\p{N} ]/gu, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
 /* The shape words matter more than the content words: "actually", "comma",
    "bullet", "percent", "dot" decide how a line is written. */
 const SHAPE = new Set(["actually", "scratch", "wait", "no", "sorry", "make", "comma", "period", "paragraph", "line", "question", "exclamation", "mark", "bullet", "list", "following", "things", "steps", "first", "then", "finally", "pack", "bring", "one", "two", "percent", "lakh", "crore", "thousand", "hundred", "dot", "at", "underscore", "am", "pm", "p", "m", "number", "whatsapp", "call", "email", "reach", "send", "budget", "price", "charge", "pay", "vendor", "buy", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "birthday", "ship", "submit", "meeting", "hackathon"]);
-const INDEX = (EXAMPLES as Example[]).map((e) => ({ e, w: new Set(words(e.i)) }));
+const INDEX = (EXAMPLES as Example[]).map((e) => ({ e, lang: e.lang || "en", w: new Set(words(e.i)) }));
 
-function nearest(transcript: string, k = 8): Example[] {
+function nearest(transcript: string, k = 8, language = "en"): Example[] {
   const q = words(transcript);
   const qs = new Set(q);
-  const scored = INDEX.map(({ e, w }) => {
+  const scored = INDEX.filter((x) => x.lang === language).map(({ e, w }) => {
     let s = 0;
     for (const t of qs) if (w.has(t)) s += SHAPE.has(t) ? 3 : 1;
     return { e, s: s / Math.sqrt(w.size + 1) };
@@ -229,9 +262,10 @@ serve(async (req) => {
     if (transcript.length > MAX_TRANSCRIPT_CHARS) {
       return json({ error: "Transcript is too long" }, 413);
     }
+    const language = body?.language === "hi" || body?.language === "hinglish" ? body.language : "en";
     if (body?.mode === "intent") {
       const t0 = Date.now();
-      const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"));
+      const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"), language);
       if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
       return json({ ...r, durationMs: Date.now() - t0 });
     }
@@ -242,8 +276,8 @@ serve(async (req) => {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) return json({ error: "AI service is not configured" }, 503);
 
-    const shots = mode === "examples" ? nearest(transcript) : [];
-    const messages: { role: string; content: string }[] = [{ role: "system", content: SYSTEM_PROMPT }];
+    const shots = mode === "examples" ? nearest(transcript, 8, language) : [];
+    const messages: { role: string; content: string }[] = [{ role: "system", content: SYSTEM_PROMPT + (LANGUAGE_RULES[language] || "") }];
     for (const s of shots) {
       messages.push({ role: "user", content: s.i });
       messages.push({ role: "assistant", content: JSON.stringify({ formatted: s.o }) });

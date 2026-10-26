@@ -19,9 +19,9 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
   handle("hub:snip:save", (l) => store.saveSnippets(l));
   handle("hub:settings:get", () => ({
     shortcut: "⌃⌥", doShortcut: "fn ⌃", microphone: "System default", version: app.getVersion(),
-    launchAtLogin: Boolean(app.getLoginItemSettings().openAtLogin),
+    launchAtLogin: Boolean(app.getLoginItemSettings().openAtLogin), language: store.getLanguage(),
   }));
-  handle("hub:settings:set", (k, v) => { if (k === "launchAtLogin") app.setLoginItemSettings({ openAtLogin: Boolean(v) }); return true; });
+  handle("hub:settings:set", (k, v) => { if (k === "launchAtLogin") app.setLoginItemSettings({ openAtLogin: Boolean(v) }); if (k === "language") { store.setLanguage(v); log("settings.language", { language: store.getLanguage() }); } return true; });
   handle("hub:details:get", () => store.getDetails());
   handle("hub:details:save", (d) => store.saveDetails(d));
   handle("hub:openData", () => shell.openPath(store.dataDir()));

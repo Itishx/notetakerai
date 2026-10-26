@@ -3,6 +3,7 @@
    Wispr Flow's Mac onboarding). Completion lives in userData/onboarding.json. */
 const fs = require("fs");
 const path = require("path");
+const store = require("./store.cjs");
 
 function createOnboarding({
   app, BrowserWindow, ipcMain, systemPreferences, shell, session, log = () => {},
@@ -48,6 +49,8 @@ function createOnboarding({
     }
     return perms();
   });
+  ipcMain.handle("onboarding:language:get", () => { store.init(app.getPath("userData")); return store.getLanguage(); });
+  ipcMain.handle("onboarding:language:set", (_e, l) => { store.init(app.getPath("userData")); const v = store.setLanguage(l); log("onboarding.language", { language: v }); return v; });
   ipcMain.on("onboarding:step", (_e, s) => {
     const prev = step;
     step = String(s || "");

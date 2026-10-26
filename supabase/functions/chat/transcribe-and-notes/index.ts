@@ -3,6 +3,12 @@ import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/o
 
 /* Words Itish says that a transcriber would otherwise turn into "Bloom" or "hairajah". */
 const DICTATION_VOCABULARY = "Braino, BrainoHERA, HERA, Braino Mac, Wispr Flow, Itish, Affective, AffectiveOS, Laya, Mesa, Supabase, Claude, Cursor, WhatsApp. Natural spoken English, sometimes with Hindi words.";
+/* Hindi and Hinglish dictation (Maven, 2026-10-27). Whisper follows the script
+   of its prompt, so the Hinglish hint is written in Roman letters. */
+const DICTATION_HINTS = {
+  hi: "नमस्ते, आज की मीटिंग शाम छह बजे है। कृपया रिपोर्ट भेज दीजिए। Maven, WhatsApp, Gmail.",
+  hinglish: "Haan, kal meeting 6 baje hai. Main report bhej dunga, tum WhatsApp pe check kar lena. Theek hai, thanks.",
+} as const;
 import {
   buildMeetingCaptionTranscript,
   labelMicEntries,
@@ -86,7 +92,10 @@ serve(async (req) => {
     const body = await req.json();
     const mode: RecordingMode = body.mode === "meeting" ? "meeting" : "lecture";
     // Opt-in: absent for lectures and meetings, "en" for the Mac's command mic.
-    const requestedLanguage = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language)
+    // Maven dictation also sends "hinglish" (Hindi in Roman letters, 2026-10-27).
+    const dictationLanguage = body.dictation === true && (body.language === "hi" || body.language === "hinglish") ? body.language as "hi" | "hinglish" : undefined;
+    const requestedLanguage = dictationLanguage === "hinglish" ? undefined
+      : typeof body.language === "string" && /^[a-z]{2}$/.test(body.language)
       ? body.language
       : undefined;
     const existingNotes = typeof body.existingNotes === "string" ? body.existingNotes : "";
@@ -129,8 +138,9 @@ serve(async (req) => {
           knownSpeakerReferences,
           openAiApiKey: OPENAI_API_KEY,
           clockOffsetMs: clockCursorMs,
-          vocabularyHint: mode === "meeting" ? speakerVocabularyHint(meetingContext) : body.dictation === true ? DICTATION_VOCABULARY : "",
+          vocabularyHint: mode === "meeting" ? speakerVocabularyHint(meetingContext) : body.dictation === true ? (dictationLanguage ? DICTATION_HINTS[dictationLanguage] : DICTATION_VOCABULARY) : "",
           dictation: body.dictation === true,
+          dictationLanguage,
         });
         if (result.entries.length) {
           entriesByRole.push(
@@ -395,7 +405,10 @@ async function transcribeSegment({
   clockOffsetMs,
   vocabularyHint,
   dictation = false,
+  dictationLanguage,
 }: {
+  /** Maven only: "hi" (Devanagari) or "hinglish" (Hindi in Roman letters). */
+  dictationLanguage?: "hi" | "hinglish";
   segment: AudioSegmentPayload;
   mode: RecordingMode;
   knownSpeakerReferences: KnownSpeakerReference[];
@@ -441,13 +454,40 @@ async function transcribeSegment({
 
   /* Dictation goes to Groq first (Whisper large v3 turbo, ~0.3-0.5 s for a
      phase vs ~1-2 s) when its key is set; any failure falls through to OpenAI. */
+  /* Hinglish: Sarvam (saaras:v3, mode "translit" = Roman-script output) when its
+     key is set. WebM and WAV are accepted as they are. Any failure (no key, a take
+     longer than its sync limit) falls through to Groq Whisper with no language lock. */
+  if (dictation && dictationLanguage === "hinglish") {
+    const sarvamKey = Deno.env.get("SARVAM_API_KEY");
+    if (sarvamKey) {
+      try {
+        const sf = new FormData();
+        sf.append("file", new Blob([decodeBase64(segment.audioBase64)], { type: segment.mimeType }), segment.fileName);
+        sf.append("model", "saaras:v3");
+        sf.append("mode", "translit");
+        sf.append("language_code", "hi-IN");
+        const sarvamStart = Date.now();
+        const sr = await fetch("https://api.sarvam.ai/speech-to-text", { method: "POST", headers: { "api-subscription-key": sarvamKey }, body: sf });
+        if (sr.ok) {
+          const sd = await sr.json();
+          const text = typeof sd.transcript === "string" ? sd.transcript.trim() : "";
+          console.log("sarvam transcription", { ms: Date.now() - sarvamStart, chars: text.length });
+          if (text) return { text, entries: [] as TranscriptEntry[], provider: "sarvam", groqMs: Date.now() - sarvamStart };
+        } else console.error("sarvam transcription failed", sr.status, (await sr.text().catch(() => "")).slice(0, 200));
+      } catch (error) { console.error("sarvam transcription error", error); }
+    }
+  }
+  /* Hindi in Devanagari asks gpt-4o-transcribe for Hindi; Hinglish leaves the
+     OpenAI fallback unlocked so the Roman prompt can steer it. */
+  if (dictationLanguage === "hi") form.set("language", "hi");
   const groqKey = dictation ? Deno.env.get("GROQ_API_KEY") : "";
   let groqFailure = dictation && !groqKey ? "no key" : "";
   if (groqKey) {
     try {
       const g = new FormData();
       g.append("file", new Blob([decodeBase64(segment.audioBase64)], { type: segment.mimeType }), segment.fileName);
-      g.append("model", "whisper-large-v3-turbo");
+      // Hindi and Hinglish need the full model; turbo is English-strong only.
+      g.append("model", dictationLanguage ? "whisper-large-v3" : "whisper-large-v3-turbo");
       g.append("response_format", "json");
       g.append("temperature", "0");
       if (language) g.append("language", language);

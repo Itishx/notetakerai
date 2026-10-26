@@ -137,9 +137,16 @@ function addMemory(fact, word = "") {
   return true;
 }
 
+/* ---------- settings (language for dictation) ---------- */
+const LANGUAGES = ["en", "hi", "hinglish"];
+function getSettings() { const v = readJson(p("settings.json"), {}); return v && typeof v === "object" ? v : {}; }
+function setSetting(k, v) { const s = getSettings(); s[k] = v; writeJson(p("settings.json"), s); return s; }
+function getLanguage() { const l = String(getSettings().language || "en"); return LANGUAGES.includes(l) ? l : "en"; }
+function setLanguage(l) { setSetting("language", LANGUAGES.includes(String(l)) ? String(l) : "en"); return getLanguage(); }
+
 /* ---------- the record of every Do command ---------- */
 function appendCommand(row) {
   try { fs.mkdirSync(p("training"), { recursive: true }); fs.appendFileSync(p("training", "commands.jsonl"), JSON.stringify(row) + "\n"); } catch (_) {}
 }
 
-module.exports = { getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };
+module.exports = { LANGUAGES, getSettings, setSetting, getLanguage, setLanguage, getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };

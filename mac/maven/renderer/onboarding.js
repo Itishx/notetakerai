@@ -1,7 +1,7 @@
 "use strict";
 /* Maven onboarding: one step per screen. Talks to main only through window.onboarding. */
 const api = window.onboarding;
-const STEPS = ["welcome", "permissions", "mic", "shortcut", "place", "practice", "done"];
+const STEPS = ["welcome", "permissions", "mic", "language", "shortcut", "place", "practice", "done"];
 const $ = (id) => document.getElementById(id);
 let current = -1;
 let leaveStep = null;
@@ -45,6 +45,14 @@ document.addEventListener("click", (e) => {
 $("finish").addEventListener("click", () => api.finish());
 
 const ENTER = {
+  language() {
+    const cards = [...document.querySelectorAll("[data-lang]")];
+    const mark = (l) => cards.forEach((c) => c.classList.toggle("active", c.dataset.lang === l));
+    api.getLanguage().then((l) => mark(l || "en")).catch(() => {});
+    const onPick = (e) => { const l = e.currentTarget.dataset.lang; mark(l); api.setLanguage(l); };
+    cards.forEach((c) => c.addEventListener("click", onPick));
+    return () => cards.forEach((c) => c.removeEventListener("click", onPick));
+  },
   permissions() {
     const order = ["accessibility", "microphone"];
     const tick = async () => {

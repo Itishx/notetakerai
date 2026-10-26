@@ -141,7 +141,9 @@ api.getSettings().then((s) => {
   $("#set-mic").textContent = s.microphone;
   $("#set-version").textContent = `version ${s.version}`;
   $("#set-login").checked = s.launchAtLogin;
+  $("#set-language").value = s.language || "en";
 });
+$("#set-language").addEventListener("change", (e) => api.setSetting("language", e.target.value));
 /* My details */
 api.getDetails().then((d) => { const f = $("#details-form"); for (const k of ["name", "email", "phone", "address"]) f[k].value = (d && d[k]) || ""; });
 $("#details-form").addEventListener("submit", async (e) => {

@@ -615,7 +615,7 @@ const FAQ = [
   { q: "Will it work in my apps?", a: "Yes. Anywhere you can type: WhatsApp, Gmail, Slack, Notes, ChatGPT, Claude, Cursor, your code editor." },
   { q: "How is it different from Apple Dictation?", a: "Apple types what it hears. Maven writes what you meant: no ums, the right punctuation, lists, ₹, and your corrections. Then it can do the next step." },
   { q: "Does it understand my accent?", a: "It was tuned on how people in India actually speak and write." },
-  { q: "What about Hindi?", a: "English today. Hinglish is coming next." },
+  { q: "What about Hindi?", a: "Hindi and Hinglish are in early preview: pick your language in Settings. Hinglish keeps Hindi words in Roman letters." },
   { q: "Noisy room or quiet voice?", a: "It works with your Mac's built-in mic. A headset helps in a noisy room." },
   { q: "What happens if I ask Maven something it can't do?", a: "It says “Not my job.” Ask “what can you do?” and it shows you the list." },
   { q: "What are snippets?", a: "Say a short phrase on its own, like “my calendar link”, and Maven pastes your saved text instead." },
