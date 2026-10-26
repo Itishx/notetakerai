@@ -63,10 +63,10 @@
 .mv-face .mv-edge rect { fill: none; stroke: #ffece0; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 16 84; vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 0 3px rgba(255,190,150,1)) drop-shadow(0 0 7px rgba(255,140,110,.7)); animation: mvEdge 1.15s linear infinite; transition: stroke .35s ease, stroke-dasharray .45s ease; }
 @keyframes mvEdge { to { stroke-dashoffset: -100; } }
-.mv-face.is-listening .mv-face .mv-edge { opacity: 1; }
+.mv-face.is-listening .mv-edge { opacity: 1; }
 .mv-face.is-listening .mv-eyes { transform: translateY(-6%); }
-.mv-face.is-happy .mv-face .mv-edge { opacity: 1; }
-.mv-face.is-happy .mv-face .mv-edge rect { stroke: #8ff0b0; stroke-dasharray: 100 0; filter: drop-shadow(0 0 3px rgba(80,220,130,1)) drop-shadow(0 0 8px rgba(60,200,120,.65)); animation: none; }
+.mv-face.is-happy .mv-edge { opacity: 1; }
+.mv-face.is-happy .mv-edge rect { stroke: #8ff0b0; stroke-dasharray: 100 0; filter: drop-shadow(0 0 3px rgba(80,220,130,1)) drop-shadow(0 0 8px rgba(60,200,120,.65)); animation: none; }
 @media (prefers-reduced-motion: reduce) { .mv-face .mv-edge rect { animation: none; } }
 .mv-lights { display: flex; gap: 7px; }
 .mv-lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
@@ -301,3 +301,90 @@
   .mv-foot-word .mv-face { --k: 1.1; }
 }
 @media (max-width: 560px) { .mv .mv-jobs { grid-template-columns: 1fr; } .mv .mv-jobs li { margin-right: 0; } }
+
+/* ══ Warm and colourful (2026-10-27): one soft colour per section, bigger
+   type, one italic word per heading, a capsule doing something in each. ══ */
+.mv { --mv-peach: #f6c9b0; --mv-peach-2: #f3a988; --mv-sage: #cfdcc4; --mv-sage-2: #8fae86; --mv-butter: #f3e3a8; --mv-sky: #cbd9ea; --mv-ink: #16150f; --mv-on: #16150f; }
+.mv[data-theme="dark"] { --mv-peach: #3a2a22; --mv-peach-2: #5a3626; --mv-sage: #24301f; --mv-sage-2: #3d5236; --mv-butter: #33301f; --mv-sky: #1f2a36; --mv-on: #f6f3ea; }
+@media (prefers-color-scheme: dark) { .mv:not([data-theme="light"]) { --mv-peach: #3a2a22; --mv-peach-2: #5a3626; --mv-sage: #24301f; --mv-sage-2: #3d5236; --mv-butter: #33301f; --mv-sky: #1f2a36; --mv-on: #f6f3ea; } }
+
+/* Bands */
+.mv .mv-band { border-top: 0; }
+.mv .mv-hero { background: var(--mv-peach); padding-bottom: 0; }
+.mv .mv-hero .aff-strip { border-top-color: color-mix(in srgb, var(--a-ink) 12%, transparent); }
+.mv .mv-hero .aff-cta-ghost { border-color: color-mix(in srgb, var(--a-ink) 30%, transparent); }
+.mv .mv-hero .mv-note, .mv .mv-hero .aff-strip-label { color: var(--a-ink-soft); }
+.mv-butter { background: var(--mv-butter); }
+.mv-sage { background: var(--mv-sage); }
+.mv-sky { background: var(--mv-sky); }
+.mv .mv-band .ah-kicker, .mv .mv-band .mv-cmp-k, .mv .mv-band .mv-cmp-line { color: var(--a-ink-soft); }
+.mv-cmp-div .mv-mark { background: var(--mv-sky) !important; }
+.mv-tabs { margin-bottom: 18px; }
+
+/* Type: bigger, tighter, one italic accent */
+.mv .mv-h1 { font-size: clamp(46px, 7.2vw, 84px); line-height: .98; letter-spacing: -.035em; }
+.mv .mv-h2, .mv .mv-does-h, .mv .mv-speed-h, .mv .mv-beyond-h, .mv .mv-close-h { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.02; letter-spacing: -.03em; }
+.mv .mv-close-h { font-size: clamp(38px, 6vw, 64px); }
+.mv em.mv-it { font-family: var(--a-display); font-style: italic; color: inherit; letter-spacing: -.01em; }
+
+/* Before / after: Maven is happy next to the clean text */
+.mv-ba-col.is-out { position: relative; background: var(--mv-peach) !important; border-color: transparent; }
+.mv-ba-face { position: absolute; right: 20px; top: 18px; }
+.mv-ba-face .mv-face { --k: .8; }
+
+/* What is Maven: a little face that watches you */
+.mv-what-k { display: flex; align-items: center; gap: 12px; }
+.mv-what-k .mv-face { --k: .7; }
+
+/* Tiles: four colours, the special one strong peach */
+.mv .mv-jobs { gap: 14px; border: 0; }
+.mv .mv-jobs li { margin: 0; padding: 26px 22px 28px; border: 0 !important; border-radius: 22px; background: var(--mv-peach); transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s ease; position: relative; }
+.mv .mv-jobs li:nth-child(2) { background: var(--mv-sage); }
+.mv .mv-jobs li:nth-child(3) { background: var(--mv-butter); }
+.mv .mv-jobs li:nth-child(4) { background: var(--mv-sky); }
+.mv .mv-jobs li.is-key { background: var(--mv-peach-2); }
+.mv .mv-jobs li.is-key small { display: inline-block; padding: 5px 10px; border-radius: 999px; background: var(--mv-ink); color: #f6f3ea !important; }
+.mv .mv-jobs li:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgba(22,21,15,.12); }
+.mv-tile-face { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.mv-tile-face .mv-face { --k: .7; }
+
+/* Beyond: Maven peeks over the divider */
+.mv-peek { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); z-index: 1; }
+.mv-peek .mv-face { --k: .75; }
+
+/* Privacy: asleep, eyes as slits */
+.mv-face.is-sleepy .mv-eye { transform: scaleY(.18); }
+.mv-face.is-sleepy .mv-cap { animation: mvBreathe 6s ease-in-out infinite; }
+.mv-sleep { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 8px 16px 8px 10px; border-radius: 999px; background: color-mix(in srgb, #fff 45%, transparent); font-size: 14px; color: var(--a-ink); }
+.mv[data-theme="dark"] .mv-sleep { background: rgba(255,255,255,.06); }
+.mv-sleep .mv-face { --k: .8; }
+
+/* Pricing: peach for Pro */
+.mv-ptable { border-top-color: var(--mv-peach-2); }
+.mv-pt-row > .is-pro { background: color-mix(in srgb, var(--mv-peach) 55%, transparent) !important; }
+
+/* Closing: strong peach into butter */
+.mv-close { background: linear-gradient(135deg, var(--mv-peach-2), var(--mv-butter)); border: 0; color: var(--a-ink); }
+.mv .mv-close-h { color: var(--a-ink); }
+.mv .mv-close-h b { box-shadow: inset 0 -0.055em 0 0 var(--a-ink); }
+.mv .mv-close .aff-cta { background: var(--a-ink); color: var(--a-bg); border-color: var(--a-ink); }
+
+/* The primary button: a thin peach light runs round it on hover */
+@property --mv-a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+.mv .aff-cta:not(.aff-cta-ghost) { position: relative; }
+.mv .aff-cta:not(.aff-cta-ghost)::after { content: ""; position: absolute; inset: -3px; border-radius: inherit; padding: 2px; pointer-events: none; opacity: 0; transition: opacity .2s ease;
+  background: conic-gradient(from var(--mv-a), transparent 0 60%, #f3a988 75%, #ffe3d2 85%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.mv .aff-cta:not(.aff-cta-ghost):hover { opacity: 1; }
+.mv .aff-cta:not(.aff-cta-ghost):hover::after { opacity: 1; animation: mvSpin 1.4s linear infinite; }
+@keyframes mvSpin { to { --mv-a: 360deg; } }
+
+/* Fade up once, but never hide: content is visible at rest */
+.mv .aff-reveal { opacity: 1; transform: none; transition: none; }
+.mv .aff-reveal.is-in { animation: mvUp .7s cubic-bezier(.22,1,.36,1) both; }
+@keyframes mvUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .mv .aff-reveal.is-in, .mv .aff-cta::after, .mv .mv-jobs li { animation: none !important; transition: none !important; }
+  .mv .mv-jobs li:hover { transform: none; }
+}
+@media (max-width: 760px) { .mv-peek { display: none; } .mv-ba-face { top: 14px; right: 14px; } }
