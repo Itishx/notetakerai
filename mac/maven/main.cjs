@@ -145,7 +145,7 @@ function buildTray() {
    bottom-centre or bottom-right of its display. Drag it and three faint spots
    show; let go and it glides to the nearest one and stays there. */
 const ISLAND_W = 150, ISLAND_H = 96;
-const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 14; // capsule inside the window: centred, 14px from the bottom
+const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 26; // capsule inside the window: centred, 14px from the bottom
 const SPOT_MARGIN = 16;
 const SPOTS = ["bottom-left", "bottom-centre", "bottom-right"];
 const islandPosPath = () => path.join(app.getPath("userData"), "island.json");
