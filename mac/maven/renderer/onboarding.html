@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Welcome to Maven</title>
+<link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+<div class="drag"></div>
+<main>
+  <section data-step="welcome" class="on">
+    <svg class="mark" viewBox="0 0 64 64" aria-label="Maven">
+      <defs><linearGradient id="ink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16150f"/><stop offset=".45" stop-color="#22201a"/><stop offset="1" stop-color="#16150f" stop-opacity=".18"/></linearGradient></defs>
+      <g transform="rotate(41 32 32)"><rect x="20" y="6" width="10" height="52" rx="5" fill="url(#ink)"/><rect x="35" y="6" width="10" height="52" rx="5" fill="url(#ink)"/></g>
+    </svg>
+    <h1>Meet Maven</h1>
+    <p class="lede">It writes what you say, wherever you type.</p>
+    <button class="primary" data-go="next">Get started</button>
+  </section>
+
+  <section data-step="permissions">
+    <h1>Two quick permissions</h1>
+    <p class="lede">Maven needs these to hear you and type for you.</p>
+    <div class="perms">
+      <div class="perm" id="perm-accessibility">
+        <div><h2>Let Maven type for you</h2><p>Accessibility, so your words land where your cursor is.</p></div>
+        <span class="tick">✓</span><button class="secondary" data-request="accessibility">Allow</button>
+      </div>
+      <div class="perm" id="perm-microphone">
+        <div><h2>Let Maven hear you</h2><p>Microphone, only while you dictate. Audio is never kept.</p></div>
+        <span class="tick">✓</span><button class="secondary" data-request="microphone">Allow</button>
+      </div>
+    </div>
+    <button class="primary hidden" id="perms-continue" data-go="next">Continue</button>
+  </section>
+
+  <section data-step="mic">
+    <h1>Test your microphone</h1>
+    <p class="lede">Say something.</p>
+    <div class="meter"><div id="meter-fill"></div></div>
+    <p class="status" id="mic-status">Listening…</p>
+    <button class="primary hidden" id="mic-continue" data-go="next">Continue</button>
+  </section>
+
+  <section data-step="shortcut">
+    <h1>Your shortcut</h1>
+    <div class="keys"><kbd>⌃</kbd><kbd>⌥</kbd></div>
+    <p class="lede">Press once to start, press again to stop.</p>
+    <p class="status" id="key-status">Try it now: press Control and Option together.</p>
+    <button class="primary hidden" id="key-continue" data-go="next">Continue</button>
+  </section>
+
+  <section data-step="practice">
+    <h1>Give it a go</h1>
+    <p class="lede" id="practice-prompt"></p>
+    <textarea id="practice-box" placeholder="Your words will appear here"></textarea>
+    <p class="status" id="practice-status"></p>
+    <div class="row">
+      <button class="link" data-go="next">Skip</button>
+      <button class="primary hidden" id="practice-continue" data-go="next">Continue</button>
+    </div>
+  </section>
+
+  <section data-step="done">
+    <h1>You're set.</h1>
+    <div class="keys small"><kbd>⌃</kbd><kbd>⌥</kbd></div>
+    <p class="lede">Press once to start, press again to stop and paste.</p>
+    <p class="note">Maven lives in your menu bar. Drag the mark anywhere.</p>
+    <button class="primary" id="finish">Start using Maven</button>
+  </section>
+</main>
+<nav class="dots" aria-hidden="true"></nav>
+<script src="onboarding.js"></script>
+</body>
+</html>

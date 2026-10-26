@@ -16,7 +16,8 @@ const path = require("path");
 const { spawn, execFile } = require("child_process");
 const { promisify } = require("util");
 const electron = require("electron");
-const { app, BrowserWindow, Tray, Menu, nativeImage, clipboard, screen, ipcMain, shell, session } = electron;
+const { app, BrowserWindow, Tray, Menu, nativeImage, clipboard, screen, ipcMain, shell, session, systemPreferences } = electron;
+const { createOnboarding } = require(path.join(__dirname, "lib", "onboarding.cjs"));
 const { createHera } = require(path.join(__dirname, "lib", "hera.cjs"));
 const { assessDictationEdit, normalizeDictationSession, spokenNumbersToDigits } = require(path.join(__dirname, "lib", "dictation.cjs"));
 
@@ -72,6 +73,7 @@ let island = null;
 let keys = null;
 let heraInstance = null;
 let quitting = false;
+let onboarding = null;
 
 function sendIsland(channel, payload) {
   if (island && !island.isDestroyed()) { try { island.webContents.send(channel, payload); } catch (_) {} }
@@ -128,6 +130,7 @@ function buildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Start dictation (⌃⌥)", click: () => toggleDictation("menu") },
     { label: "Open last dictation", click: () => { const p = lastDictationPath(); if (fs.existsSync(p)) shell.openPath(p); } },
+    { label: "Show onboarding again", click: () => onboarding && onboarding.show() },
     { type: "separator" },
     { label: "Quit Maven", click: () => { quitting = true; app.quit(); } },
   ]));
@@ -232,7 +235,10 @@ function onChord(kind) {
     if ((phase === "starting" || phase === "listening") && Date.now() - startedAt < 1500) stopDictation("chord was a shortcut", { discard: true });
     return;
   }
-  if (kind === "start") toggleDictation("Control+Option");
+  if (kind === "start") {
+    if (onboarding && onboarding.onChord()) return; // the shortcut step only checks the keys
+    toggleDictation("Control+Option");
+  }
 }
 function toggleDictation(source) {
   if (phase === "idle") void startDictation(source);
@@ -477,6 +483,8 @@ app.whenReady().then(() => {
   buildTray();
   createIsland();
   startKeys();
+  onboarding = createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shell, session, log });
+  if (!onboarding.isDone()) onboarding.show();
   screen.on("display-metrics-changed", placeIsland);
   log("maven.ready", { hasKey: Boolean(SUPABASE_ANON_KEY) });
 });
