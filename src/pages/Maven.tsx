@@ -150,29 +150,23 @@ function MvSwitcher() {
       <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => { setGroup("write"); setAt(0); setHeld(true); }}>It writes</button>
       <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => { setGroup("do"); setAt(0); setHeld(true); }}>It does</button>
     </div>
-    <div className="mv-switch">
-      <ol className="mv-switch-list">
+    <div className="mv-stage2">
+      <div className="mv-chips" role="tablist" aria-label="Feature">
         {list.map((x, i) => (
-          <li key={x.title} className={i === at ? "on" : ""}>
-            <button type="button" onClick={() => { setAt(i); setHeld(true); }} aria-pressed={i === at}>
-              <span className="mv-switch-n">{String(i + 1).padStart(2, "0")}</span>
-              <span className="mv-switch-t">{x.title}</span>
-            </button>
-            {i === at && (
-              <div className="mv-switch-more">
-                <p className="mv-switch-p">{x.p}</p>
-                <div className="mv-said">
-                  <p className="mv-said-k">What you said</p>
-                  <p className="mv-said-raw">{"“"}<Raw text={x.raw} />{"”"}</p>
-                  <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{x.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
-                </div>
-                {!held && <span className="mv-switch-bar" key={at} />}
-              </div>
-            )}
-          </li>
+          <button key={x.title} type="button" role="tab" aria-selected={i === at} className={i === at ? "on" : ""} onClick={() => { setAt(i); setHeld(true); }}>
+            {x.title}{i === at && !held && <span className="mv-chip-bar" key={group + at} />}
+          </button>
         ))}
-      </ol>
+      </div>
       <MvSceneWindow s={s} phase={phase} key={group + at} />
+      <div className="mv-cap2" key={"c" + group + at}>
+        <p className="mv-switch-p">{s.p}</p>
+        <div className="mv-said">
+          <p className="mv-said-k">What you said</p>
+          <p className="mv-said-raw">“<Raw text={s.raw} />”</p>
+          <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{s.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
+        </div>
+      </div>
     </div>
     </div>
   );
@@ -499,6 +493,25 @@ export default function Maven() {
             <div className="mv-what aff-reveal">
               <p className="ah-kicker">What is Maven?</p>
               <p className="mv-what-line">A Mac app that does two things. It writes what you say, properly, wherever you type. And it does the small job that comes next: opens the app, sends the message, fills the form.</p>
+              {/* Two halves, at a glance: the words, and the job after them. */}
+              <div className="mv-halves" aria-hidden="true">
+                <div className="mv-half">
+                  <p className="mv-half-k">It writes</p>
+                  <div className="mv-half-card">
+                    <p className="mv-half-raw">"<s>um so</s> the deck is done <s>uh</s> numbers by <s>five no wait</s> six"</p>
+                    <p className="mv-half-arrow">↓</p>
+                    <p className="mv-half-out">The deck is done. Numbers by 6 PM.<span className="mv-caret" /></p>
+                  </div>
+                </div>
+                <div className="mv-half">
+                  <p className="mv-half-k">It does</p>
+                  <div className="mv-half-card">
+                    <p className="mv-half-raw">"open youtube"</p>
+                    <p className="mv-half-arrow">↓</p>
+                    <div className="mv-half-do"><AppLogo name="Chrome" /><span>youtube.com</span><b>YouTube. Open.</b></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -522,16 +535,16 @@ export default function Maven() {
               <h2 className="mv-h2">Other apps stop at typing.<br />Maven keeps going.</h2>
               <p>Dictation apps are good at one thing: you talk, they type. Maven does that too. Then it uses your Mac for you, one small step at a time, and always asks before anything goes out.</p>
             </div>
-            <div className="mv-beyond-table aff-reveal" role="table">
-              <div className="mv-bt-row mv-bt-head" role="row"><span role="columnheader" /><span role="columnheader">Dictation apps</span><span role="columnheader" className="is-us"><MavenMark size={22} />Maven</span></div>
-              {BEYOND.map((r) => (
-                <div key={r.k} className="mv-bt-row" role="row">
-                  <span role="cell">{r.k}</span>
-                  <span role="cell" className={r.them ? "yes" : "no"}>{r.them ? "✓" : "—"}</span>
-                  <span role="cell" className="yes is-us">✓</span>
-                </div>
+            <ol className="mv-track aff-reveal">
+              {BEYOND.map((r, i) => (
+                <li key={r.k} className={r.them ? "is-both" : "is-us"} style={{ animationDelay: `${i * 0.08}s` }}>
+                  {!r.them && i === BEYOND.findIndex((x) => !x.them) && <span className="mv-track-stop">Other apps stop here</span>}
+                  <i aria-hidden="true" />
+                  <span>{r.k}</span>
+                  <small>{r.them ? "Every dictation app" : "Only Maven"}</small>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         </section>
 
