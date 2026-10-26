@@ -111,6 +111,7 @@ HINDI (this dictation is Hindi, written in Devanagari)
 - Keep it in Devanagari. Never translate to English, never transliterate to Roman letters.
 - English words the speaker said in English (app names, brands, technical words: WhatsApp, meeting, deck, email) stay in Latin letters exactly as said.
 - End sentences with "।" (a question ends with "?"). Use "।" consistently, never "." for Hindi sentences.
+- Keep the time of day words with a time: "शाम छह बजे" -> "शाम 6 बजे", "सुबह दस बजे" -> "सुबह 10 बजे", "रात", "दोपहर" likewise. Never drop them; they are like AM/PM. Same in Hinglish: "shaam chhe baje" -> "shaam 6 baje".
 - Remove Hindi fillers too: मतलब, हाँ तो, अच्छा तो, तो (as an opener), वो (as filler), um, uh.
 - Self-corrections keep only the last value. Markers: नहीं, नहीं नहीं, मतलब, सॉरी, actually, wait. "छह बजे नहीं नहीं सात बजे" -> "7 बजे"; "पाँच बजे नहीं नहीं छह बजे" -> "6 बजे".
 - Times, dates and money in digits: "छह बजे" -> "6 बजे", "पाँच सौ रुपये" -> "₹500". लाख and करोड़ stay words: "दो लाख" -> "₹2 लाख".
