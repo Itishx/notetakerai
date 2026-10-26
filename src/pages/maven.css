@@ -406,3 +406,13 @@
   .mv-track-stop { position: static; transform: none; grid-column: 2; justify-self: start; margin-bottom: 8px; }
   .mv-track li.is-us:nth-child(3)::after { display: none; }
 }
+
+/* ── Round 9 (2026-10-26) ── */
+.mv .aff-hero { padding-top: clamp(14px, 2vw, 32px); }
+.mv .aff-hero-row { margin-top: 0; }
+.mv-mac { position: relative; }
+.mv-film-corner { position: absolute; top: 34px; right: clamp(14px, 2.4vw, 30px); z-index: 2; padding: 6px 8px; border-radius: 12px; background: rgba(255,255,255,.55); backdrop-filter: blur(14px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.mv-film-corner .mv-face { --s: .42; --a-ink: #0b0b0b; --a-bg: #fff; }
+.mv { --a-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+.mv .aff-h1, .mv .mv-h2, .mv h1, .mv h2, .mv .mv-what-line, .mv .mv-switch-t, .mv .mv-amt, .mv .mv-pt-head em { font-family: var(--a-display); font-weight: 400; letter-spacing: -0.02em; }
+.mv-foot3 .mv-foot3-word { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 400; }
