@@ -94,7 +94,7 @@ function useOnScreen<T extends HTMLElement>() {
 
 /* raw: what you actually said; ~word~ is what Maven took out. fixed: what it
    did, in plain words. That before/after is the whole point of the section. */
-type MvScene = { app: string; raw: string; title: string; p: string; out: string[]; field: string; fixed: string[]; wait?: string };
+type MvScene = { app: string; raw: string; title: string; p: string; out: string[]; field: string; fixed: string[]; wait?: string; form?: string[] };
 const SCENES: MvScene[] = [
   { app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done and the numbers by ~five no wait~ six",
     title: "Talk messy. It writes clean.", p: "You don't have to speak like a newsreader. Ums go, half-sentences join up, and when you change your mind, it keeps the last thing you said.",
@@ -107,7 +107,7 @@ const SCENES: MvScene[] = [
     out: ["The payment is \u20b925,000. Call me on 98450 12345."], fixed: ["\u201ctwenty five thousand rupees\u201d became \u20b925,000", "Grouped the phone number"] },
   { app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
     title: "Ask, and it's done.", p: "Not everything is dictation. Ask it to fill a form, open an app or send a message, and it does that one thing. It stops before anything is sent.",
-    out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], fixed: ["Filled 3 fields from what it knows", "Didn't press Submit"], wait: "Waiting for your yes to submit" },
+    form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], fixed: ["Filled 3 fields from what it knows", "Didn't press Submit"], wait: "Waiting for your yes to submit" },
 ];
 
 function Raw({ text }: { text: string }) {
@@ -143,11 +143,29 @@ function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
               <span className="mv-mail-title">{s.app}</span>
             </div>
             <div className="mv-mail-row"><span>{s.app === "Chrome" ? "Form" : s.app === "Slack" ? "To" : "Note"}</span>{s.field}</div>
+            {s.form ? (
+              /* A real form: empty fields, then each fills in by itself. */
+              <div className="mv-mail-body mv-form">
+                {s.form.map((label, i) => (
+                  <label key={label} className="mv-fieldbox">
+                    <span>{label}</span>
+                    <span className={"mv-input" + (!phase && i === 0 ? " is-focus" : "")}>
+                      {phase ? <em style={{ animationDelay: `${i * 0.28}s` }}>{s.out[i]}</em> : i === 0 ? <span className="mv-caret" /> : null}
+                    </span>
+                  </label>
+                ))}
+                <div className="mv-form-foot">
+                  <span className="mv-submit">Submit</span>
+                  {phase && s.wait ? <span className="mv-wait">{s.wait}</span> : null}
+                </div>
+              </div>
+            ) : (
             <div className="mv-mail-body">
               {phase
-                ? <div className="mv-landed">{s.out.map((l, i) => <p key={l}>{l}{i === s.out.length - 1 && <span className="mv-caret" />}</p>)}{s.wait && <p className="mv-wait">{s.wait}</p>}</div>
+                ? <div className="mv-landed">{s.out.map((l, i) => <p key={l}>{l}{i === s.out.length - 1 && <span className="mv-caret" />}</p>)}</div>
                 : <p><span className="mv-caret" /></p>}
             </div>
+            )}
             {/* Maven sits on the bottom edge of the window, like in the app. */}
             <div className={"mv-edge" + (phase ? " is-gone" : "")}><MavenFace mood="listening" /></div>
           </div>
@@ -332,14 +350,26 @@ function MvSceneFilm() {
   );
 }
 
+/* Plays the moods on its own once the lines have drawn in. */
+function FaceShow() {
+  const [ref, on] = useOnScreen<HTMLDivElement>();
+  const order: Mood[] = ["idle", "listening", "thinking", "happy", "idle"];
+  const [at, setAt] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const t = window.setInterval(() => setAt((x) => (x + 1) % order.length), 2600);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on]);
+  return <div ref={ref} className={"mv-faceshow" + (on ? " is-in" : "")}><MavenFace mood={order[at]} /></div>;
+}
+
 export default function Maven() {
   const { theme, toggle } = useAffTheme();
   const [view, setView] = useState<"product" | "letter">(() => (typeof window !== "undefined" && window.location.hash === "#letter" ? "letter" : "product"));
   const show = (v: "product" | "letter") => { setView(v); window.history.replaceState(null, "", v === "letter" ? "#letter" : window.location.pathname); window.scrollTo({ top: 0 }); };
   const root = useAffReveal();
-  const [mood, setMood] = useState<Mood>("idle");
-  useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
-  const current = MOODS.find((m) => m.key === mood)!;
+    useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
 
   return (
     <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
@@ -408,30 +438,18 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* ── Maven's face (2026-10-26): two lines, alive ── */}
-        <section className="hb6" id="face">
-          <div className="aff-wrap">
-            <div className="hb6-box mv-facebox aff-reveal">
-              <div className="mv-face-copy">
-                <p className="ah-kicker">Meet the face</p>
-                <h2 className="mv-h2">Two lines. Still alive.</h2>
-                <p className="hb6-line">Maven isn't a mascot. Its whole face is the two lines of its name. They breathe, blink, look at you, and listen. Move your pointer around.</p>
-                <div className="mv-moods" role="tablist" aria-label="Mood">
-                  {MOODS.map((m) => (
-                    <button key={m.key} type="button" role="tab" aria-selected={mood === m.key} className={mood === m.key ? "on" : ""} onClick={() => setMood(m.key)}>{m.label}</button>
-                  ))}
-                </div>
-                <p className="mv-mood-note">{current.note}</p>
-              </div>
-              <div className="mv-face-stage"><MavenFace mood={mood} /></div>
-            </div>
-          </div>
+        {/* ── Maven's face: just the two lines, big; they draw in, then live ── */}
+        <section className="mv-facehero" id="face">
+          <FaceShow />
+          <p className="ah-kicker">Meet the face</p>
+          <h2 className="mv-h2">Two lines. Still alive.</h2>
+          <p className="mv-facehero-p">It breathes, blinks, looks where you are, and listens.</p>
         </section>
 
         {/* ── Honest take: a tab, against everywhere ── */}
         <section className="hb6">
           <div className="aff-wrap">
-            <div className="hb6-box mv-honest2 aff-reveal">
+            <div className="mv-honest2 aff-reveal">
               <div className="mv-honest2-copy">
                 <p className="ah-kicker">Honest take</p>
                 <h2 className="mv-h2">You already talk to AI. Good.</h2>

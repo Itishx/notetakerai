@@ -210,3 +210,36 @@
 .mv-fixed li::before { content: "\2713  "; color: #1f8a4c; }
 .mv-fixed.is-on li { opacity: 1; transform: none; }
 .mv-fixed.is-on li:nth-child(2) { transition-delay: .15s; } .mv-fixed.is-on li:nth-child(3) { transition-delay: .3s; }
+
+/* ── Round 6 ── */
+/* scenes: room above the number and heading */
+.mv-deck .bs-row { padding-top: clamp(36px, 5vw, 64px); padding-bottom: 24px; }
+.mv-deck .bs-talk { padding-top: 8px; }
+
+/* the form scene: real fields */
+.mv-form { display: grid; gap: 12px; }
+.mv-fieldbox { display: grid; gap: 4px; }
+.mv-fieldbox > span:first-child { font-size: 12px; color: #6e6e73; }
+.mv-input { display: flex; align-items: center; min-height: 34px; padding: 0 10px; border-radius: 7px; border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f; font-size: 14px; }
+.mv-input.is-focus { border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.18); }
+.mv-input em { font-style: normal; opacity: 0; animation: mvLand .25s ease forwards; }
+.mv-form-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.mv-submit { padding: 6px 14px; border-radius: 7px; background: #0a84ff; color: #fff; font-size: 13px; font-weight: 500; opacity: .55; }
+
+/* Meet the face: big, just the two lines */
+.mv-facehero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(80px, 10vw, 140px) var(--a-gutter); }
+.mv-faceshow { margin-bottom: 40px; }
+.mv-faceshow .mv-face { --s: 2.4; }
+.mv-faceshow .mv-eye { clip-path: inset(100% 0 0 0 round 999px); transition: clip-path 1s cubic-bezier(.2,.8,.2,1), transform .14s ease; }
+.mv-faceshow .mv-eye:nth-child(2) { transition-delay: .18s, 0s; }
+.mv-faceshow.is-in .mv-eye { clip-path: inset(0 0 0 0 round 999px); }
+.mv-facehero .mv-h2 { font-size: clamp(36px, 5vw, 60px); }
+.mv-facehero-p { margin: 12px 0 0; font-size: 18px; color: var(--a-ink-soft); }
+@media (max-width: 760px) { .mv-faceshow .mv-face { --s: 1.6; } }
+
+/* Honest take: bigger, no box */
+.mv-honest2 { padding: clamp(40px, 6vw, 90px) 0; }
+.mv-honest2 .mv-h2 { font-size: clamp(40px, 6vw, 76px); line-height: 1.02; }
+.mv-honest2 .mv-honest-sub { font-size: clamp(22px, 2.6vw, 30px); }
+.mv-honest2 .mv-honest-body { font-size: 19px !important; }
+.mv-honest2-viz { background: none; border: 0; padding: 0; }
