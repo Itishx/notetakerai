@@ -134,8 +134,8 @@ function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
 const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
 
 const PLANS = [
-  { name: "Free", price: "$0", per: "", line: "Everything you need to start talking.", gets: ["Dictation in any app", "Small actions on your Mac", "Basic memory"], cta: "Download for Mac", pro: false },
-  { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation", "Full memory", "Sending and submitting, with your yes", "Voice shortcuts"], cta: "Get Pro", pro: true },
+  { name: "Free", price: "$0", per: "", line: "Dictation, plus Maven doing one thing at a time on your Mac.", gets: ["Dictation in any app, 2,000 words a week", "Open and switch apps, tabs and websites", "Write and send a message, with your yes, 10 a day", "Fill a form from your details, with your yes, 5 a day", "Remembers your names and basic details"], cta: "Download for Mac", pro: false },
+  { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation, sending and form filling", "Acts on what's on your screen: \u201creply to this\u201d", "Full memory: your lists, your details, your way of writing", "Hinglish, coming soon"], cta: "Get Pro", pro: true },
 ];
 
 const FAQ = [
