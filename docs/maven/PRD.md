@@ -173,7 +173,7 @@ Every job is one step. Anything that sends, submits or deletes **waits for your 
 
 | | Free | Pro ($10/month) |
 |---|---|---|
-| Dictation | 2,000 words/week | Unlimited |
+| Dictation | Unlimited for the first 4 days, then 2,000 words/week (heavy users hit it in ~1 day; light users never) | Unlimited |
 | Open and switch | ✓ | ✓ |
 | Send a message, with your yes | 10/day | Unlimited |
 | Fill a form, with your yes | 3/month | Unlimited |
