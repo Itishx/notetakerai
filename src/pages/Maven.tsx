@@ -33,9 +33,9 @@ export function MavenMark({ size = 120 }: { size?: number }) {
 
 /* Maven's face (2026-10-26): the capsule from the Mac app. A small dark pill
    with two white eyes. Resting it breathes and blinks; listening, the eyes
-   give way to one glowing waveform; done, a quick happy squint. */
+   look up and a warm light races round its edge; done, the light turns green
+   and wraps the capsule (matches the app, 2026-10-26). */
 type Mood = "idle" | "listening" | "happy";
-const WAVE = [0.35, 0.5, 0.62, 0.74, 0.86, 0.95, 1, 0.95, 0.86, 0.74, 0.62, 0.5, 0.35];
 
 export function MavenFace({ mood, follow = false }: { mood: Mood; follow?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -62,9 +62,8 @@ export function MavenFace({ mood, follow = false }: { mood: Mood; follow?: boole
       style={{ ["--lx" as string]: mood === "idle" ? look.toFixed(3) : 0 }} aria-hidden="true">
       <span className="mv-cap">
         <span className="mv-eyes"><i className="mv-eye" /><i className="mv-eye" /></span>
-        <span className="mv-wave">{WAVE.map((h, i) => <i key={i} style={{ ["--h" as string]: h, ["--i" as string]: i }} />)}</span>
-        <svg className="mv-squint" viewBox="0 0 30 12"><path d="M3 10 L7.5 3 L12 10" /><path d="M18 10 L22.5 3 L27 10" /></svg>
-        <span className="mv-sheen" />
+        {/* Edge light: a bright point racing round the capsule while it listens; green, wrapping the whole capsule, when the words land. */}
+        <svg className="mv-edge" viewBox="0 0 60 32" preserveAspectRatio="none"><rect x="1" y="1" width="58" height="30" rx="15" pathLength="100" /></svg>
       </span>
     </div>
   );
