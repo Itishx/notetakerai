@@ -146,9 +146,9 @@ function MvSwitcher() {
   const s = list[at] || list[0];
   return (
     <div ref={ref}>
-    <div className="mv-groups" role="tablist" aria-label="What Maven does">
-      <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => { setGroup("write"); setAt(0); setHeld(true); }}><b>It writes</b><span>Dictation, done properly</span></button>
-      <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => { setGroup("do"); setAt(0); setHeld(true); }}><b>It does</b><span>Small jobs on your Mac</span></button>
+    <div className="mv-tabs mv-tabs-inline" role="tablist" aria-label="What Maven does">
+      <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => { setGroup("write"); setAt(0); setHeld(true); }}>It writes</button>
+      <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => { setGroup("do"); setAt(0); setHeld(true); }}>It does</button>
     </div>
     <div className="mv-switch">
       <ol className="mv-switch-list">
@@ -233,6 +233,16 @@ const BEYOND = [
   { k: "Sends a message, with your yes", them: false },
   { k: "Fills forms from what it knows", them: false },
   { k: "Remembers your lists, names and details", them: false },
+];
+
+const PRICE_ROWS = [
+  { k: "Dictation in any app", free: "2,000 words a week", pro: "Unlimited" },
+  { k: "Open and switch apps, tabs and websites", free: "✓", pro: "✓" },
+  { k: "Send a message, with your yes", free: "10 a day", pro: "Unlimited" },
+  { k: "Fill a form, with your yes", free: "5 a day", pro: "Unlimited" },
+  { k: "Reply to what's on your screen", free: "—", pro: "✓" },
+  { k: "Memory", free: "Names and basic details", pro: "Lists, details, your way of writing" },
+  { k: "Hinglish", free: "—", pro: "Coming soon" },
 ];
 
 const PLANS = [
@@ -532,14 +542,22 @@ export default function Maven() {
               <p className="ah-kicker">Pricing</p>
               <h2 className="mv-h2">Start free. Go Pro when you can't stop talking.</h2>
             </div>
-            <div className="mv-price aff-reveal">
-              {PLANS.map((pl) => (
-                <div key={pl.name} className={pl.pro ? "is-pro" : undefined}>
-                  <div className="mv-plan-top"><h3>{pl.name}</h3>{pl.pro && <span className="mv-badge">Most people</span>}</div>
-                  <p className="mv-amt">{pl.price}{pl.per && <small>{pl.per}</small>}</p>
-                  <p className="mv-plan-line">{pl.line}</p>
-                  <ul>{pl.gets.map((g) => <li key={g}><i aria-hidden="true">✓</i>{g}</li>)}</ul>
-                  <a href={DOWNLOAD} className={"aff-cta" + (pl.pro ? "" : " aff-cta-ghost")}>{pl.cta}</a>
+            <div className="mv-ptable aff-reveal" role="table" aria-label="Free and Pro">
+              <div className="mv-pt-row mv-pt-head" role="row">
+                <span role="columnheader" />
+                {PLANS.map((pl) => (
+                  <span key={pl.name} role="columnheader" className={pl.pro ? "is-pro" : undefined}>
+                    <b>{pl.name}</b>
+                    <em>{pl.price}{pl.per && <small>{pl.per}</small>}</em>
+                    <a href={DOWNLOAD} className={"aff-cta" + (pl.pro ? "" : " aff-cta-ghost")}>{pl.cta}</a>
+                  </span>
+                ))}
+              </div>
+              {PRICE_ROWS.map((r) => (
+                <div key={r.k} className="mv-pt-row" role="row">
+                  <span role="cell">{r.k}</span>
+                  <span role="cell">{r.free}</span>
+                  <span role="cell" className="is-pro">{r.pro}</span>
                 </div>
               ))}
             </div>
