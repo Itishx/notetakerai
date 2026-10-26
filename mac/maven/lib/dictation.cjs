@@ -453,7 +453,14 @@ function assessDictationEdit(source, candidate) {
     // Digits count only when they are new (spoken as words), never a swap of digits already said.
     const FORMAT = /^(?:list|lists|todo|to-do|₹|%|am|pm)$/i;
     const said = new Set(sourceTokens.map(String));
-    const inventions = aligned.insertedTokens.filter((t) => !(FORMAT.test(String(t)) || (/^[0-9][0-9.,:]*$/.test(String(t)) && !said.has(String(t))))).length;
+    // Light grammar a person would add when typing it ("what you mean by"), a few at most.
+    const GLUE = /^(?:by|is|are|the|a|an|to|of|that|for|in|on|and|was)$/i; // never pronouns: he->it is a real change
+    let glue = Math.max(2, Math.floor(sourceTokens.length / 15));
+    const inventions = aligned.insertedTokens.filter((t) => {
+      if (FORMAT.test(String(t)) || (/^[0-9][0-9.,:]*$/.test(String(t)) && !said.has(String(t)))) return false;
+      if (GLUE.test(String(t)) && glue > 0) { glue -= 1; return false; }
+      return true;
+    }).length;
     if (!moves && inventions > 0) return { accepted: false, reason: "words_added_or_reordered", ...align };
     align.inserted = 0;
     align.deleted -= moves;

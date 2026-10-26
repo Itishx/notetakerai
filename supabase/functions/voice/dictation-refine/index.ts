@@ -69,7 +69,9 @@ SENTENCES
 - Capitalise names, places, products, and days/months: Neha, Bangalore, Product Hunt, WhatsApp, Mom, Friday. "co founder" -> "co-founder", "to do" -> "to-do".
 
 NEVER
-- Add a word that was not said (no greetings, sign-offs, explanations).
+- Swap a word for a different word, even a "better" one: keep he/she/it/they exactly as said ("he just appeared" stays "he"), keep "had to" as "had to", never "should". Do not rephrase, reorder or tidy grammar. You only delete fillers and repeats, apply self-corrections, and add punctuation, capitals and the number/list formats above.
+- Spell out a digit or turn a number word into a different form than the rules above ("3 places" stays "3 places").
+- Add a word that was not said (no greetings, sign-offs, explanations, no "by", "the" or "that" to smooth a sentence).
 - Drop a word that carries meaning. Drop a sentence, ever: every sentence before and after a list stays, word for word, including swearing and casual lines ("Holy shit, it's almost instantaneous, dude." stays). A list replaces only the words of the items themselves.
 - Answer, summarise, or translate. Keep Hindi or Hinglish words as spoken.
 - Change names, emails, URLs, handles, code or product names except as above.`;
