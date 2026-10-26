@@ -356,24 +356,24 @@ const SAID_PARTS = ["um", " so can you tell rahul ", "the the", " deck is done a
 
 /* What it does: plain scenes on a real Mac. raw is what you said; ~word~ is
    what Maven took out; out is what lands. */
-type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[]; list?: string[] };
+type MvScene = { group: "write" | "do"; does: string; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[]; list?: string[] };
 const SCENES: MvScene[] = [
-  { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
+  { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ the deck is ~uh~ done, numbers by ~five no wait~ six, and the budget is twenty five thousand", does: "Types it cleanly into your Slack message: no ums, the 6 you meant, and ₹25,000.",
     title: "Talk the way you talk. It writes it neatly.", p: "It drops the ums, adds the full stops, and keeps the version you meant. Money and numbers come out right.",
     out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."] },
-  { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
+  { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this: yes friday works, see you at eight", does: "Reads Neha's message and writes your answer in the reply box. You press send.",
     title: "Answer a message without typing.", p: "Say “reply to this” and your answer. Maven reads her message and writes yours. You send it.",
     out: ["Yes, Friday works. See you at 8!"] },
-  { group: "write", app: "Notes", field: "Launch list", raw: "add record the Maven film to my launch list",
+  { group: "write", app: "Notes", field: "Launch list", raw: "add record the Maven film to my launch list", does: "Adds it to the bottom of your Launch list in Notes.",
     title: "Add to your lists by voice.", p: "Say “add this to my launch list” and it lands in the right list. It remembers names and details too.",
     list: ["Send the deck to Rahul", "Book the venue"], out: ["Record the Maven film"], reply: "Added." },
-  { group: "do", app: "Chrome", field: "New tab", raw: "maven could you please open youtube",
+  { group: "do", app: "Chrome", field: "New tab", raw: "open YouTube", does: "Opens YouTube in a new tab and says \"YouTube. Open.\"",
     title: "Open any app, tab or website.", p: "Say where you want to go and you're there. No hunting through forty tabs.",
     out: ["youtube.com", "YouTube is open in a new tab."], reply: "YouTube. Open." },
-  { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
+  { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell Rahul the deck is done", does: "Finds Rahul in Slack, writes the message, and waits for your yes before sending.",
     title: "Send a message, after you say yes.", p: "On WhatsApp, Slack or Mail. It writes the message, then waits. Nothing goes out until you say yes.",
     out: ["The deck is done."], reply: "Drafted. Send?" },
-  { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
+  { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address", does: "Fills your name and address into the form, and stops before Submit.",
     title: "Fill a form in one sentence.", p: "Your name, address and phone, filled in from what it knows. It stops before Submit.",
     form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
 ];
@@ -410,7 +410,11 @@ function MvDoes() {
             {i === at && (
               <div className="mv-acc-body">
                 <p className="mv-acc-p">{x.p}</p>
-                <p className="mv-acc-said"><span>You said</span><q>“<Raw text={x.raw} />”</q></p>
+                {/* Two plain steps, so it is obvious what happened (2026-10-27). */}
+                <ol className="mv-acc-steps">
+                  <li><span>You press ⌃⌥ and say</span><q>“<Raw text={x.raw} />”</q></li>
+                  <li><span>Maven</span>{x.does}</li>
+                </ol>
                 <span className={"mv-acc-bar" + (held || calm ? " is-full" : "")} key={"b" + at}><i /></span>
               </div>
             )}
@@ -485,7 +489,7 @@ function MvSceneWindow({ s, phase }: { s: MvScene; phase: number }) {
             </div>
           )}
           {/* Maven sits on the bottom edge of the window, like in the app. */}
-          <div className={"mv-winedge" + (phase && !s.reply ? " is-gone" : "")}>
+          <div className="mv-winedge mv-wincorner">
             <MavenFace mood={phase ? "happy" : "listening"} />
             {phase && s.reply ? <span className="mv-winedge-reply">{s.reply}</span> : null}
           </div>

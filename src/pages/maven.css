@@ -415,3 +415,12 @@
 .mv-faq-list details[open] summary i { transform: rotate(45deg); }
 .mv-faq-list details p { margin: -6px 0 22px; padding-left: clamp(0px, 2vw, 24px); max-width: 66ch; font-size: 16px; line-height: 1.6; color: var(--a-ink-soft); }
 @media (prefers-reduced-motion: reduce) { .mv-check li.is-new, .mv-faq-list summary i { animation: none !important; transition: none !important; } }
+
+/* Scene captions as two steps; the mascot inside the white window, bottom-right (2026-10-27). */
+.mv-acc-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.mv-acc-steps li { display: grid; gap: 2px; font-size: 14.5px; line-height: 1.45; color: var(--a-ink); }
+.mv-acc-steps li span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--a-ink-faint); }
+.mv-acc-steps q { quotes: none; color: var(--a-ink-soft); font-style: normal; }
+.mv-acc-said { display: none; }
+.mv-winedge.mv-wincorner { left: auto; right: 14px; bottom: 14px; transform: none; z-index: 3; flex-direction: row-reverse; }
+.mv-winedge.mv-wincorner .mv-face { --k: .75; }
