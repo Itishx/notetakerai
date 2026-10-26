@@ -424,3 +424,16 @@
 .mv-acc-said { display: none; }
 .mv-winedge.mv-wincorner { left: auto; right: 14px; bottom: 14px; transform: none; z-index: 3; flex-direction: row-reverse; }
 .mv-winedge.mv-wincorner .mv-face { --k: .75; }
+
+/* Pricing: Plans | Value for money */
+.mv-ptabs { margin: 0 0 22px; }
+.mv-compare { display: grid; gap: 14px; }
+.mv-compare-lead { margin: 0; font-family: var(--a-display); font-size: clamp(20px, 2.4vw, 26px); color: var(--a-ink); }
+.mv-compare-scroll { overflow-x: auto; }
+.mv-ctable { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 15px; }
+.mv-ctable th, .mv-ctable td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--a-line); color: var(--a-ink-soft); vertical-align: top; }
+.mv-ctable thead th { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--a-ink-faint); font-weight: 500; }
+.mv-ctable tbody th { color: var(--a-ink); font-weight: 400; padding-left: 0; }
+.mv-ctable .is-us { color: var(--a-ink); font-weight: 600; background: color-mix(in srgb, var(--mv-peach, #f6d3bf) 45%, transparent); }
+.mv-ctable thead .is-us { color: var(--a-ink); letter-spacing: 0; text-transform: none; font-size: 15px; }
+.mv-compare-note { margin: 0; font-size: 13px; color: var(--a-ink-faint); }
