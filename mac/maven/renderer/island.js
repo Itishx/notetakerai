@@ -60,10 +60,14 @@ function paintEdge() {
   for (let i = 0; i < n; i++) {
     const [x, y] = at(head - i * (per / 90));
     ectx.fillStyle = `rgba(${R},${G},${B},${(1 - (i / n) * (done ? 0.35 : 1)) * bright * fade})`;
-    ectx.beginPath(); ectx.arc(x, y, 1.6 - i * 0.04, 0, Math.PI * 2); ectx.fill();
+    ectx.beginPath(); ectx.arc(x, y, Math.max(0.5, 1.6 - (i / n) * 1.1), 0, Math.PI * 2); ectx.fill(); // never a negative radius (it threw and killed the loop)
   }
 }
-function loop() { paint(); paintWave(); paintEdge(); anim = island.classList.contains("listening") || island.classList.contains("done") ? requestAnimationFrame(loop) : 0; }
+function loop() {
+  // A drawing error must never stop the animation for good.
+  try { paint(); paintWave(); paintEdge(); } catch (_) {}
+  anim = island.classList.contains("listening") || island.classList.contains("done") ? requestAnimationFrame(loop) : 0;
+}
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
 function scheduleBlink() {
@@ -93,7 +97,7 @@ window.maven.onState(({ state, note: text }) => {
     return;
   }
   note.classList.remove("on");
-  if (state === "listening") { setState("listening"); if (!anim) anim = requestAnimationFrame(loop); return; }
+  if (state === "listening") { setState("listening"); warm = 1; tail = 26; fade = 1; doneAt = 0; if (!anim) anim = requestAnimationFrame(loop); return; } // always starts warm, never green
   if (state === "done") { setState("done"); if (!anim) anim = requestAnimationFrame(loop); return; }
   // idle, hidden, thinking: the resting face (the listening state is gone the moment you press)
   setState("idle");
