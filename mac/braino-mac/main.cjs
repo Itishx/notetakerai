@@ -4385,7 +4385,24 @@ function startSwiftHotkeyHelper() {
         if (phase === "start") ensureDockWindowVisible("voice-hotkey");
         return;
       }
-      if (trimmed.startsWith("dictate-hold-")) trimmed = trimmed.replace("dictate-hold-", "option-hold-");
+      /* Hands-free (2026-10-26, Itish): Control+Option is a switch, not a hold.
+         Press once, it listens; press again, it stops and pastes. Letting go
+         does nothing. A chord used as a shortcut (another key while held,
+         right after starting) still throws the take away. */
+      if (trimmed.startsWith("dictate-hold-")) {
+        const phase = trimmed.slice("dictate-hold-".length);
+        const running = heraHold.on || localDictationActive || localDictationStarting;
+        if (phase === "end") return;
+        if (phase === "cancel") {
+          if (heraHold.on && Date.now() - heraHold.at < 1500) trimmed = "option-hold-cancel";
+          else return;
+        } else if (phase === "start") {
+          if (running) {
+            if (!heraHold.on) heraHold = { on: true, at: Date.now(), stopQueued: false };
+            trimmed = "option-hold-end";
+          } else trimmed = "option-hold-start";
+        }
+      }
       if (trimmed === "option-hold-start" || trimmed === "option-hold-end" || trimmed === "option-hold-cancel") {
         if (SKIT.enabled) return;
         if (!(heraCloudEnabled() || (parakeetEnabled() && (parakeet.ready || sarvamActive())))) {
