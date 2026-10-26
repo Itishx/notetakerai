@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import { useAffTheme } from "@/components/AffTheme";
+import { AffNav, AffFooter, useAffReveal } from "@/components/affPage";
+import { AppLogo } from "@/components/AppLogo";
 import "./affective.css";
+import "./affective-home.css";
 import "./maven.css";
 
 /* Maven (2026-10-26): agentic dictation for the Mac, its own product by
    Affective (it grew out of BrainoHERA). Copy is Itish's "Maven website copy
-   v2". The mark is two slanted pills that fade from ink to air, drawn in code
-   so it stays sharp at any size. */
+   v2"; the page is built from the home page's parts, like /braino and
+   /foundry. The mark is two slanted pills that fade from ink to air. */
 
 export function MavenMark({ size = 120 }: { size?: number }) {
   return (
@@ -25,7 +28,54 @@ export function MavenMark({ size = 120 }: { size?: number }) {
   );
 }
 
-/* No public build yet: the button asks for the preview instead of pretending to download. */
+/* Maven's face: the two bars are its eyes. No mouth, no body, nothing of
+   Braino. It is alive through small things only: it breathes, blinks, looks
+   at your pointer, and each mood is one change in how the bars sit. */
+type Mood = "idle" | "listening" | "thinking" | "happy" | "sleepy";
+const MOODS: { key: Mood; label: string; note: string }[] = [
+  { key: "idle", label: "Waiting", note: "Breathes, blinks now and then, and watches your pointer." },
+  { key: "listening", label: "Listening", note: "Your voice moves through both bars, the same wave in each." },
+  { key: "thinking", label: "Thinking", note: "The bars tilt back and forth while it works out what you meant." },
+  { key: "happy", label: "Done", note: "A small hop when your words land." },
+  { key: "sleepy", label: "Resting", note: "Half closed, slow breathing, when nothing is happening." },
+];
+
+export function MavenFace({ mood }: { mood: Mood }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [look, setLook] = useState({ x: 0, y: 0 });
+  const [blink, setBlink] = useState(false);
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      const dx = (e.clientX - (r.left + r.width / 2)) / window.innerWidth;
+      const dy = (e.clientY - (r.top + r.height / 2)) / window.innerHeight;
+      setLook({ x: Math.max(-1, Math.min(1, dx * 2.2)), y: Math.max(-1, Math.min(1, dy * 2.2)) });
+    };
+    window.addEventListener("pointermove", move);
+    return () => window.removeEventListener("pointermove", move);
+  }, []);
+  useEffect(() => {
+    let t = 0;
+    const next = () => { t = window.setTimeout(() => { setBlink(true); window.setTimeout(() => setBlink(false), 140); next(); }, 2200 + Math.random() * 2800); };
+    next();
+    return () => clearTimeout(t);
+  }, []);
+  const follow = mood === "idle" || mood === "listening";
+  return (
+    <div ref={ref} className={`mv-face is-${mood}${blink && mood !== "sleepy" ? " is-blink" : ""}`}
+      style={{ ["--lx" as string]: follow ? look.x.toFixed(3) : 0, ["--ly" as string]: follow ? look.y.toFixed(3) : 0 }} aria-hidden="true">
+      <div className="mv-eyes">
+        {[0, 1].map((e) => (
+          <span key={e} className="mv-eye">
+            <span className="mv-wave">{[0, 1, 2, 3, 4].map((d) => <i key={d} style={{ ["--i" as string]: d }} />)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
 
 const SEE = [
@@ -35,9 +85,9 @@ const SEE = [
 ];
 
 const DOES = [
-  { h: "Type", p: "Hold a key, talk, and clean, formatted text shows up in any app you use. Punctuation in, filler out, lists that look like lists." },
-  { h: "Do", p: "Open an app. Switch a tab. Fill a form. Small jobs on your Mac, by voice." },
-  { h: "Remember", p: "Your names, your lists, your way of writing. Say it once, and Maven keeps it." },
+  { k: "Type", h: "Talk, and it's written.", p: "Hold a key, talk, and clean, formatted text shows up in any app you use. Punctuation in, filler out, lists that look like lists." },
+  { k: "Do", h: "Small jobs, by voice.", p: "Open an app. Switch a tab. Fill a form. Small jobs on your Mac, by voice." },
+  { k: "Remember", h: "Say it once.", p: "Your names, your lists, your way of writing. Say it once, and Maven keeps it." },
 ];
 
 const FAQ = [
@@ -49,91 +99,156 @@ const FAQ = [
 ];
 
 export default function Maven() {
-  const [open, setOpen] = useState<number | null>(null);
   const { theme, toggle } = useAffTheme();
-  useEffect(() => {
-    document.title = "Maven · Agentic Dictation · Affective";
-    const prev = document.body.style.background;
-    document.body.style.background = theme === "dark" ? "" : "#f4f2ec";
-    return () => { document.body.style.background = prev; };
-  }, [theme]);
+  const root = useAffReveal();
+  const [mood, setMood] = useState<Mood>("idle");
+  useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
+  const current = MOODS.find((m) => m.key === mood)!;
+
   return (
-    <div className="aff" data-theme={theme}>
-    <nav className="aff-nav">
-      <div className="aff-nav-in">
-        <Link to="/" className="aff-logo" aria-label="Affective">
-          <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
-        </Link>
-        <div className="aff-nav-links">
-          <Link to="/braino">Braino</Link>
-          <Link to="/maven">Maven</Link>
-          <Link to="/affectiveos">AffectiveOS</Link>
-          <a href={DOWNLOAD} className="aff-nav-go">Download for Mac</a>
-          <AffThemeToggle theme={theme} onToggle={toggle} />
+    <div className="aff mv" data-theme={theme} ref={root}>
+      <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
+        links={[["See it work", "#see"], ["Face", "#face"], ["Pricing", "#pricing"], ["Questions", "#faq"]]} go={["Download for Mac", "/maven#download"]} />
+
+      {/* ── Hero: the home page's ── */}
+      <header className="aff-hero">
+        <div className="aff-wrap">
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              <span className="aff-h1-line">Speak it</span>
+              <b>into being.</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="ah-kicker">Agentic Dictation</p>
+              <p className="aff-hero-one">Maven types what you say, does small jobs for you, and remembers you. On your Mac.</p>
+              <div className="aff-hero-cta">
+                <a href={DOWNLOAD} className="aff-cta">Download for Mac</a>
+                <a href="#see" className="aff-cta aff-cta-ghost">See it work</a>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </nav>
-    <main className="mv-page">
-      <section className="mv-hero">
-        <MavenMark size={200} />
-        <p className="mv-eyebrow">Agentic Dictation</p>
-        <h1>Speak it into being.</h1>
-        <p className="mv-line">Maven types what you say, does small jobs for you, and remembers you. On your Mac.</p>
-        <a href={DOWNLOAD} className="mv-btn">Download for Mac</a>
-      </section>
+        <div className="mv-stage aff-reveal">
+          <MavenFace mood="listening" />
+        </div>
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p className="aff-strip-label">Works wherever you type</p>
+            <ul className="aff-strip-names aff-strip-logos">
+              {(["WhatsApp", "Chrome", "Mail", "Finder", "Calendar", "Spotify"] as const).map((n) => (
+                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </header>
 
-      <section className="mv-sec">
-        <h2>See it work</h2>
-        <ul className="mv-see">
-          {SEE.map((x) => (
-            <li key={x.say}>
-              <p className="mv-say"><span>You say</span>&ldquo;{x.say}&rdquo;</p>
-              <p className="mv-does"><span>Maven</span>{x.does}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <main>
+        {/* ── See it work ── */}
+        <section className="hb6" id="see">
+          <div className="aff-wrap">
+            <div className="hb6-box aff-reveal">
+              <div className="hb6-head">
+                <div>
+                  <p className="ah-kicker">See it work</p>
+                  <div className="hb5-name"><h2>You say. Maven does.</h2><MavenMark size={84} /></div>
+                </div>
+              </div>
+              <ul className="mv-see">
+                {SEE.map((x) => (
+                  <li key={x.say}>
+                    <p className="mv-say"><span>You say</span>&ldquo;{x.say}&rdquo;</p>
+                    <p className="mv-does"><span>Maven</span>{x.does}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
 
-      <section className="mv-sec">
-        <h2>What it does</h2>
-        <ul className="mv-points">
-          {DOES.map((x) => <li key={x.h}><h3>{x.h}</h3><p>{x.p}</p></li>)}
-        </ul>
-      </section>
+        {/* ── What it does ── */}
+        <section className="hb6">
+          <div className="aff-wrap">
+            <div className="hb6-box aff-reveal">
+              <div className="hb6-head"><div><p className="ah-kicker">What it does</p><h2 className="mv-h2">Type. Do. Remember.</h2></div></div>
+              <ul className="hb4-does hb6-jobs">
+                {DOES.map((d) => <li key={d.k} className="is-key"><small>{d.k}</small><h3>{d.h}</h3><p>{d.p}</p></li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
 
-      <section className="mv-sec mv-honest">
-        <h2>Honest take</h2>
-        <p>You already talk to AI. Good. Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
-      </section>
+        {/* ── Maven's face (2026-10-26): two lines, alive ── */}
+        <section className="hb6" id="face">
+          <div className="aff-wrap">
+            <div className="hb6-box mv-facebox aff-reveal">
+              <div className="mv-face-copy">
+                <p className="ah-kicker">Meet the face</p>
+                <h2 className="mv-h2">Two lines. Still alive.</h2>
+                <p className="hb6-line">Maven isn't a mascot. Its whole face is the two lines of its name. They breathe, blink, look at you, and listen. Move your pointer around.</p>
+                <div className="mv-moods" role="tablist" aria-label="Mood">
+                  {MOODS.map((m) => (
+                    <button key={m.key} type="button" role="tab" aria-selected={mood === m.key} className={mood === m.key ? "on" : ""} onClick={() => setMood(m.key)}>{m.label}</button>
+                  ))}
+                </div>
+                <p className="mv-mood-note">{current.note}</p>
+              </div>
+              <div className="mv-face-stage"><MavenFace mood={mood} /></div>
+            </div>
+          </div>
+        </section>
 
-      <section className="mv-sec">
-        <h2>Pricing</h2>
-        <div className="mv-price">
-          <div><h3>Free</h3><p className="mv-amt">$0</p><p>Dictation, small actions on your Mac, basic memory.</p></div>
-          <div className="is-pro"><h3>Pro</h3><p className="mv-amt">$10<small>/month</small></p><p>Unlimited dictation, full memory, sending and submitting with your yes, voice shortcuts.</p></div>
+        {/* ── Honest take ── */}
+        <section className="hb6">
+          <div className="aff-wrap">
+            <div className="mv-honest aff-reveal">
+              <p className="ah-kicker">Honest take</p>
+              <p>You already talk to AI. Good. Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Pricing ── */}
+        <section className="hb6" id="pricing">
+          <div className="aff-wrap">
+            <div className="mv-price aff-reveal">
+              <div><p className="ah-kicker">Free</p><p className="mv-amt">$0</p><p>Dictation, small actions on your Mac, basic memory.</p></div>
+              <div className="is-pro"><p className="ah-kicker">Pro</p><p className="mv-amt">$10<small>/month</small></p><p>Unlimited dictation, full memory, sending and submitting with your yes, voice shortcuts.</p></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ── Questions: the home page's ── */}
+      <section className="hb2-faq" id="faq">
+        <div className="aff-wrap hb2-faq-split">
+          <div className="hb2-faq-side">
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
+            <p>The short answers.</p>
+          </div>
+          <div className="hb2-faq-list">
+            {FAQ.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}<i aria-hidden="true">+</i></summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="mv-sec">
-        <h2>FAQ</h2>
-        <ul className="mv-faq">
-          {FAQ.map((x, i) => (
-            <li key={x.q} className={open === i ? "is-open" : undefined}>
-              <button type="button" onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}>{x.q}<span>{open === i ? "−" : "+"}</span></button>
-              {open === i && <p>{x.a}</p>}
-            </li>
-          ))}
-        </ul>
+      {/* ── The last word ── */}
+      <section className="hb-end" id="download">
+        <div className="hb-end-glow" aria-hidden="true" />
+        <div className="aff-wrap hb-end-in aff-reveal mv-end">
+          <MavenFace mood="happy" />
+          <h2 className="aff-h1 hb-end-line">Say something.</h2>
+          <a href={DOWNLOAD} className="aff-cta">Download for Mac</a>
+          <p className="mv-by">Maven, by <Link to="/">Affective</Link>. Powered by <Link to="/affectiveos">AffectiveOS</Link>.</p>
+        </div>
       </section>
 
-      <section className="mv-end">
-        <MavenMark size={72} />
-        <h2>Say something.</h2>
-        <a href={DOWNLOAD} className="mv-btn">Download for Mac</a>
-      </section>
-
-      <footer className="mv-foot">Maven, by Affective. Powered by AffectiveOS.</footer>
-    </main>
+      <AffFooter />
     </div>
   );
 }
