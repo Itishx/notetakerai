@@ -241,7 +241,8 @@ function onChord(kind) {
   }
 }
 function toggleDictation(source) {
-  if (phase === "idle") void startDictation(source);
+  // A press while the last one is still pasting starts a new one; it is never ignored.
+  if (phase === "idle" || phase === "finishing") void startDictation(source);
   else if (phase === "starting" || phase === "listening") stopDictation(source);
 }
 
@@ -276,7 +277,8 @@ function stopDictation(reason, opts = {}) {
   if (phase === "starting") { stopQueued = { reason, opts }; return; }
   if (phase !== "listening") return;
   phase = "finishing";
-  void finishDictation(reason, Boolean(opts.discard));
+  islandHide(); // the moment you press, the listening state goes; the text follows
+  void finishDictation(reason, Boolean(opts.discard), session_);
 }
 
 /* ---------- transcription ---------- */
@@ -428,18 +430,16 @@ async function insertText(text) {
   }
 }
 
-async function finishDictation(reason, discard) {
+async function finishDictation(reason, discard, mySession = session_) {
   const t0 = Date.now();
   clearInterval(phaseTimer); phaseTimer = 0;
   const audio = await hera().stop();
   if (discard) {
     phaseJobs = [];
     log("dictation.discarded", { reason });
-    islandHide();
-    phase = "idle";
+    if (session_ === mySession) phase = "idle";
     return;
   }
-  islandShow("thinking");
   try {
     if (!audio?.audioBase64) { log("dictation.empty", { reason, error: audio?.error || "" }); islandHide(); return; }
     const phased = await collectPhases(audio);
@@ -460,13 +460,13 @@ async function finishDictation(reason, discard) {
     try { fs.writeFileSync(lastDictationPath(), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${finalText}\n`); } catch (_) {}
     printDictation({ audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
-    if (pasted.ok) islandHide();
-    else { islandShow("note", { note: "Copied. No box." }); islandHide(2200); }
+    if (!pasted.ok && session_ === mySession) { islandShow("note", { note: "Copied. No box." }); islandHide(2200); }
   } catch (error) {
     log("dictation.failed", { error: String(error?.message || error) });
     islandHide();
   } finally {
-    phase = "idle";
+    // Only if no new dictation started meanwhile.
+    if (session_ === mySession) phase = "idle";
   }
 }
 
