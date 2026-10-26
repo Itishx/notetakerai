@@ -341,3 +341,22 @@
 .mv-foot3 .mv-foot3-word::after { content: none; }
 .mv-foot3-means { margin: 18px 0 0; font-size: 14px; letter-spacing: .22em; text-transform: uppercase; color: rgba(244,242,236,.55); }
 .mv-foot3-means b { color: #f4f2ec; font-weight: 700; }
+
+/* No italics in "Maven does it." */
+.mv-does-h em { font-style: normal; }
+/* It writes / It does: the same pill switch as Maven | The announcement */
+.mv-tabs.mv-tabs-inline { margin: 0 auto clamp(30px, 4vw, 48px); }
+/* Pricing as a table */
+.mv-ptable { border-top: 1px solid var(--a-ink); }
+.mv-pt-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; align-items: center; border-bottom: 1px solid var(--a-line); }
+.mv-pt-row > span { padding: 16px 18px; font-size: 15.5px; color: var(--a-ink); }
+.mv-pt-row > span:first-child { padding-left: 0; }
+.mv-pt-row > span:not(:first-child) { color: var(--a-ink-soft); }
+.mv-pt-row > .is-pro { color: var(--a-ink) !important; font-weight: 500; background: color-mix(in srgb, var(--a-ink) 4%, transparent); align-self: stretch; display: flex; align-items: center; }
+.mv-pt-head > span { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 22px; padding-bottom: 22px; }
+.mv-pt-head b { font-size: 15px; font-weight: 600; color: var(--a-ink); }
+.mv-pt-head em { font-style: normal; font-family: var(--a-display); font-size: 40px; font-weight: 600; letter-spacing: -.03em; color: var(--a-ink); line-height: 1; }
+.mv-pt-head em small { font-size: 15px; font-weight: 400; color: var(--a-ink-soft); margin-left: 3px; letter-spacing: 0; }
+.mv-pt-head .aff-cta { margin-top: 8px; }
+.mv-pt-head > .is-pro { flex-direction: column; align-items: flex-start; }
+@media (max-width: 700px) { .mv-pt-row { grid-template-columns: 1.1fr 1fr 1fr; } .mv-pt-row > span { padding: 12px 8px; font-size: 13.5px; } .mv-pt-head em { font-size: 28px; } }
