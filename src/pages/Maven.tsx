@@ -148,23 +148,38 @@ const FAQ = [
 
 const MAVEN_FILM = "";
 
+/* The hero film in code (2026-10-26): exactly what happens on a real Mac.
+   Your cursor waits in an empty email, Maven's two bars listen with the voice
+   moving through them, you let go, and the words land at the cursor at once. */
+const FILM_WORDS = ["Hey Neha,", "Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.", "Thanks,", "Itish"];
 function MvSceneFilm() {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<"listen" | "landed">("listen");
   useEffect(() => {
-    const t = window.setInterval(() => setStep((x) => (x + 1) % 3), 2600);
-    return () => clearInterval(t);
-  }, []);
+    const t = window.setTimeout(() => setStep((x) => (x === "listen" ? "landed" : "listen")), step === "listen" ? 3200 : 4200);
+    return () => clearTimeout(t);
+  }, [step]);
   return (
-    <div className="mv-film-in" aria-label="Maven typing a message as you speak">
-      <MacMenuBar app="Mail" />
-      <div className="mv-film-body">
-        <p className="mv-field">To: Neha · Subject: Tomorrow</p>
-        <div className={"mv-typed" + (step >= 1 ? " is-on" : "")}>
-          <p>Hey Neha,</p>
-          <p>Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.</p>
-          <p>Thanks,<br />Itish</p>
+    <div className="mv-mac" aria-label="Maven listening, then typing an email where the cursor is">
+      <MacMenuBar app="Mail" menus={["File", "Edit", "View", "Mailbox", "Message", "Format", "Window", "Help"]} />
+      <div className="mv-desk">
+        <div className="mv-mail">
+          <div className="mv-mail-bar">
+            <span className="mv-lights"><i /><i /><i /></span>
+            <span className="mv-mail-title">New Message</span>
+            <span className="mv-mail-send" aria-hidden="true">➤</span>
+          </div>
+          <div className="mv-mail-row"><span>To:</span><b className="mv-chip">Neha Sharma</b></div>
+          <div className="mv-mail-row"><span>Subject:</span>Tomorrow</div>
+          <div className="mv-mail-body">
+            {step === "landed"
+              ? <div className="mv-landed">{FILM_WORDS.map((w, i) => <p key={i}>{w}{i === FILM_WORDS.length - 1 && <span className="mv-caret" />}</p>)}</div>
+              : <p><span className="mv-caret" /></p>}
+          </div>
         </div>
-        <div className="mv-film-face"><MavenFace mood={step === 0 ? "listening" : step === 1 ? "thinking" : "happy"} /></div>
+        <div className={"mv-film-face" + (step === "landed" ? " is-gone" : "")}>
+          <MavenFace mood="listening" />
+          <span className="mv-film-hint">Listening…</span>
+        </div>
       </div>
     </div>
   );
