@@ -356,25 +356,25 @@ const SAID_PARTS = ["um", " so can you tell rahul ", "the the", " deck is done a
 
 /* What it does: plain scenes on a real Mac. raw is what you said; ~word~ is
    what Maven took out; out is what lands. */
-type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[] };
+type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[]; list?: string[] };
 const SCENES: MvScene[] = [
   { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
-    title: "Talk the way you talk. It writes it neatly.", p: "It drops the ums, adds the full stops, and if you change your mind halfway, it keeps the final version. Money and numbers come out the way you'd type them.",
+    title: "Talk the way you talk. It writes it neatly.", p: "It drops the ums, adds the full stops, and keeps the version you meant. Money and numbers come out right.",
     out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."] },
   { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
-    title: "Answer a message without typing.", p: "Neha asks if Friday still works. You say “reply to this” and your answer. Maven reads her message, writes yours in the reply box, and leaves the sending to you.",
+    title: "Answer a message without typing.", p: "Say “reply to this” and your answer. Maven reads her message and writes yours. You send it.",
     out: ["Yes, Friday works. See you at 8!"] },
-  { group: "write", app: "Notes", field: "Launch list", raw: "add ~uh~ record the maven film to my launch list",
-    title: "Add to your lists by voice.", p: "Say “add this to my launch list” and it lands in the right list. It also remembers names, spellings and your details, so you only say them once.",
-    out: ["- Send the deck to Rahul", "- Book the venue", "- Record the Maven film"] },
+  { group: "write", app: "Notes", field: "Launch list", raw: "add record the Maven film to my launch list",
+    title: "Add to your lists by voice.", p: "Say “add this to my launch list” and it lands in the right list. It remembers names and details too.",
+    list: ["Send the deck to Rahul", "Book the venue"], out: ["Record the Maven film"], reply: "Added." },
   { group: "do", app: "Chrome", field: "New tab", raw: "maven could you please open youtube",
-    title: "Open any app, tab or website.", p: "Say where you want to go and you're there. No hunting through the dock or forty open tabs.",
+    title: "Open any app, tab or website.", p: "Say where you want to go and you're there. No hunting through forty tabs.",
     out: ["youtube.com", "YouTube is open in a new tab."], reply: "YouTube. Open." },
   { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
-    title: "Send a message, after you say yes.", p: "On WhatsApp, Slack or Mail. It finds the person and writes the message, then waits. Nothing goes out until you say yes.",
+    title: "Send a message, after you say yes.", p: "On WhatsApp, Slack or Mail. It writes the message, then waits. Nothing goes out until you say yes.",
     out: ["The deck is done."], reply: "Drafted. Send?" },
   { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
-    title: "Fill a form in one sentence.", p: "Your name, address, email and phone number, filled in from what it already knows. It stops before Submit so you can check.",
+    title: "Fill a form in one sentence.", p: "Your name, address and phone, filled in from what it knows. It stops before Submit.",
     form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
 ];
 
@@ -409,8 +409,8 @@ function MvDoes() {
             <button type="button" aria-expanded={i === at} onClick={() => { setAt(i); setHeld(true); }}>{x.title}</button>
             {i === at && (
               <div className="mv-acc-body">
-                <p>{x.p}</p>
-                <p className="mv-acc-said"><span>You said</span>“<Raw text={x.raw} />”</p>
+                <p className="mv-acc-p">{x.p}</p>
+                <p className="mv-acc-said"><span>You said</span><q>“<Raw text={x.raw} />”</q></p>
                 <span className={"mv-acc-bar" + (held || calm ? " is-full" : "")} key={"b" + at}><i /></span>
               </div>
             )}
@@ -472,6 +472,11 @@ function MvSceneWindow({ s, phase }: { s: MvScene; phase: number }) {
                 {phase && s.wait ? <span className="mv-wait">{s.wait}</span> : null}
               </div>
             </div>
+          ) : s.list ? (
+            <ul className="mv-mail-body mv-check">
+              {s.list.map((l) => <li key={l}><i />{l}</li>)}
+              {phase ? <li className="is-new"><i />{s.out[0]}</li> : <li className="is-empty"><i /><span className="mv-caret" /></li>}
+            </ul>
           ) : (
             <div className="mv-mail-body">
               {phase
@@ -498,7 +503,7 @@ const FEATURES = [
 ];
 
 const BEYOND_THEM = ["Clean, punctuated text", "Lists, ₹ and numbers done right"];
-const BEYOND_US = ["Replies to what's on screen", "Opens apps, tabs and websites", "Sends a message, with your yes", "Fills forms from what it knows", "Remembers your names and lists"];
+const BEYOND_US = ["Replies to what's on screen", "Opens apps and sends, with your yes", "Fills forms from what it knows"];
 
 const FAQ = [
   { q: "Will it work in my apps?", a: "Yes. Anywhere you can type: WhatsApp, Gmail, Slack, Notes, ChatGPT, Claude, Cursor, your code editor." },
@@ -654,19 +659,19 @@ export default function Maven() {
           <SecHead pill="Beyond dictation"><h2 className="mv-h2">Other apps stop at typing.<br />Maven <em className="mv-it">keeps going</em>.</h2></SecHead>
           <div className="mv-cards aff-reveal">
             <article className="mv-card">
-              <div className="mv-card-top"><span className="mv-snip">{BEYOND_THEM.join(" · ")}</span></div>
+              <div className="mv-card-top"><span className="mv-snip">Clean text. Done.</span></div>
               <h3>Every dictation app</h3>
               <p>{BEYOND_THEM.join(". ")}.</p>
             </article>
             <article className="mv-card">
-              <div className="mv-card-top"><span className="mv-snip mv-snip-face"><MavenFace mood="happy" /><span className="mv-winedge-reply">Drafted. Send?</span></span></div>
-              <h3>Only Maven</h3>
-              <ul>{BEYOND_US.map((k) => <li key={k}>{k}</li>)}</ul>
+              <div className="mv-card-top"><span className="mv-snip mv-snip-face"><MavenFace mood="happy" /><span>Drafted. Send?</span></span></div>
+              <h3>Then it <em className="mv-it">does it</em>. <span className="mv-card-tag">Only Maven</span></h3>
+              <p>{BEYOND_US.join(". ")}.</p>
             </article>
             <article className="mv-card">
-              <div className="mv-card-top"><span className="mv-sleep"><MavenFace mood="sleepy" /><span>Audio is never kept</span></span></div>
+              <div className="mv-card-top"><span className="mv-snip mv-snip-face"><MavenFace mood="sleepy" /><span>Audio is never kept</span></span></div>
               <h3>Your voice stays <em className="mv-it">yours</em>.</h3>
-              <p>Audio is never kept. Your history stays on your Mac. Nothing is sent, posted or submitted without your yes.</p>
+              <p>Audio is never kept. Your history stays on your Mac. Nothing goes out without your yes.</p>
             </article>
           </div>
         </section>
@@ -701,9 +706,9 @@ export default function Maven() {
       </main>
 
       {/* 10. Questions */}
-      <section className="mv-cell hb2-faq" id="faq">
+      <section className="mv-cell mv-faq" id="faq">
         <SecHead pill="Questions" side={<p className="mv-head-desc">The short answers.</p>}><h2 className="mv-h2">Questions</h2></SecHead>
-        <div className="hb2-faq-list">
+        <div className="mv-faq-list">
           {FAQ.map((f) => (
             <details key={f.q}>
               <summary>{f.q}<i aria-hidden="true">+</i></summary>
