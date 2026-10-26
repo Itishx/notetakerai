@@ -460,3 +460,6 @@
 .mv .mv-tile p, .mv .mv-card p, .mv .mv-faq p { font-size: 16px; line-height: 1.65; }
 .mv .mv-faq li > button, .mv .mv-faq summary { padding-block: 22px; font-size: 17px; }
 @media (max-width: 700px) { .mv .mv-cell { padding-block: 56px; } .mv-acc-steps li { max-width: none; } }
+
+/* The hidden tab must stay hidden (display:grid was overriding [hidden]). */
+.mv [data-ptab][hidden] { display: none !important; }
