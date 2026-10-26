@@ -50,7 +50,11 @@
            pill: cancel, your voice as dots, done. braino-mac.js heraIsland*. -->
       <div id="hera-island" aria-label="Dictation">
         <button type="button" class="hi-x" aria-label="Cancel dictation">✕</button>
-        <div class="hi-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <!-- Maven mark: two slanted bars, the same voice wave in each (2026-10-26). -->
+        <div class="hi-bars" aria-hidden="true">
+          <div class="hi-bar"><div class="hi-dots"><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="hi-bar"><div class="hi-dots"><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
         <span class="hi-pulse" aria-hidden="true"></span>
         <button type="button" class="hi-ok" aria-label="Done, type it">✓</button>
       </div>

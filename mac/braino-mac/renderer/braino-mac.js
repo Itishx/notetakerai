@@ -16660,11 +16660,13 @@ function heraIslandPaint() {
   heraIsland.style.setProperty("--hi-lv", heraLevel.toFixed(3));
   heraIsland.style.setProperty("--hi-lv-s", (1 + heraLevel * 0.9).toFixed(3));
   const t = performance.now() / 55; // faster wave
-  heraDots.forEach((d, i) => {
+  // Two Maven bars, the same wave in each: dot i of one bar matches dot i of the other.
+  const perBar = Math.max(1, heraDots.length / 2);
+  heraDots.forEach((d, k) => {
+    const i = k % perBar;
     const wave = 0.5 + 0.5 * Math.sin(t + i * 1.1);
-    // Up to ~6x wide (3px -> 18px) at full voice; centre dots move most.
-    const centre = 1 - Math.abs(i - (heraDots.length - 1) / 2) / heraDots.length;
-    d.style.setProperty("--d", (1 + heraLevel * 5.5 * wave * (0.6 + centre)).toFixed(2));
+    const centre = 1 - Math.abs(i - (perBar - 1) / 2) / perBar;
+    d.style.setProperty("--d", (1 + heraLevel * 3.2 * wave * (0.6 + centre)).toFixed(2));
   });
 }
 let heraAnim = 0;

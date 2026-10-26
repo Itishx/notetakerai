@@ -6970,6 +6970,24 @@ body.aos-notch #status-pill { opacity: 0 !important; visibility: hidden !importa
 #hera-island.thinking .hi-dots i { animation: hiThink .9s ease-in-out infinite; }
 #hera-island.thinking .hi-dots i:nth-child(2n) { animation-delay: .15s; }
 @keyframes hiThink { 50% { opacity: .3; } }
+/* Maven island (2026-10-26): Braino morphs into the Maven mark, two slanted
+   bars fading from ink to air, the voice wave moving in both. ✕ and ✓ sit
+   beside it and show on hover. */
+#hera-island { width: 64px; height: 60px; padding: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; flex-direction: row; justify-content: center; gap: 2px; }
+#hera-island::after { display: none; }
+#hera-island .hi-bars { display: flex; gap: 7px; transform: rotate(41deg); transition: transform .38s cubic-bezier(.34,1.3,.45,1), opacity .2s ease; }
+#hera-island .hi-bar { position: relative; width: 15px; height: 56px; border-radius: 8px; overflow: hidden;
+  background: linear-gradient(180deg, #000 0%, #111 45%, rgba(0,0,0,.18) 100%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 6px 16px rgba(0,0,0,.28); display: flex; align-items: center; justify-content: center; }
+#hera-island .hi-bar::after { content: ""; position: absolute; inset: -50% 0; background: linear-gradient(180deg, transparent 35%, rgba(255,255,255,.22) 50%, transparent 65%); animation: hiShimmer 1.6s linear infinite; }
+#hera-island .hi-dots { gap: 4px; }
+#hera-island .hi-dots i { width: 2.5px; height: 2.5px; }
+#hera-island .hi-x, #hera-island .hi-ok { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; opacity: 0; }
+#hera-island .hi-x { left: -16px; background: rgba(0,0,0,.55); }
+#hera-island .hi-ok { right: -16px; background: #000; color: #fff; }
+#hera-island.open .hi-x, #hera-island.open .hi-ok { opacity: 1; }
+#hera-island.from { width: var(--hi-w0, 64px); height: var(--hi-h0, 78px); border-radius: 0; }
+#hera-island.from .hi-bars { transform: rotate(0deg) scale(.6); opacity: 0; }
 @media (prefers-reduced-motion: reduce) { #walker, #hera-island, #hera-island * { transition: none !important; animation: none !important; } }
 
 #hera-box {
