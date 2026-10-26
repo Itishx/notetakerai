@@ -99,9 +99,9 @@ const SCENES: MvScene[] = [
   /* It writes */
   { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
     title: "Talk messy. It writes clean.", p: "Ums go, full stops come in, and when you change your mind it keeps the last thing you said. Four things in a row become a list, and money and phone numbers come out the way you'd type them.",
-    out: ["The deck is done. Numbers by 6 PM, and the budget is \u20b925,000."], fixed: ["Took out \u201cum\u201d and \u201cuh\u201d", "Kept six, not five", "\u20b925,000, not the words"] },
+    out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."], fixed: ["Took out “um” and “uh”", "Kept six, not five", "₹25,000, not the words"] },
   { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
-    title: "Replies to what's on your screen.", p: "Say \u201creply to this\u201d and it reads the message you're looking at, then writes your answer right in the box. You press send.",
+    title: "Replies to what's on your screen.", p: "Say “reply to this” and it reads the message you're looking at, then writes your answer right in the box. You press send.",
     out: ["Yes, Friday works. See you at 8!"], fixed: ["Read Neha's message", "Wrote it in the reply box", "Left Send to you"] },
   { group: "write", app: "Notes", field: "Launch list", raw: "add ~uh~ record the maven film to my launch list",
     title: "Say it once. It remembers.", p: "Your lists, the names you use and how they're spelled, your address and email. Tell it once and it knows which list you mean next time.",
@@ -113,7 +113,7 @@ const SCENES: MvScene[] = [
   { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
     title: "Sends messages, with your yes.", p: "WhatsApp, Slack or Mail. It finds the person, writes the message, and stops. Nothing goes out until you say so.",
     out: ["The deck is done."], fixed: ["Found Rahul in Slack", "Wrote the message", "Waiting for your yes"], reply: "Drafted. Send?" },
-  { group: "do", app: "Chrome", field: "Checkout \u00b7 Shipping address", raw: "fill in my address",
+  { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
     title: "Fills forms.", p: "Names, addresses, emails, phone numbers, from what it already knows about you. It stops before Submit so you can check.",
     form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], fixed: ["Filled 3 fields from what it knows", "Didn't press Submit"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
 ];
@@ -163,7 +163,7 @@ function MvSwitcher() {
                 <p className="mv-switch-p">{x.p}</p>
                 <div className="mv-said">
                   <p className="mv-said-k">What you said</p>
-                  <p className="mv-said-raw">{"\u201c"}<Raw text={x.raw} />{"\u201d"}</p>
+                  <p className="mv-said-raw">{"“"}<Raw text={x.raw} />{"”"}</p>
                   <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{x.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
                 </div>
                 {!held && <span className="mv-switch-bar" key={at} />}
@@ -227,7 +227,7 @@ const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%
 
 const BEYOND = [
   { k: "Clean, punctuated text in any app", them: true },
-  { k: "Lists, \u20b9 amounts and phone numbers written properly", them: true },
+  { k: "Lists, ₹ amounts and phone numbers written properly", them: true },
   { k: "Replies to what's on your screen", them: false },
   { k: "Opens apps, tabs and websites by voice", them: false },
   { k: "Sends a message, with your yes", them: false },
@@ -237,7 +237,7 @@ const BEYOND = [
 
 const PLANS = [
   { name: "Free", price: "$0", per: "", line: "Dictation, plus Maven doing one thing at a time on your Mac.", gets: ["Dictation in any app, 2,000 words a week", "Open and switch apps, tabs and websites", "Write and send a message, with your yes, 10 a day", "Fill a form from your details, with your yes, 5 a day", "Remembers your names and basic details"], cta: "Download for Mac", pro: false },
-  { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation, sending and form filling", "Acts on what's on your screen: \u201creply to this\u201d", "Full memory: your lists, your details, your way of writing", "Hinglish, coming soon"], cta: "Get Pro", pro: true },
+  { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation, sending and form filling", "Acts on what's on your screen: “reply to this”", "Full memory: your lists, your details, your way of writing", "Hinglish, coming soon"], cta: "Get Pro", pro: true },
 ];
 
 const FAQ = [
@@ -517,8 +517,8 @@ export default function Maven() {
               {BEYOND.map((r) => (
                 <div key={r.k} className="mv-bt-row" role="row">
                   <span role="cell">{r.k}</span>
-                  <span role="cell" className={r.them ? "yes" : "no"}>{r.them ? "\u2713" : "\u2014"}</span>
-                  <span role="cell" className="yes is-us">\u2713</span>
+                  <span role="cell" className={r.them ? "yes" : "no"}>{r.them ? "✓" : "—"}</span>
+                  <span role="cell" className="yes is-us">✓</span>
                 </div>
               ))}
             </div>

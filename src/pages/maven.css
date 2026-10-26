@@ -323,3 +323,13 @@
 .mv-bt-row .no { color: var(--a-ink-faint); }
 .mv-bt-row .is-us { background: color-mix(in srgb, var(--a-ink) 5%, transparent); align-self: stretch; display: flex; align-items: center; justify-content: center; margin: -15px 0; padding: 15px 0; }
 @media (max-width: 700px) { .mv-bt-row { grid-template-columns: 1fr 70px 70px; font-size: 14.5px; } .mv-groups { grid-template-columns: 1fr 1fr; } }
+
+/* SF Pro across Maven (2026-10-26): Apple's own type, for a Mac app. */
+.mv, .mv-foot3 {
+  --a-display: -apple-system, "SF Pro Display", BlinkMacSystemFont, "Helvetica Neue", "Inter", sans-serif;
+  --ao-serif: -apple-system, "SF Pro Text", BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-family: -apple-system, "SF Pro Text", BlinkMacSystemFont, "Helvetica Neue", "Inter", sans-serif;
+}
+.mv .aff-h1, .mv .mv-h2, .mv .mv-foot3-word, .mv .ao-title, .mv h1, .mv h2 { font-family: var(--a-display); font-weight: 600; letter-spacing: -0.03em; }
+.mv .mv-say, .mv .mv-said-raw, .mv .mv-switch-t, .mv .mv-what-line, .mv .mv-amt, .mv .mv-groups button b { font-family: var(--a-display); }
+.mv-foot3-word { font-weight: 600; }
