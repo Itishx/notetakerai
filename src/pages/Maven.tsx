@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, AffFooter, useAffReveal } from "@/components/affPage";
 import { AppLogo } from "@/components/AppLogo";
-import { MacMenuBar } from "./aff-figures";
+import { MacMenuBar, Viz } from "./aff-figures";
 import "./affectiveos-page.css";
 import "./braino-page.css";
 import "./affective.css";
@@ -116,15 +116,23 @@ function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
         <p className="bs-p">{s.p}</p>
         <p className="bs-said">You say <b>{"\u201c"}{s.ask}{"\u201d"}</b></p>
       </div>
-      <div className="mv-win">
+      <div className="mv-mac mv-scene-mac">
         <MacMenuBar app={s.app} />
-        <div className="mv-win-body">
-          <p className="mv-field">{s.field}</p>
-          <div className={"mv-typed" + (phase ? " is-on" : "")}>
-            {s.out.map((l, i) => <p key={l} style={{ animationDelay: `${i * 0.18}s` }}>{l}</p>)}
+        <div className="mv-desk">
+          <div className="mv-mail">
+            <div className="mv-mail-bar">
+              <span className="mv-lights"><i /><i /><i /></span>
+              <span className="mv-mail-title">{s.app}</span>
+            </div>
+            <div className="mv-mail-row"><span>{s.app === "Chrome" ? "Form" : s.app === "Slack" ? "To" : "Note"}</span>{s.field}</div>
+            <div className="mv-mail-body">
+              {phase
+                ? <div className="mv-landed">{s.out.map((l, i) => <p key={l}>{l}{i === s.out.length - 1 && <span className="mv-caret" />}</p>)}{s.wait && <p className="mv-wait">{s.wait}</p>}</div>
+                : <p><span className="mv-caret" /></p>}
+            </div>
+            {/* Maven sits on the bottom edge of the window, like in the app. */}
+            <div className={"mv-edge" + (phase ? " is-gone" : "")}><MavenFace mood="listening" /></div>
           </div>
-          {s.wait && phase ? <p className="mv-wait">{s.wait}</p> : null}
-          <div className={"mv-win-face" + (phase ? " is-done" : "")}><MavenFace mood={phase ? "happy" : "listening"} /></div>
         </div>
       </div>
     </div>
@@ -147,6 +155,131 @@ const FAQ = [
 ];
 
 const MAVEN_FILM = "";
+
+/* ── The announcement letter (2026-10-26): the AffectiveOS page's voice and
+   layout, text and diagrams only. ── */
+function FigSpeed() {
+  const rows = [{ k: "Typing", v: 40, c: "is-grey" }, { k: "Speaking", v: 150, c: "is-ink" }];
+  return (
+    <svg viewBox="0 0 640 170" className="mv-fig" role="img" aria-label="People type about 40 words a minute and speak about 150.">
+      {rows.map((r, i) => (
+        <g key={r.k} transform={`translate(0 ${30 + i * 64})`}>
+          <text x="0" y="22" className="mv-fig-k">{r.k}</text>
+          <rect x="120" y="4" width={r.v * 3.2} height="28" rx="14" className={r.c} />
+          <text x={130 + r.v * 3.2} y="24" className="mv-fig-v">~{r.v} words a minute</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+function FigFlow() {
+  const steps = ["You talk", "Heard in stretches, while you talk", "Cleaned up the way you write", "Lands at your cursor"];
+  return (
+    <svg viewBox="0 0 760 120" className="mv-fig" role="img" aria-label="You talk, it is heard while you talk, cleaned up, and lands at your cursor.">
+      {steps.map((t, i) => (
+        <g key={t} transform={`translate(${i * 190} 20)`}>
+          <rect x="0" y="0" width="170" height="64" rx="14" className={i === 3 ? "is-ink" : "is-box"} />
+          <foreignObject x="10" y="8" width="150" height="50"><div className={"mv-fig-t" + (i === 3 ? " is-inv" : "")}>{t}</div></foreignObject>
+          {i < 3 && <path d={`M172 32 h16`} className="mv-fig-arrow" />}
+        </g>
+      ))}
+      <text x="570" y="108" className="mv-fig-v">about a second after you let go</text>
+    </svg>
+  );
+}
+function FigTwoModes() {
+  return (
+    <svg viewBox="0 0 760 190" className="mv-fig" role="img" aria-label="Dictation types your words; a task does one small thing, and waits for your yes before sending.">
+      <rect x="0" y="10" width="360" height="170" rx="18" className="is-box" />
+      <rect x="400" y="10" width="360" height="170" rx="18" className="is-box" />
+      <text x="24" y="44" className="mv-fig-k">You dictate</text>
+      <text x="24" y="80" className="mv-fig-q">"The deck is done, numbers by five."</text>
+      <text x="24" y="124" className="mv-fig-v">Types exactly that, where your</text>
+      <text x="24" y="146" className="mv-fig-v">cursor is.</text>
+      <text x="424" y="44" className="mv-fig-k">You ask</text>
+      <text x="424" y="80" className="mv-fig-q">"Tell Rahul the deck is done."</text>
+      <text x="424" y="124" className="mv-fig-v">Opens Slack, writes it to Rahul,</text>
+      <text x="424" y="146" className="mv-fig-v">and waits for your yes to send.</text>
+    </svg>
+  );
+}
+
+function MavenLetter() {
+  return (
+    <div className="mv-letter">
+      <article className="ao-col">
+        <p className="ao-date">October 26, 2026 · Announcements</p>
+        <h1 className="ao-title">
+          Introducing Maven, agentic dictation for the Mac. You talk, and your words are written properly, wherever
+          your cursor is. And when you ask, it does the small thing that comes next.
+        </h1>
+
+        <aside className="mv-tldr">
+          <p className="mv-tldr-h">TL;DR</p>
+          <ul>
+            <li>Hold two keys, talk, let go. Clean text lands where your cursor is, in about a second.</li>
+            <li>It writes the way you do: lists, rupees, lakh and crore, phone numbers, and the correction you made halfway through.</li>
+            <li>It can do one small thing at a time: open an app, switch a tab, send a message, fill a form. It never sends or submits without your yes.</li>
+            <li>It remembers your names and details, so you say them once.</li>
+            <li>Free to start, Pro is $10 a month. Private preview, on Mac.</li>
+          </ul>
+        </aside>
+
+        <p>
+          Here is what bugged us. You can talk almost four times faster than you can type, and yet most of your day is
+          still typing. Messages, emails, notes, forms. Your thoughts are ready long before your fingers are.
+        </p>
+        <Viz caption="Figure 1. Roughly how fast people type and speak."><FigSpeed /></Viz>
+        <p>
+          Dictation was meant to fix that, and mostly it gave you a wall of words with no full stops. So you fix it
+          by hand, and by then you may as well have typed. We wanted dictation you don't have to clean up after.
+        </p>
+      </article>
+
+      <article className="ao-col">
+        <h2>How it works</h2>
+        <p>
+          <b>It listens while you talk.</b> Long thoughts are heard in stretches as you go, so when you let go,
+          only the last few seconds are left.
+        </p>
+        <p>
+          <b>It writes the way you write.</b> Filler goes, punctuation comes in, and four things in a row become a
+          list. We trained it on how people in India actually write: ₹25,000, not "twenty five thousand rupees".
+        </p>
+        <p>
+          <b>It lands at your cursor.</b> Slack, Mail, Notes, a form in Chrome, anywhere you can click. If there's
+          nowhere to type, it copies the words and shows them to you, so nothing is ever lost.
+        </p>
+        <Viz caption="Figure 2. From your voice to your cursor."><FigFlow /></Viz>
+      </article>
+
+      <article className="ao-col">
+        <h2>Dictate, or do</h2>
+        <p>
+          Most of the time you just want your words typed. Sometimes you want the thing after that: tell Rahul,
+          fill the address, add it to the list. Maven is built to tell the two apart from how you say it, and if
+          it isn't sure, it types. We're still building this part, and it's the part we're most excited about.
+        </p>
+        <Viz caption="Figure 3. The same voice, two kinds of help."><FigTwoModes /></Viz>
+        <p>
+          <b>What it does, and what it doesn't.</b> Maven only does things that end in text: it types, sends,
+          fills, and gets you to the place where you type. One step at a time. Anything bigger, like planning a
+          trip or running a whole task across apps, is Braino's job, not Maven's.
+        </p>
+      </article>
+
+      <article className="ao-col">
+        <h2>What's honest to say today</h2>
+        <p>
+          Maven is in private preview on Mac. Dictation works well, and it's fast. Telling a task from dictation
+          is being built. Hinglish is next. Windows is not on the list yet.
+        </p>
+        <p className="ao-why">Talk to your Mac like you'd talk to a friend who types fast. That's the whole idea.</p>
+        <p>Itish, founder, Affective</p>
+      </article>
+    </div>
+  );
+}
 
 /* The hero film in code (2026-10-26): exactly what happens on a real Mac.
    Your cursor waits in an empty email, Maven's two bars listen with the voice
@@ -187,16 +320,24 @@ function MvSceneFilm() {
 
 export default function Maven() {
   const { theme, toggle } = useAffTheme();
+  const [view, setView] = useState<"product" | "letter">(() => (typeof window !== "undefined" && window.location.hash === "#letter" ? "letter" : "product"));
+  const show = (v: "product" | "letter") => { setView(v); window.history.replaceState(null, "", v === "letter" ? "#letter" : window.location.pathname); window.scrollTo({ top: 0 }); };
   const root = useAffReveal();
   const [mood, setMood] = useState<Mood>("idle");
   useEffect(() => { document.title = "Maven · Agentic Dictation · Affective"; }, []);
   const current = MOODS.find((m) => m.key === mood)!;
 
   return (
-    <div className="aff mv" data-theme={theme} ref={root}>
+    <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
         links={[["What it does", "#see"], ["Face", "#face"], ["Pricing", "#pricing"], ["Questions", "#faq"]]} go={["Download for Mac", "/maven#download"]} />
 
+      {/* The page, or the letter that introduces it (2026-10-26). */}
+      <div className="mv-tabs" role="tablist" aria-label="View">
+        <button type="button" role="tab" aria-selected={view === "product"} className={view === "product" ? "on" : ""} onClick={() => show("product")}>Maven</button>
+        <button type="button" role="tab" aria-selected={view === "letter"} className={view === "letter" ? "on" : ""} onClick={() => show("letter")}>The announcement</button>
+      </div>
+      {view === "letter" ? <MavenLetter /> : <>
       {/* ── Hero: the home page's ── */}
       <header className="aff-hero">
         <div className="aff-wrap">
@@ -273,14 +414,30 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* ── Honest take ── */}
+        {/* ── Honest take: a tab, against everywhere ── */}
         <section className="hb6">
           <div className="aff-wrap">
-            <div className="mv-honest aff-reveal">
-              <p className="ah-kicker">Honest take</p>
-              <h2 className="mv-h2">You already talk to AI. Good.</h2>
-              <p className="mv-honest-sub">Maven isn't another chatbot.</p>
-              <p className="mv-honest-body">Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
+            <div className="hb6-box mv-honest2 aff-reveal">
+              <div className="mv-honest2-copy">
+                <p className="ah-kicker">Honest take</p>
+                <h2 className="mv-h2">You already talk to AI. Good.</h2>
+                <p className="mv-honest-sub">Maven isn't another chatbot.</p>
+                <p className="mv-honest-body">Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
+              </div>
+              <div className="mv-honest2-viz" aria-hidden="true">
+                <div className="mv-hv-col">
+                  <p className="mv-hv-k">Your chatbot</p>
+                  <div className="mv-hv-tab"><span className="mv-hv-dots"><i /><i /><i /></span><span>One tab</span></div>
+                </div>
+                <div className="mv-hv-col">
+                  <p className="mv-hv-k">Maven</p>
+                  <ul className="mv-hv-apps">
+                    {(["WhatsApp", "Mail", "Chrome", "Finder", "Calendar", "Spotify"] as const).map((n, i) => (
+                      <li key={n} style={{ animationDelay: `${i * 0.35}s` }}><AppLogo name={n} /><span className="mv-hv-mark"><MavenMark size={18} /></span></li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -336,6 +493,7 @@ export default function Maven() {
         </div>
       </section>
 
+      </>}
       <AffFooter />
     </div>
   );
