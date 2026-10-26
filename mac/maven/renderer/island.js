@@ -18,21 +18,25 @@ function paint() {
 function loop() { paint(); anim = island.classList.contains("on") ? requestAnimationFrame(loop) : 0; }
 
 window.maven.onState(({ state, note: text }) => {
-  if (state === "hidden") {
-    island.classList.remove("on", "open", "thinking");
+  if (state === "hidden" || state === "idle") {
+    // Idle: the mark stays on screen, the dots rest.
+    island.classList.add("on", "idle");
+    island.classList.remove("open", "thinking");
     note.classList.remove("on");
     level = 0; paint();
     window.maven.hover(false);
     return;
   }
   if (state === "note") {
-    island.classList.remove("on", "open", "thinking");
+    island.classList.remove("open", "thinking");
+    island.classList.add("on", "idle");
     note.textContent = String(text || "");
     note.classList.add("on");
     return;
   }
   note.classList.remove("on");
   island.classList.add("on");
+  island.classList.remove("idle");
   island.classList.toggle("thinking", state === "thinking");
   if (!anim) anim = requestAnimationFrame(loop);
 });

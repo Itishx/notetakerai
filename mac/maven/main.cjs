@@ -135,15 +135,20 @@ function buildTray() {
 
 /* ---------- the island: top-right, under the menu bar ---------- */
 const ISLAND_W = 150, ISLAND_H = 96;
+/* Always on screen; drag it anywhere like Braino, and it stays where you leave it. */
+const islandPosPath = () => path.join(app.getPath("userData"), "island.json");
+function savedIslandPos() { try { return JSON.parse(fs.readFileSync(islandPosPath(), "utf8")); } catch (_) { return null; } }
 function placeIsland() {
   if (!island || island.isDestroyed()) return;
-  const d = screen.getPrimaryDisplay();
-  const wa = d.workArea; // starts below the menu bar
+  const saved = savedIslandPos();
+  const onScreen = saved && screen.getAllDisplays().some((d) => saved.x >= d.bounds.x - 40 && saved.x < d.bounds.x + d.bounds.width && saved.y >= d.bounds.y - 40 && saved.y < d.bounds.y + d.bounds.height);
+  if (onScreen) { island.setBounds({ x: saved.x, y: saved.y, width: ISLAND_W, height: ISLAND_H }); return; }
+  const wa = screen.getPrimaryDisplay().workArea; // below the menu bar
   island.setBounds({ x: Math.round(wa.x + wa.width - ISLAND_W - 12), y: Math.round(wa.y + 6), width: ISLAND_W, height: ISLAND_H });
 }
 function createIsland() {
   island = new BrowserWindow({
-    width: ISLAND_W, height: ISLAND_H, show: false, frame: false, transparent: true, resizable: false, movable: false,
+    width: ISLAND_W, height: ISLAND_H, show: false, frame: false, transparent: true, resizable: false, movable: true,
     focusable: false, skipTaskbar: true, hasShadow: false, alwaysOnTop: true, fullscreenable: false,
     webPreferences: { preload: path.join(__dirname, "renderer", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
@@ -152,20 +157,22 @@ function createIsland() {
   island.setIgnoreMouseEvents(true, { forward: true }); // click-through, except the buttons (see maven:hover)
   island.loadFile(path.join(__dirname, "renderer", "island.html"));
   placeIsland();
+  island.on("moved", () => { try { const [x, y] = island.getPosition(); fs.writeFileSync(islandPosPath(), JSON.stringify({ x, y })); } catch (_) {} });
+  island.once("ready-to-show", () => { island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
+  island.webContents.once("did-finish-load", () => { if (!island.isVisible()) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
   island.on("closed", () => { island = null; });
 }
 let islandHideTimer = 0;
 function islandShow(state, extra = {}) {
   if (!island || island.isDestroyed()) return;
   clearTimeout(islandHideTimer);
-  placeIsland();
   if (!island.isVisible()) island.showInactive();
   sendIsland("maven:state", { state, ...extra });
 }
 function islandHide(delay = 0) {
   clearTimeout(islandHideTimer);
-  sendIsland("maven:state", { state: "hidden" });
-  islandHideTimer = setTimeout(() => { if (island && !island.isDestroyed()) island.hide(); }, delay + 220);
+  // The mark stays; only the dots and notes go (back to idle).
+  islandHideTimer = setTimeout(() => sendIsland("maven:state", { state: "idle" }), delay);
 }
 ipcMain.on("maven:hover", (_e, over) => {
   if (island && !island.isDestroyed()) island.setIgnoreMouseEvents(!over, { forward: true });
@@ -312,7 +319,9 @@ function quickTidy(raw) {
   if (!/[.?!]$/.test(out)) out += /^(?:can|could|would|will|is|are|do|does|did|what|why|how|where|when|who|which|shall|should)\b/i.test(out) ? "?" : ".";
   return out;
 }
+let lastRefine = {};
 async function refine(raw, timeoutMs) {
+  lastRefine = {};
   if (!raw || raw.length > 20000 || !SUPABASE_ANON_KEY) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -327,10 +336,12 @@ async function refine(raw, timeoutMs) {
     if (!res.ok) { log("refine.failed", { status: res.status }); return null; }
     const candidate = String(data?.formatted || "").trim();
     const a = assessDictationEdit(raw, candidate);
+    lastRefine = { model: String(data?.model || ""), provider: String(data?.provider || ""), candidate, verdict: a.accepted ? "accepted" : "refused", reason: a.reason || "", coverage: a.sourceCoverage };
     if (!a.accepted) { log("refine.rejected", { reason: a.reason }); return null; }
     return candidate;
   } catch (error) {
-    log("refine.fallback", { reason: error?.name === "AbortError" ? "timeout" : "request_error" });
+    lastRefine = { verdict: "failed", reason: error?.name === "AbortError" ? "timeout" : "request error" };
+    log("refine.fallback", { reason: lastRefine.reason });
     return null;
   } finally { clearTimeout(timer); }
 }
@@ -341,6 +352,55 @@ function gate(raw, prepared) {
   const c = String(prepared || "").trim();
   if (!c || !normalizeDictationSession([r]).trim()) return normalizeDictationSession([r]).trim();
   return (assessDictationEdit(r, c).accepted ? normalizeDictationSession([c]) : normalizeDictationSession([r])).trim();
+}
+
+/* ---------- the record of every dictation (2026-10-26, Itish) ----------
+   Everything in seconds to one decimal. Printed in the terminal, and kept as
+   one JSON line per dictation in userData/training/dictations.jsonl so there
+   is always data to train on. Stays on this Mac. */
+const sec = (ms) => `${(Math.max(0, ms || 0) / 1000).toFixed(1)}s`;
+function wordDiff(a, b) {
+  const words = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9₹'\s-]/g, " ").split(/\s+/).filter(Boolean);
+  const A = words(a), B = words(b);
+  const left = new Map(); B.forEach((w) => left.set(w, (left.get(w) || 0) + 1));
+  const removed = [];
+  A.forEach((w) => { if (left.get(w)) left.set(w, left.get(w) - 1); else removed.push(w); });
+  const added = [];
+  const pool = new Map(); A.forEach((w) => pool.set(w, (pool.get(w) || 0) + 1));
+  B.forEach((w) => { if (pool.get(w)) pool.set(w, pool.get(w) - 1); else added.push(w); });
+  return { removed, added, kept: A.length ? (A.length - removed.length) / A.length : 1, words: A.length };
+}
+function printDictation(d) {
+  const r = lastRefine || {};
+  const diff = wordDiff(d.raw, d.finalText);
+  const used = d.finalText !== normalizeDictationSession([d.raw]).trim();
+  const cleanLine = d.quick ? "skipped (plain line, already clean)"
+    : r.verdict === "accepted" ? `${r.provider || "?"}${r.model ? " " + r.model : ""}, ${sec(d.cleanMs)}`
+    : r.verdict === "refused" ? `refused by the safety check (${r.reason}), raw words pasted`
+    : r.verdict === "failed" ? `${r.reason}, raw words pasted`
+    : "not run";
+  const lines = [
+    "",
+    `[MAVEN] ── ${sec(d.audio.ms)} spoken · ${d.pasted.ok ? `pasted into ${d.pasted.app || "the front app"}` : "copied (no text box)"} · total ${sec(d.totalMs)}`,
+    `  heard   (${d.heard.provider || "?"}, ${sec(d.textMs)}): "${d.raw}"`,
+    `  cleanup ${cleanLine}`,
+    used ? `  final   "${d.finalText}"` : "  final   same as heard",
+    `  changes removed ${diff.removed.length ? diff.removed.map((w) => `"${w}"`).join(", ") : "nothing"}${diff.added.length ? ` · added ${diff.added.map((w) => `"${w}"`).join(", ")}` : ""}`,
+    `  kept    ${Math.round(diff.kept * 100)}% of ${diff.words} words${d.audio.phases ? ` · ${d.audio.phases} phases` : ""}`,
+    `  time    text ${sec(d.textMs)} · clean ${d.quick ? "0.0s" : sec(d.cleanMs)} · paste ${sec(d.pasteMs)} · total ${sec(d.totalMs)}`,
+  ];
+  console.log(lines.join("\n"));
+  try {
+    const dir = path.join(app.getPath("userData"), "training");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, "dictations.jsonl"), JSON.stringify({
+      at: new Date().toISOString(), spokenSec: +(d.audio.ms / 1000).toFixed(1), phases: d.audio.phases || 0, heardBy: d.heard.provider || "",
+      raw: d.raw, cleanup: d.quick ? "skipped" : r.verdict || "none", cleanupModel: r.model || "", candidate: r.candidate || "", refusedBecause: r.verdict === "refused" ? r.reason : "",
+      final: d.finalText, removed: diff.removed, added: diff.added, keptPct: Math.round(diff.kept * 100),
+      textSec: +(d.textMs / 1000).toFixed(1), cleanSec: +(d.cleanMs / 1000).toFixed(1), pasteSec: +(d.pasteMs / 1000).toFixed(1), totalSec: +(d.totalMs / 1000).toFixed(1),
+      app: d.pasted.app || "", pasted: Boolean(d.pasted.ok),
+    }) + "\n");
+  } catch (_) {}
 }
 
 /* ---------- typing it in ---------- */
@@ -392,7 +452,7 @@ async function finishDictation(reason, discard) {
     const pasted = await insertText(finalText);
     const pasteMs = Date.now() - p0;
     try { fs.writeFileSync(lastDictationPath(), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${finalText}\n`); } catch (_) {}
-    console.log(`[MAVEN] ${((audio.ms || 0) / 1000).toFixed(1)}s spoken | text ${heard.provider || "?"} ${textMs}ms | clean ${quick ? "skipped" : `${cleanMs}ms`} | paste ${pasteMs}ms | TOTAL ${Date.now() - t0}ms`);
+    printDictation({ audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
     if (pasted.ok) islandHide();
     else { islandShow("note", { note: "Copied. No box." }); islandHide(2200); }

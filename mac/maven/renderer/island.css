@@ -23,3 +23,11 @@ body { width: 150px; height: 96px; font: 12px/1.3 -apple-system, BlinkMacSystemF
   opacity: 0; transition: opacity .15s ease; box-shadow: 0 0 0 .5px rgba(255,255,255,.15); }
 #note.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Always on screen (idle): the mark only, dots resting, no shimmer. Drag it by the bars. */
+#island.idle .dots { opacity: 0; }
+#island.idle .bar::after { animation: none; opacity: 0; }
+.dots { transition: opacity .15s ease; }
+.bars { -webkit-app-region: drag; cursor: grab; }
+.x, .ok { -webkit-app-region: no-drag; }
+#island.idle.open .x, #island.idle.open .ok { opacity: 0; pointer-events: none; }
