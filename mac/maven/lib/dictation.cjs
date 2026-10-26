@@ -105,7 +105,16 @@ function spokenNumbersToDigits(value) {
       break;
     }
 
-    let text = String(foldNumberWords(run));
+    /* "Oh my God" is not "0 my God", and "one data point" stays a word: a lone
+       small number word (zero to nine, or "oh") is left as spoken; "oh" only
+       means zero inside a run of digits, as in a phone number (2026-10-26). */
+    const lone = run.length === 1 && (run[0] === "oh" || (NUMBER_UNITS[run[0]] !== undefined && NUMBER_UNITS[run[0]] < 10));
+    if (lone && clean(words[j]) !== "point") { out.push(...words.slice(i, j)); i = j; continue; }
+    if (run[0] === "oh") { out.push(words[i]); i += 1; continue; }
+    // Digits said one by one (phone numbers, PINs, OTPs) are written in order,
+    // never added up: "five six zero zero three eight" is 560038, not 22.
+    const digitsOnly = run.length >= 2 && run.every((w) => w === "oh" || (NUMBER_UNITS[w] !== undefined && NUMBER_UNITS[w] < 10));
+    let text = digitsOnly ? run.map((w) => (w === "oh" ? "0" : String(NUMBER_UNITS[w]))).join("") : String(foldNumberWords(run));
 
     if (clean(words[j]) === "point") {
       const decimals = [];
