@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, AffFooter, useAffReveal } from "@/components/affPage";
 import { AppLogo } from "@/components/AppLogo";
+import { MacMenuBar } from "./aff-figures";
+import "./affectiveos-page.css";
+import "./braino-page.css";
 import "./affective.css";
 import "./affective-home.css";
 import "./maven.css";
@@ -35,9 +38,8 @@ type Mood = "idle" | "listening" | "thinking" | "happy" | "sleepy";
 const MOODS: { key: Mood; label: string; note: string }[] = [
   { key: "idle", label: "Waiting", note: "Breathes, blinks now and then, and watches your pointer." },
   { key: "listening", label: "Listening", note: "Your voice moves through both bars, the same wave in each." },
-  { key: "thinking", label: "Thinking", note: "The bars tilt back and forth while it works out what you meant." },
+  { key: "thinking", label: "Thinking", note: "Still, and a little closer together, while it works out what you meant." },
   { key: "happy", label: "Done", note: "A small hop when your words land." },
-  { key: "sleepy", label: "Resting", note: "Half closed, slow breathing, when nothing is happening." },
 ];
 
 export function MavenFace({ mood }: { mood: Mood }) {
@@ -76,18 +78,64 @@ export function MavenFace({ mood }: { mood: Mood }) {
   );
 }
 
-const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
+/* Types a line once it is on screen, the way Maven pastes it. */
+function useOnScreen<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || on) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.45 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [on]);
+  return [ref, on] as const;
+}
 
-const SEE = [
-  { say: "Tell Rahul the deck is done, numbers by five.", does: "Types a clean message in Slack, with Rahul spelled right." },
-  { say: "Fill in my address.", does: "Fills the form and waits. It doesn't submit until you say so." },
-  { say: "Add that to my launch list.", does: "Knows which list, and adds it." },
+type MvScene = { app: string; ask: string; title: string; p: string; out: string[]; field: string; wait?: string };
+const SCENES: MvScene[] = [
+  { app: "Slack", field: "Message #launch", ask: "Tell Rahul the deck is done, numbers by five.", title: "Type", p: "Hold a key, talk, and clean, formatted text shows up in any app you use. Punctuation in, filler out, names spelled right.", out: ["@Rahul the deck is done. Numbers by 5 PM."] },
+  { app: "Notes", field: "Groceries", ask: "I need eggs, mango, strawberries, peanut butter and oat milk.", title: "Lists that look like lists", p: "Say four things and you get a list, not a run-on sentence. Rupees, lakhs and phone numbers come out the way you write them.", out: ["I need:", "- Eggs", "- Mango", "- Strawberries", "- Peanut butter", "- Oat milk"] },
+  { app: "Chrome", field: "Shipping address", ask: "Fill in my address.", title: "Do", p: "Open an app. Switch a tab. Fill a form. Small jobs on your Mac, by voice. It stops before anything is sent.", out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit" },
+  { app: "Notes", field: "Launch list", ask: "Add that to my launch list.", title: "Remember", p: "Your names, your lists, your way of writing. Say it once, and Maven keeps it.", out: ["- Record the Maven film", "- Send the deck to Rahul ✓ added"] },
 ];
 
-const DOES = [
-  { k: "Type", h: "Talk, and it's written.", p: "Hold a key, talk, and clean, formatted text shows up in any app you use. Punctuation in, filler out, lists that look like lists." },
-  { k: "Do", h: "Small jobs, by voice.", p: "Open an app. Switch a tab. Fill a form. Small jobs on your Mac, by voice." },
-  { k: "Remember", h: "Say it once.", p: "Your names, your lists, your way of writing. Say it once, and Maven keeps it." },
+function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
+  const [ref, on] = useOnScreen<HTMLDivElement>();
+  const [phase, setPhase] = useState(0); // 0 listening, 1 typed
+  useEffect(() => {
+    if (!on) return;
+    const t = window.setTimeout(() => setPhase(1), 1800);
+    return () => clearTimeout(t);
+  }, [on]);
+  return (
+    <div ref={ref} className={"bs-row mv-row" + (flip ? " is-flip" : "") + (on ? " is-in" : "")} style={{ top: `calc(84px + ${n * 14}px)`, zIndex: n }}>
+      <div className="bs-talk">
+        <div className="bs-meta"><span className="bs-n">{String(n).padStart(2, "0")}</span><span className="bs-app-tag">{s.app}</span></div>
+        <h3>{s.title}</h3>
+        <p className="bs-p">{s.p}</p>
+        <p className="bs-said">You say <b>{"\u201c"}{s.ask}{"\u201d"}</b></p>
+      </div>
+      <div className="mv-win">
+        <MacMenuBar app={s.app} />
+        <div className="mv-win-body">
+          <p className="mv-field">{s.field}</p>
+          <div className={"mv-typed" + (phase ? " is-on" : "")}>
+            {s.out.map((l, i) => <p key={l} style={{ animationDelay: `${i * 0.18}s` }}>{l}</p>)}
+          </div>
+          {s.wait && phase ? <p className="mv-wait">{s.wait}</p> : null}
+          <div className={"mv-win-face" + (phase ? " is-done" : "")}><MavenFace mood={phase ? "happy" : "listening"} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
+
+const PLANS = [
+  { name: "Free", price: "$0", per: "", line: "Everything you need to start talking.", gets: ["Dictation in any app", "Small actions on your Mac", "Basic memory"], cta: "Download for Mac", pro: false },
+  { name: "Pro", price: "$10", per: "/month", line: "For people who'd rather say it than type it.", gets: ["Unlimited dictation", "Full memory", "Sending and submitting, with your yes", "Voice shortcuts"], cta: "Get Pro", pro: true },
 ];
 
 const FAQ = [
@@ -97,6 +145,30 @@ const FAQ = [
   { q: "Does it work on Windows?", a: "Not yet. Tell us and we'll let you know first." },
   { q: "How is Maven different from Wispr Flow?", a: "Wispr Flow is built around dictation: you talk, it types. Maven types too. Then it goes further: it does small jobs on your Mac by voice, like opening apps, switching tabs and filling forms. It also remembers your names, lists and details, so you say them once." },
 ];
+
+const MAVEN_FILM = "";
+
+function MvSceneFilm() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setStep((x) => (x + 1) % 3), 2600);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="mv-film-in" aria-label="Maven typing a message as you speak">
+      <MacMenuBar app="Mail" />
+      <div className="mv-film-body">
+        <p className="mv-field">To: Neha · Subject: Tomorrow</p>
+        <div className={"mv-typed" + (step >= 1 ? " is-on" : "")}>
+          <p>Hey Neha,</p>
+          <p>Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.</p>
+          <p>Thanks,<br />Itish</p>
+        </div>
+        <div className="mv-film-face"><MavenFace mood={step === 0 ? "listening" : step === 1 ? "thinking" : "happy"} /></div>
+      </div>
+    </div>
+  );
+}
 
 export default function Maven() {
   const { theme, toggle } = useAffTheme();
@@ -108,13 +180,13 @@ export default function Maven() {
   return (
     <div className="aff mv" data-theme={theme} ref={root}>
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
-        links={[["See it work", "#see"], ["Face", "#face"], ["Pricing", "#pricing"], ["Questions", "#faq"]]} go={["Download for Mac", "/maven#download"]} />
+        links={[["What it does", "#see"], ["Face", "#face"], ["Pricing", "#pricing"], ["Questions", "#faq"]]} go={["Download for Mac", "/maven#download"]} />
 
       {/* ── Hero: the home page's ── */}
       <header className="aff-hero">
         <div className="aff-wrap">
           <div className="aff-hero-row aff-reveal">
-            <h1 className="aff-h1">
+            <h1 className="aff-h1 mv-h1">
               <span className="aff-h1-line">Speak it</span>
               <b>into being.</b>
             </h1>
@@ -128,9 +200,10 @@ export default function Maven() {
             </div>
           </div>
         </div>
-        <div className="mv-stage aff-reveal">
-          <MavenFace mood="listening" />
-        </div>
+        {/* The film container: a real recording goes in MAVEN_FILM; until then the scene plays in code. */}
+        <figure className="aff-hero-shot mv-film" data-grow>
+          {MAVEN_FILM ? <video src={MAVEN_FILM} playsInline controls preload="metadata" /> : <MvSceneFilm />}
+        </figure>
         <div className="aff-strip">
           <div className="aff-wrap aff-strip-in">
             <p className="aff-strip-label">Works wherever you type</p>
@@ -144,37 +217,24 @@ export default function Maven() {
       </header>
 
       <main>
-        {/* ── See it work ── */}
-        <section className="hb6" id="see">
+        {/* ── What Maven is, in one breath ── */}
+        <section className="hb6">
           <div className="aff-wrap">
-            <div className="hb6-box aff-reveal">
-              <div className="hb6-head">
-                <div>
-                  <p className="ah-kicker">See it work</p>
-                  <div className="hb5-name"><h2>You say. Maven does.</h2><MavenMark size={84} /></div>
-                </div>
-              </div>
-              <ul className="mv-see">
-                {SEE.map((x) => (
-                  <li key={x.say}>
-                    <p className="mv-say"><span>You say</span>&ldquo;{x.say}&rdquo;</p>
-                    <p className="mv-does"><span>Maven</span>{x.does}</p>
-                  </li>
-                ))}
-              </ul>
+            <div className="mv-what aff-reveal">
+              <p className="ah-kicker">What is Maven?</p>
+              <p className="mv-what-line">A dictation app for your Mac. Hold a key and talk, and your words appear, written properly, in whatever app you're in. Then it does small jobs for you, and it remembers you.</p>
             </div>
           </div>
         </section>
 
-        {/* ── What it does ── */}
-        <section className="hb6">
-          <div className="aff-wrap">
-            <div className="hb6-box aff-reveal">
-              <div className="hb6-head"><div><p className="ah-kicker">What it does</p><h2 className="mv-h2">Type. Do. Remember.</h2></div></div>
-              <ul className="hb4-does hb6-jobs">
-                {DOES.map((d) => <li key={d.k} className="is-key"><small>{d.k}</small><h3>{d.h}</h3><p>{d.p}</p></li>)}
-              </ul>
+        {/* ── What it does: the Braino page's scene deck ── */}
+        <section className="bs bs-deck mv-deck" id="see">
+          <div className="bs-wrap">
+            <div className="bs-head is-in">
+              <h2 className="aff-h1 bs-h">You say it.<br /><em>Maven does it.</em></h2>
+              <p>Four things it does today, in the apps you already use.</p>
             </div>
+            {SCENES.map((x, i) => <MvSceneRow key={x.title} s={x} n={i + 1} flip={i % 2 === 1} />)}
           </div>
         </section>
 
@@ -203,7 +263,9 @@ export default function Maven() {
           <div className="aff-wrap">
             <div className="mv-honest aff-reveal">
               <p className="ah-kicker">Honest take</p>
-              <p>You already talk to AI. Good. Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
+              <h2 className="mv-h2">You already talk to AI. Good.</h2>
+              <p className="mv-honest-sub">Maven isn't another chatbot.</p>
+              <p className="mv-honest-body">Your chatbot lives in a tab. Maven lives wherever you type: messages, docs, forms, everything else. It's not here to replace your chatbot. It's here so your voice works everywhere else too.</p>
             </div>
           </div>
         </section>
@@ -211,9 +273,20 @@ export default function Maven() {
         {/* ── Pricing ── */}
         <section className="hb6" id="pricing">
           <div className="aff-wrap">
+            <div className="mv-price-head aff-reveal">
+              <p className="ah-kicker">Pricing</p>
+              <h2 className="mv-h2">Start free. Go Pro when you can't stop talking.</h2>
+            </div>
             <div className="mv-price aff-reveal">
-              <div><p className="ah-kicker">Free</p><p className="mv-amt">$0</p><p>Dictation, small actions on your Mac, basic memory.</p></div>
-              <div className="is-pro"><p className="ah-kicker">Pro</p><p className="mv-amt">$10<small>/month</small></p><p>Unlimited dictation, full memory, sending and submitting with your yes, voice shortcuts.</p></div>
+              {PLANS.map((pl) => (
+                <div key={pl.name} className={pl.pro ? "is-pro" : undefined}>
+                  <div className="mv-plan-top"><h3>{pl.name}</h3>{pl.pro && <span className="mv-badge">Most people</span>}</div>
+                  <p className="mv-amt">{pl.price}{pl.per && <small>{pl.per}</small>}</p>
+                  <p className="mv-plan-line">{pl.line}</p>
+                  <ul>{pl.gets.map((g) => <li key={g}><i aria-hidden="true">✓</i>{g}</li>)}</ul>
+                  <a href={DOWNLOAD} className={"aff-cta" + (pl.pro ? "" : " aff-cta-ghost")}>{pl.cta}</a>
+                </div>
+              ))}
             </div>
           </div>
         </section>
