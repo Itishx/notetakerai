@@ -50,7 +50,7 @@ function coolMic() {
    it is transcribed while you keep talking. On release only the last stretch
    is left. The MediaRecorder keeps running as the backup. */
 let ws = null, wsReady = false, pending = [], proc = null, srcNode = null;
-let dropped = 0, failedItems = 0, errors = 0, noiseFloor = 0.01;
+let dropped = 0, failedItems = 0, errors = 0, noiseFloor = 0.01, vadMax = 0, loudTotal = 0;
 let order = [], texts = {}, spokeSinceCommit = false, speechMs = 0, silentMs = 0, streamFailed = false;
 /* Phases (2026-10-25, Itish's design): every ~12-15 words closed by a real
    pause becomes its own small WAV, sent to the same accurate transcriber while
@@ -119,7 +119,7 @@ function connect(secret, attempt = 0) {
   };
 }
 function startStream() {
-  segBuf = []; segReady = []; segIndex = 0; order = []; texts = {}; pending = []; dropped = 0; failedItems = 0; errors = 0; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
+  segBuf = []; segReady = []; segIndex = 0; vadMax = 0; loudTotal = 0; noiseFloor = 0.01; order = []; texts = {}; pending = []; dropped = 0; failedItems = 0; errors = 0; wsReady = false; streamFailed = false; spokeSinceCommit = false; speechMs = 0; silentMs = 0; gotSecret = false;
   if (!ctx) { streamFailed = true; return; }
   srcNode = ctx.createMediaStreamSource(stream);
   proc = ctx.createScriptProcessor(2048, 1, 1);
@@ -135,9 +135,9 @@ function startStream() {
     segBuf.push(pcm);
     // The raw mic has room noise, so "quiet" is measured against this room's own floor.
     const rms = Math.sqrt(sum / Math.max(1, n));
-    noiseFloor = rms < noiseFloor ? noiseFloor * 0.9 + rms * 0.1 : rms < noiseFloor * 1.5 ? noiseFloor * 0.995 + rms * 0.005 : noiseFloor;
-    const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.006, noiseFloor * 2.5);
-    if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; }
+    noiseFloor = rms < noiseFloor ? noiseFloor * 0.8 + rms * 0.2 : noiseFloor * 0.9995 + rms * 0.0005; vadMax = Math.max(vadMax, rms);
+    const ms = f.length / ctx.sampleRate * 1000, loud = rms > Math.max(0.0035, noiseFloor * 2.2);
+    if (loud) { spokeSinceCommit = true; speechMs += ms; silentMs = 0; loudTotal += ms; }
     // A phase closes only after ~5 s of talk (12-15 words) and a real pause: whole sentences, never 2-3 words.
     else { silentMs += ms; if (spokeSinceCommit && speechMs > 5000 && silentMs > 900) commit(); }
   };
@@ -147,6 +147,7 @@ let tailSeg = null;
 async function finishStream() {
   try { proc && proc.disconnect(); srcNode && srcNode.disconnect(); } catch (_) {}
   proc = null; srcNode = null;
+  console.log("hera-vad:" + JSON.stringify({ phases: segIndex, loudMs: Math.round(loudTotal), floor: +noiseFloor.toFixed(4), peak: +vadMax.toFixed(4) }));
   tailSeg = segIndex > 0 ? cutSegment() : null; // only when phases ran; a short take uses the whole recording
   if (!streamWanted) return null;
   // The key may still be on its way: give it a moment, the audio is buffered.
@@ -178,7 +179,7 @@ window.heraStart = async (wantStream) => {
     levelTimer = setInterval(() => {
       analyser.getByteTimeDomainData(buf);
       let sum = 0; for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
-      console.log("hera-level:" + Math.min(1, Math.sqrt(sum / buf.length) * 6).toFixed(3));
+      console.log("hera-level:" + Math.min(1, Math.sqrt(Math.sqrt(sum / buf.length) * 3)).toFixed(3)); // the raw mic is quiet (no auto gain): a square-root curve so normal speech fills the wave
     }, 60);
   }
   startStream();
@@ -221,6 +222,7 @@ function createHera({ BrowserWindow, session, log = () => {}, onLevel = () => {}
       const msg = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
       if (typeof msg === "string" && msg.startsWith("hera-level:")) onLevel(Number(msg.slice(11)) || 0);
       else if (typeof msg === "string" && msg.startsWith("hera-stream-error:")) log("hera.stream.error", { message: msg.slice(18) });
+      else if (typeof msg === "string" && msg.startsWith("hera-vad:")) { try { log("hera.vad", JSON.parse(msg.slice(9))); } catch (_) {} }
       else if (typeof msg === "string" && msg.startsWith("hera-stream-stat:")) { try { log("hera.stream.stat", JSON.parse(msg.slice(17))); } catch (_) {} }
     });
     /* From a real file, not a data: URL. Chromium hides navigator.mediaDevices

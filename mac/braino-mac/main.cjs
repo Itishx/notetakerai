@@ -3223,7 +3223,7 @@ async function finishCloudDictation(reason) {
   // Short plain lines skip the clean-up call (~1.2s): the transcriber already punctuates them.
   const quick = quickDictationTidy(raw);
   const cleanStart = Date.now();
-  const cloud = quick ? null : await refineDictationText(raw, { timeoutMs: 3000 }).catch(() => null);
+  const cloud = quick ? null : await refineDictationText(raw, { timeoutMs: Math.min(7000, 2500 + raw.length * 8) }).catch(() => null); // a long take gets longer to clean (a 470-char take timed out at 3 s and pasted raw)
   const cleanMs = Date.now() - cleanStart;
   const prepared = quick || (cloud?.refined && cloud.text ? cloud.text : "");
   localDictationActive = false;
