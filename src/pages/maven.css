@@ -333,3 +333,11 @@
 .mv .aff-h1, .mv .mv-h2, .mv .mv-foot3-word, .mv .ao-title, .mv h1, .mv h2 { font-family: var(--a-display); font-weight: 600; letter-spacing: -0.03em; }
 .mv .mv-say, .mv .mv-said-raw, .mv .mv-switch-t, .mv .mv-what-line, .mv .mv-amt, .mv .mv-groups button b { font-family: var(--a-display); }
 .mv-foot3-word { font-weight: 600; }
+
+/* Footer, merged (2026-10-26): the face draws in, then MAVEN spreads across. */
+.mv-foot3-face .mv-faceshow { margin-bottom: 0; }
+.mv-foot3-face .mv-faceshow .mv-face { --s: 2; }
+.mv-foot3 .mv-foot3-word { display: block; margin: clamp(40px, 6vw, 70px) 0 0; font-size: clamp(90px, 22vw, 330px); line-height: .85; letter-spacing: -.055em; color: #f4f2ec; }
+.mv-foot3 .mv-foot3-word::after { content: none; }
+.mv-foot3-means { margin: 18px 0 0; font-size: 14px; letter-spacing: .22em; text-transform: uppercase; color: rgba(244,242,236,.55); }
+.mv-foot3-means b { color: #f4f2ec; font-weight: 700; }
