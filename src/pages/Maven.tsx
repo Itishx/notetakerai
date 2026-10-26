@@ -114,26 +114,52 @@ function Raw({ text }: { text: string }) {
   return <>{text.split(/(~[^~]+~)/).filter(Boolean).map((t, i) => t.startsWith("~") ? <s key={i}>{t.slice(1, -1)}</s> : <span key={i}>{t}</span>)}</>;
 }
 
-function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
+/* The features as a switcher (2026-10-26, replaces the stacking deck): the
+   list on the left, one Mac window on the right playing the chosen one. It
+   moves on by itself every few seconds; a click takes over. */
+function MvSwitcher() {
   const [ref, on] = useOnScreen<HTMLDivElement>();
-  const [phase, setPhase] = useState(0); // 0 listening, 1 typed
+  const [at, setAt] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const [held, setHeld] = useState(false);
   useEffect(() => {
     if (!on) return;
-    const t = window.setTimeout(() => setPhase(1), 1800);
-    return () => clearTimeout(t);
-  }, [on]);
+    setPhase(0);
+    const a = window.setTimeout(() => setPhase(1), 1800);
+    const b = held ? 0 : window.setTimeout(() => setAt((x) => (x + 1) % SCENES.length), 6500);
+    return () => { clearTimeout(a); if (b) clearTimeout(b); };
+  }, [on, at, held]);
+  const s = SCENES[at];
   return (
-    <div ref={ref} className={"bs-row mv-row" + (flip ? " is-flip" : "") + (on ? " is-in" : "")} style={{ top: `calc(84px + ${n * 14}px)`, zIndex: n }}>
-      <div className="bs-talk">
-        <div className="bs-meta"><span className="bs-n">{String(n).padStart(2, "0")}</span><span className="bs-app-tag">{s.app}</span></div>
-        <h3>{s.title}</h3>
-        <p className="bs-p">{s.p}</p>
-        <div className="mv-said">
-          <p className="mv-said-k">What you said</p>
-          <p className="mv-said-raw">{"\u201c"}<Raw text={s.raw} />{"\u201d"}</p>
-          <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{s.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
-        </div>
-      </div>
+    <div ref={ref} className="mv-switch">
+      <ol className="mv-switch-list">
+        {SCENES.map((x, i) => (
+          <li key={x.title} className={i === at ? "on" : ""}>
+            <button type="button" onClick={() => { setAt(i); setHeld(true); }} aria-pressed={i === at}>
+              <span className="mv-switch-n">{String(i + 1).padStart(2, "0")}</span>
+              <span className="mv-switch-t">{x.title}</span>
+            </button>
+            {i === at && (
+              <div className="mv-switch-more">
+                <p className="mv-switch-p">{x.p}</p>
+                <div className="mv-said">
+                  <p className="mv-said-k">What you said</p>
+                  <p className="mv-said-raw">{"\u201c"}<Raw text={x.raw} />{"\u201d"}</p>
+                  <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{x.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
+                </div>
+                {!held && <span className="mv-switch-bar" key={at} />}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      <MvSceneWindow s={s} phase={phase} key={at} />
+    </div>
+  );
+}
+
+function MvSceneWindow({ s, phase }: { s: MvScene; phase: number }) {
+  return (
       <div className="mv-mac mv-scene-mac">
         <MacMenuBar app={s.app} />
         <div className="mv-desk">
@@ -171,7 +197,6 @@ function MvSceneRow({ s, n, flip }: { s: MvScene; n: number; flip: boolean }) {
           </div>
         </div>
       </div>
-    </div>
   );
 }
 
@@ -364,6 +389,14 @@ function FaceShow() {
   return <div ref={ref} className={"mv-faceshow" + (on ? " is-in" : "")}><MavenFace mood={order[at]} /></div>;
 }
 
+/* Maven only ever answers in three words or fewer. */
+const REPLIES = ["YouTube. Open.", "Drafted. Send?", "Filled. Your call.", "Again?", "Not my job.", "Anytime."];
+function FootReplies() {
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => setI((x) => (x + 1) % REPLIES.length), 2000); return () => clearInterval(t); }, []);
+  return <p className="mv-foot3-reply" key={i}>{REPLIES[i]}</p>;
+}
+
 export default function Maven() {
   const { theme, toggle } = useAffTheme();
   const [view, setView] = useState<"product" | "letter">(() => (typeof window !== "undefined" && window.location.hash === "#letter" ? "letter" : "product"));
@@ -427,14 +460,14 @@ export default function Maven() {
           </div>
         </section>
 
-        {/* ── What it does: the Braino page's scene deck ── */}
-        <section className="bs bs-deck mv-deck" id="see">
-          <div className="bs-wrap">
-            <div className="bs-head is-in">
-              <h2 className="aff-h1 bs-h">You say it.<br /><em>Maven does it.</em></h2>
+        {/* ── What it does: a switcher ── */}
+        <section className="mv-does-sec" id="see">
+          <div className="aff-wrap">
+            <div className="mv-does-head aff-reveal">
+              <h2 className="aff-h1 mv-does-h">You say it.<br /><em>Maven does it.</em></h2>
               <p>Talk the way you talk. Here\u2019s what it does with it.</p>
             </div>
-            {SCENES.map((x, i) => <MvSceneRow key={x.title} s={x} n={i + 1} flip={i % 2 === 1} />)}
+            <MvSwitcher />
           </div>
         </section>
 
@@ -526,27 +559,24 @@ export default function Maven() {
       </section>
 
       </>}
-      {/* Maven's own footer (2026-10-26): the name, and what it stands for. */}
-      <footer className="mv-foot2">
-        <div className="aff-wrap">
-          <div className="mv-foot2-top">
-            <div className="mv-foot2-brand">
-              <MavenMark size={64} />
-              <p className="mv-foot2-name">Maven</p>
-              <p className="mv-foot2-means"><b>M</b>emory <b>A</b>nd <b>V</b>oice <b>En</b>gine</p>
-            </div>
-            <nav className="mv-foot2-cols" aria-label="Footer">
-              <div><h4>Maven</h4><a href="#see">What it does</a><a href="#face">The face</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a></div>
-              <div><h4>Read</h4><a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a><Link to="/trust">Trust &amp; privacy</Link></div>
-              <div><h4>Get it</h4><a href={DOWNLOAD}>Download for Mac</a><Link to="/contact">Contact</Link></div>
-            </nav>
-          </div>
-          <p className="mv-foot2-word" aria-hidden="true">Maven</p>
-          <div className="mv-foot2-base">
-            <span>© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru</span>
-            <span><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
-          </div>
-        </div>
+      {/* Maven's footer (2026-10-26): Maven itself, not a sitemap. The face
+          watches you, it answers in three words, and the name spells out
+          what it stands for. */}
+      <footer className="mv-foot3">
+        <div className="mv-foot3-face"><MavenFace mood="idle" /></div>
+        <FootReplies />
+        <h2 className="mv-foot3-word" aria-label="Maven: Memory And Voice Engine">
+          <span><b>M</b><i>emory</i></span>
+          <span><b>A</b><i>nd</i></span>
+          <span><b>V</b><i>oice</i></span>
+          <span><b>En</b><i>gine</i></span>
+        </h2>
+        <nav className="mv-foot3-links" aria-label="Footer">
+          <a href="#see">What it does</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a>
+          <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
+          <Link to="/trust">Privacy</Link><a href={DOWNLOAD}>Download for Mac</a>
+        </nav>
+        <p className="mv-foot3-base">© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
       </footer>
     </div>
   );
