@@ -463,3 +463,20 @@
 
 /* The hidden tab must stay hidden (display:grid was overriding [hidden]). */
 .mv [data-ptab][hidden] { display: none !important; }
+
+/* ══ Exactly what Maven does (2026-10-27): three columns from MAVEN_JOBS ══ */
+.mv-jobs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mv-jobs-col { min-width: 0; padding: 24px; border-radius: 20px; border: 1px solid var(--a-line); background: var(--a-bg); }
+.mv-jobs-col.is-write { background: color-mix(in srgb, var(--mv-peach) 45%, var(--a-bg)); border-color: transparent; }
+.mv-jobs-col.is-not { background: var(--mv-butter); border-color: transparent; }
+.mv-jobs-col h3 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--a-display); font-weight: 400; font-size: 28px; letter-spacing: -.02em; color: var(--a-ink); }
+.mv-jobs-col h3 kbd { font: 600 13px var(--ao-sf, -apple-system, sans-serif); padding: 3px 8px; border-radius: 7px; border: 1px solid var(--a-line); background: var(--a-bg); color: var(--a-ink); letter-spacing: 0; }
+.mv-jobs-dot { width: 8px; height: 8px; border-radius: 50%; background: #5a96ff; box-shadow: 0 0 8px rgba(90,150,255,.7); flex: none; }
+.mv-jobs-how { margin: 6px 0 16px; font-size: 14px; color: var(--a-ink-soft); }
+.mv-jobs-col ul { list-style: none; margin: 0; padding: 0; }
+.mv-jobs-col li { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-top: 1px solid var(--a-line); min-width: 0; }
+.mv-jobs-col li span { font-size: 15.5px; line-height: 1.4; color: var(--a-ink); font-weight: 500; overflow-wrap: anywhere; }
+.mv-jobs-col.is-not li span { font-weight: 400; color: var(--a-ink-soft); }
+.mv-jobs-col q { font-family: var(--a-display); font-style: italic; font-size: 15px; line-height: 1.4; color: var(--a-ink-soft); overflow-wrap: anywhere; }
+.mv-jobs-col q::before { content: "“"; } .mv-jobs-col q::after { content: "”"; }
+@media (max-width: 960px) { .mv-jobs { grid-template-columns: minmax(0, 1fr); } }

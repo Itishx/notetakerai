@@ -67,3 +67,15 @@ textarea { width: 100%; min-height: 70px; padding: 9px 12px; border: 1px solid v
 .subhead { font-size: 18px; margin: 32px 0 4px; }
 #details-form .row input, #details-form .row textarea { width: 60%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; font: inherit; color: inherit; resize: vertical; outline: none; }
 #details-status { color: var(--muted); }
+
+/* What Maven does (2026-10-27) */
+.keys { margin-bottom: 10px; }
+.keys .row b { font-weight: 600; }
+.sub.hint { margin-bottom: 8px; }
+.sub.small { font-size: 12px; margin: 0 0 8px; }
+.jobs-group .subhead { display: flex; align-items: center; gap: 10px; }
+.jobs { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.jobs li { display: flex; flex-direction: column; gap: 2px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.jobs li .a { font-weight: 500; }
+.jobs li .ex { color: var(--muted); font: italic 14px var(--serif); }
+.g-not .jobs li .a { font-weight: 400; color: var(--muted); }

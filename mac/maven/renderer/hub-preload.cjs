@@ -15,5 +15,7 @@ contextBridge.exposeInMainWorld("maven", {
   saveDetails: (d) => inv("hub:details:save", d),
   openDataFolder: () => inv("hub:openData"),
   deleteHistory: () => inv("hub:deleteHistory"),
+  getJobs: () => inv("hub:jobs"),
+  onPage: (fn) => { const h = (_e, v) => fn(v); ipcRenderer.on("hub:page", h); return () => ipcRenderer.removeListener("hub:page", h); },
   showOnboarding: () => inv("hub:onboarding"),
 });

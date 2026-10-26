@@ -11,6 +11,7 @@
   <div class="brand"><span class="mark"><i></i><i></i></span><span>Maven</span></div>
   <nav>
     <button data-page="home" class="on">Home</button>
+    <button data-page="jobs">What Maven does</button>
     <button data-page="dictionary">Dictionary</button>
     <button data-page="snippets">Snippets</button>
   </nav>
@@ -30,6 +31,16 @@
     </div>
     <input id="search" class="search" type="search" placeholder="Search your history">
     <div id="history"></div>
+  </section>
+
+  <section id="jobs" class="page">
+    <header class="head"><h1>What Maven does</h1><p class="sub">Two shortcuts, a few small jobs. Anything else, Maven says “Not my job.”</p></header>
+    <div class="rows keys">
+      <div class="row"><span><b>Write</b> · type anything, cleaned up</span><kbd>⌃⌥</kbd></div>
+      <div class="row"><span><b>Do</b> · one small job, after your yes when it sends</span><kbd>fn ⌃</kbd></div>
+    </div>
+    <p class="sub hint">Press to start, press again to stop. Lost? Press <kbd>fn ⌃</kbd> and say “what can you do?”</p>
+    <div id="jobs-list"></div>
   </section>
 
   <section id="dictionary" class="page">

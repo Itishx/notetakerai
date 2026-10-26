@@ -182,3 +182,23 @@ body.do .acts button:focus-visible, body.do .opts button:focus-visible { outline
 /* The actions row is always visible; the preview gives way first. */
 .acts { flex: none; }
 .body { grid-template-rows: auto minmax(0, auto) auto; }
+
+/* "Not my job." gets a tiny second line under the pill for 3 s (2026-10-27). */
+#hint { position: absolute; bottom: 9px; font-size: 10px; color: rgba(246,243,234,.85); background: rgba(13,13,12,.82); padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  opacity: 0; translate: 0 -2px; transition: opacity .16s ease, translate .3s var(--spring); pointer-events: none; }
+#hint.on { opacity: 1; translate: 0 0; }
+body.a-left #hint { left: 26px; } body.a-right #hint { right: 26px; } body.a-centre #hint { left: 50%; translate: -50% 0; }
+
+/* "What I can do": the list, small, fits in the card (group label left, one line per job). */
+.jobs:empty { display: none; }
+.jobs { display: grid; gap: 5px; font-size: 10px; line-height: 12px; }
+.jobs .jg { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px; }
+.jobs .jh { display: flex; flex-direction: column; gap: 1px; }
+.jobs .jh b { font-weight: 600; color: var(--ink); }
+.jobs .jh kbd { font: 9px -apple-system, BlinkMacSystemFont, sans-serif; color: rgba(246,243,234,.55); }
+.jobs .jr { display: flex; gap: 5px; white-space: nowrap; overflow: hidden; }
+.jobs .jr span { flex: none; }
+.jobs .jr i { font-style: normal; color: rgba(246,243,234,.5); overflow: hidden; text-overflow: ellipsis; }
+#card.k-help .body { gap: 6px; padding-top: 10px; padding-bottom: 10px; }
+#card.k-help .edit { display: none; }
+body.do .jobs .jg + .jg .jh b::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 4px; border-radius: 50%; background: #6aa0ff; vertical-align: middle; }

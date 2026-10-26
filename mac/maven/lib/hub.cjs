@@ -2,6 +2,7 @@
 /* The Hub: Maven's main window (home, dictionary, snippets, settings). */
 const path = require("path");
 const store = require("./store.cjs");
+const { MAVEN_JOBS } = require("./jobs.cjs");
 
 function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding, log = () => {} }) {
   store.init(app.getPath("userData"));
@@ -31,10 +32,11 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
     send("hub:history", { items: [], stats: store.stats([]) });
     return true;
   });
+  handle("hub:jobs", () => MAVEN_JOBS);
   handle("hub:onboarding", () => { showOnboarding && showOnboarding(); });
 
-  function open() {
-    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); return win; }
+  function open(page) {
+    if (win && !win.isDestroyed()) { if (page) send("hub:page", page); if (win.isMinimized()) win.restore(); win.show(); win.focus(); return win; }
     win = new BrowserWindow({
       width: 980, height: 680, minWidth: 760, minHeight: 520, show: false, title: "Maven",
       titleBarStyle: "hiddenInset", backgroundColor: "#f4f2ec",
@@ -43,6 +45,7 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", (e) => e.preventDefault());
     win.loadFile(path.join(__dirname, "..", "renderer", "hub.html"));
+    if (page) win.webContents.once("did-finish-load", () => send("hub:page", page));
     win.once("ready-to-show", () => { if (app.dock) app.dock.show(); win.show(); win.focus(); });
     unwatch = store.watchHistory((items) => send("hub:history", { items, stats: store.stats(items) }));
     win.on("closed", () => { try { unwatch && unwatch(); } catch (_) {} unwatch = null; win = null; if (app.dock) app.dock.hide(); });

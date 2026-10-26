@@ -5,10 +5,38 @@ const $ = (s) => document.querySelector(s);
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = String(text); return n; }
 
 /* ---------- navigation ---------- */
-document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
-  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
-  document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === b.dataset.page));
-}));
+function showPage(id) {
+  if (!document.getElementById(id)) return;
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x.dataset.page === id));
+  document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === id));
+}
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.page)));
+if (api.onPage) api.onPage((id) => showPage(String(id || "")));
+
+/* ---------- what Maven does (from lib/jobs.cjs, the one list) ---------- */
+if (api.getJobs) api.getJobs().then((J) => {
+  if (!J) return;
+  const box = $("#jobs-list"); box.replaceChildren();
+  for (const key of ["write", "do", "not"]) {
+    const g = J[key]; if (!g) continue;
+    const sec = el("div", `jobs-group g-${key}`);
+    const h = el("h2", "subhead", g.title);
+    if (g.shortcut) h.append(el("kbd", "", g.shortcut));
+    sec.append(h);
+    if (g.how) sec.append(el("p", "sub small", g.how));
+    const ul = el("ul", "jobs");
+    for (const j of g.jobs) {
+      const li = el("li");
+      if (typeof j === "string") { li.append(el("span", "a", j)); }
+      else {
+        li.append(el("span", "a", j.job));
+        li.append(el("span", "ex", `“${j.example}”${j.example2 ? `  ·  “${j.example2}”` : ""}`));
+      }
+      ul.append(li);
+    }
+    sec.append(ul); box.append(sec);
+  }
+});
 
 /* ---------- home ---------- */
 let history = [];

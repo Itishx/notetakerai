@@ -23,7 +23,7 @@ const { createOnboarding } = require(path.join(__dirname, "lib", "onboarding.cjs
 const { createHera } = require(path.join(__dirname, "lib", "hera.cjs"));
 const mavenStore = require(path.join(__dirname, "lib", "store.cjs"));
 let hub = null;
-function openHub() { if (!hub) { mavenStore.init(app.getPath("userData")); hub = require(path.join(__dirname, "lib", "hub.cjs")).createHub({ app, BrowserWindow, ipcMain, shell, dialog: electron.dialog, showOnboarding: () => onboarding && onboarding.show(), log }); } hub.open(); }
+function openHub(page) { if (!hub) { mavenStore.init(app.getPath("userData")); hub = require(path.join(__dirname, "lib", "hub.cjs")).createHub({ app, BrowserWindow, ipcMain, shell, dialog: electron.dialog, showOnboarding: () => onboarding && onboarding.show(), log }); } hub.open(page); }
 const { assessDictationEdit, normalizeDictationSession, spokenNumbersToDigits } = require(path.join(__dirname, "lib", "dictation.cjs"));
 
 const execFileP = promisify(execFile);
@@ -729,6 +729,7 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
    to the app you were in. After 20 s it folds and leaves the draft on the clipboard. */
 const actions = require(path.join(__dirname, "lib", "actions.cjs"));
 const whatsapp = require(path.join(__dirname, "lib", "whatsapp.cjs"));
+const { MAVEN_JOBS } = require(path.join(__dirname, "lib", "jobs.cjs"));
 const CHAT_APPS = /^(WhatsApp|Slack|Messages|Telegram|Discord|Signal|Microsoft Teams)$/i;
 const DETAIL_WORDS = { name: "name", email: "email", phone: "phone number", address: "address" };
 
@@ -752,9 +753,12 @@ async function intentFor(raw) {
   } finally { clearTimeout(timer); }
 }
 
+/* After every "Not my job." a tiny second line says how to see the list (3 s). */
+const HELP_HINT = "Say “what can you do?”";
 function reply(text, face = "done", ms = 1700) {
-  islandShow("reply", { note: text, face });
-  islandHide(ms);
+  const refused = text === "Not my job.";
+  islandShow("reply", { note: text, face, ...(refused ? { hint: HELP_HINT } : {}) });
+  islandHide(refused ? Math.max(ms, 3000) : ms);
 }
 
 /* ---------- the island asking ---------- */
@@ -771,7 +775,8 @@ async function giveFocusBack(front) {
 function armFold() {
   if (!doAsk) return;
   clearTimeout(doAsk.timer);
-  doAsk.timer = setTimeout(() => void endAsk("folded after 20s"), 20000);
+  const ms = doAsk.spec.foldMs || 20000;
+  doAsk.timer = setTimeout(() => void endAsk(`folded after ${Math.round(ms / 1000)}s`), ms);
 }
 async function ask(spec, rec, handlers) {
   const front = doAsk ? doAsk.front : await actions.frontApp();
@@ -970,6 +975,13 @@ async function doAction(intent, rec) {
     await shell.openExternal(site.href);
     reply(`${site.label}. Open.`);
     return `opened ${site.href}`;
+  }
+  if (act === "help") {
+    // "what can you do?": the list, in the card. See all opens the Hub's page. Esc or 12 s folds it.
+    await ask({ kind: "help", title: "What I can do", right: "My jobs.", jobs: MAVEN_JOBS, primary: "See all", foldMs: 12000 }, rec, {
+      onYes: async () => { islandShow("idle"); await giveFocusBack(""); openHub("jobs"); return "showed jobs, opened the Hub"; },
+    });
+    return "asking";
   }
   if (act === "send_message") return sendFlow(intent, rec);
   if (act === "reply" && intent.draft === true && !String(intent.message || "").trim()) return draftReply(intent, rec);

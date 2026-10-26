@@ -81,7 +81,7 @@ NEVER
    purpose (the project is at its edge-function cap). Fixed prompt first so it
    caches; only the command changes per call. */
 const INTENT_PROMPT = `You turn one spoken command into ONE action for a Mac assistant. Return one JSON object, nothing else:
-{"action": "open_app"|"open_url"|"switch_app"|"send_message"|"reply"|"fill"|"add_to_list"|"remember"|"none", "app"?: string, "url"?: string, "person"?: string, "message"?: string, "subject"?: string, "list"?: string, "item"?: string, "detail"?: "name"|"email"|"phone"|"address", "fact"?: string, "word"?: string, "draft"?: boolean, "reply3": string}
+{"action": "open_app"|"open_url"|"switch_app"|"send_message"|"reply"|"fill"|"add_to_list"|"remember"|"help"|"none", "app"?: string, "url"?: string, "person"?: string, "message"?: string, "subject"?: string, "list"?: string, "item"?: string, "detail"?: "name"|"email"|"phone"|"address", "fact"?: string, "word"?: string, "draft"?: boolean, "reply3": string}
 
 ACTIONS
 - open_app: "open Slack" -> {"action":"open_app","app":"Slack","reply3":"Slack. Open."}. Only real Mac apps.
@@ -92,7 +92,8 @@ ACTIONS
 - fill: "fill in my address", "put my email here" -> {"action":"fill","detail":"address","reply3":"Filled. Your call."}.
 - add_to_list: "add milk to my grocery list" -> {"action":"add_to_list","list":"Grocery","item":"Milk","reply3":"Added."}. list is the list's name without the word "list", capitalised.
 - remember: "remember Riya is spelled R-I-Y-A" -> {"action":"remember","fact":"Riya is spelled Riya.","word":"Riya","reply3":"Got it."}. word only when the fact is how a name or word is written.
-- none: anything else, anything with more than one step, questions, chit-chat, or when unsure -> {"action":"none","reply3":"Not my job."}. Empty or garbled speech -> {"action":"none","reply3":"Again?"}.
+- help: asking what Maven does or can do: "what is your job", "what can you do", "help", "what are you for", "what do you do", "why not" (after it said no) -> {"action":"help","reply3":"My jobs."}. Only questions about Maven itself; any other question is "none".
+- none: anything else, anything with more than one step, other questions, chit-chat, or when unsure -> {"action":"none","reply3":"Not my job."}. Empty or garbled speech -> {"action":"none","reply3":"Again?"}.
 
 RULES
 - One step only. Never plan.
@@ -126,7 +127,7 @@ async function intentFor(transcript: string, openaiKey: string | undefined) {
   const data = await response.json().catch(() => ({}));
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* none below */ }
-  const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "none"];
+  const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "help", "none"];
   const intent: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(parsed)) if (typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
   if (parsed.draft === true || parsed.draft === "true") intent.draft = true;

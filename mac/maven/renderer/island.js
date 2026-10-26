@@ -1,6 +1,15 @@
 "use strict";
 const island = document.getElementById("island");
 const note = document.getElementById("note");
+const hint = document.getElementById("hint");
+let hintTimer = 0;
+/* The tiny second line under the pill after "Not my job.", for 3 s. */
+function showHint(text) {
+  clearTimeout(hintTimer);
+  hint.textContent = String(text || "");
+  hint.classList.toggle("on", Boolean(text));
+  if (text) hintTimer = setTimeout(() => hint.classList.remove("on"), 3000);
+}
 const dots = [...island.querySelectorAll(".eye i")];
 let level = 0, anim = 0, blinkTimer = 0;
 
@@ -99,7 +108,7 @@ let wakeTimer = 0;
 window.maven.onState((p) => {
   const { state, note: text } = p || {};
   if (state !== "sent" && state !== "ask" && card.isOpen()) card.close();
-  if (state === "ask") { note.classList.remove("on"); card.open(p.card || {}); return; }
+  if (state === "ask") { note.classList.remove("on"); showHint(""); card.open(p.card || {}); return; }
   if (state === "sent") { card.sent(String(p.text || "Sent.")); return; }
   if (state === "note" || state === "reply") {
     // The 3-word reply beside the pill, with the face that goes with it.
@@ -107,6 +116,7 @@ window.maven.onState((p) => {
     if (p.face === "done") { setState("done"); warm = 1; startLoop(); } else setState("idle", face);
     note.textContent = String(text || "");
     note.classList.add("on");
+    showHint(p.hint || "");
     return;
   }
   note.classList.remove("on");
@@ -200,6 +210,26 @@ const card = (() => {
       b.addEventListener("click", () => choose(i));
       opts.append(b);
     });
+    // "What I can do": two groups, one line per job with a short example.
+    const jobs = $(".jobs"); jobs.replaceChildren();
+    if (kind === "help" && c.jobs) {
+      for (const key of ["write", "do"]) {
+        const g = c.jobs[key]; if (!g) continue;
+        const grp = document.createElement("div"); grp.className = "jg";
+        const h = document.createElement("div"); h.className = "jh";
+        const t = document.createElement("b"); t.textContent = g.title;
+        const k = document.createElement("kbd"); k.textContent = g.shortcut || "";
+        h.append(t, k);
+        const rows = document.createElement("div");
+        for (const j of g.jobs) {
+          const r = document.createElement("div"); r.className = "jr";
+          const n = document.createElement("span"); n.textContent = j.short || j.job;
+          const e = document.createElement("i"); e.textContent = `“${j.example}”`;
+          r.append(n, e); rows.append(r);
+        }
+        grp.append(h, rows); jobs.append(grp);
+      }
+    }
   }
   async function openCard(c) {
     clearTimeout(closeTimer);
