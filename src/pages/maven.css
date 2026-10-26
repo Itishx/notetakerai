@@ -304,9 +304,11 @@
 
 /* ══ Warm and colourful (2026-10-27): one soft colour per section, bigger
    type, one italic word per heading, a capsule doing something in each. ══ */
-.mv { --mv-peach: #f6c9b0; --mv-peach-2: #f3a988; --mv-sage: #cfdcc4; --mv-sage-2: #8fae86; --mv-butter: #f3e3a8; --mv-sky: #cbd9ea; --mv-ink: #16150f; --mv-on: #16150f; }
-.mv[data-theme="dark"] { --mv-peach: #3a2a22; --mv-peach-2: #5a3626; --mv-sage: #24301f; --mv-sage-2: #3d5236; --mv-butter: #33301f; --mv-sky: #1f2a36; --mv-on: #f6f3ea; }
-@media (prefers-color-scheme: dark) { .mv:not([data-theme="light"]) { --mv-peach: #3a2a22; --mv-peach-2: #5a3626; --mv-sage: #24301f; --mv-sage-2: #3d5236; --mv-butter: #33301f; --mv-sky: #1f2a36; --mv-on: #f6f3ea; } }
+/* One palette (2026-10-27): Affective warm neutrals + one Maven colour (peach, from the edge light) + ink.
+   The old sage/butter/sky names now point at tints of that one family, so nothing is a random colour. */
+.mv { --mv-peach: #f6d3bf; --mv-peach-2: #f0a483; --mv-sage: #fbe9df; --mv-sage-2: #f0a483; --mv-butter: #efe8dd; --mv-sky: #f4eee6; --mv-ink: #16150f; --mv-on: #16150f; }
+.mv[data-theme="dark"] { --mv-peach: #3a2a22; --mv-peach-2: #6a3e2a; --mv-sage: #2c2420; --mv-sage-2: #6a3e2a; --mv-butter: #23211e; --mv-sky: #1d1b19; --mv-on: #f6f3ea; }
+@media (prefers-color-scheme: dark) { .mv:not([data-theme="light"]) { --mv-peach: #3a2a22; --mv-peach-2: #6a3e2a; --mv-sage: #2c2420; --mv-sage-2: #6a3e2a; --mv-butter: #23211e; --mv-sky: #1d1b19; --mv-on: #f6f3ea; } }
 
 /* Bands */
 .mv .mv-band { border-top: 0; }
