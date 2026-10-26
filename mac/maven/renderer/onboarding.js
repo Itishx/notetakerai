@@ -1,10 +1,22 @@
 "use strict";
 /* Maven onboarding: one step per screen. Talks to main only through window.onboarding. */
 const api = window.onboarding;
-const STEPS = ["welcome", "permissions", "mic", "shortcut", "practice", "done"];
+const STEPS = ["welcome", "permissions", "mic", "shortcut", "place", "practice", "done"];
 const $ = (id) => document.getElementById(id);
 let current = -1;
 let leaveStep = null;
+// One listener each for the whole window, routed to the current step
+// (before, every visit to the shortcut step added another listener).
+let onChord = null, onKeys = null, onPlaced = null;
+api.onChord(() => { if (onChord) onChord(); });
+api.onKeys((p) => { if (onKeys) onKeys(p); });
+api.onPlaced((p) => { if (onPlaced) onPlaced(p); });
+
+// Maven in the Welcome screen blinks like he does on screen.
+(function blink() {
+  const c = document.getElementById("welcome-capsule");
+  setTimeout(() => { if (c) { c.classList.add("blink"); setTimeout(() => c.classList.remove("blink"), 120); } blink(); }, 2600 + Math.random() * 3400);
+})();
 
 const dots = document.querySelector(".dots");
 STEPS.forEach(() => dots.appendChild(document.createElement("i")));
@@ -93,14 +105,36 @@ const ENTER = {
 
   shortcut() {
     // The chord comes from main's key watcher (the native one), not from this window.
-    let done = false;
-    api.onChord(() => {
-      if (STEPS[current] !== "shortcut" || done) return;
+    // Until the watcher says its event tap is on, presses cannot arrive: say so.
+    let done = false, ready = false;
+    const status = $("key-status");
+    const paint = (r) => {
+      ready = Boolean(r && r.ready);
+      if (done) return;
+      status.textContent = ready ? "Try it now: press Control and Option together."
+        : r && r.accessibility === false ? "Maven needs Accessibility for the shortcut. Turn it on in System Settings."
+        : "Getting the shortcut ready…";
+    };
+    api.keys().then(paint).catch(() => {});
+    const poll = setInterval(() => { if (!ready) api.keys().then(paint).catch(() => {}); }, 1000);
+    onKeys = paint;
+    onChord = () => {
+      if (done) return;
       done = true;
       document.querySelectorAll("section[data-step=shortcut] kbd").forEach((k) => k.classList.add("pressed"));
-      $("key-status").textContent = "✓ That's it.";
+      status.textContent = "✓ That's it.";
       $("key-continue").classList.remove("hidden");
-    });
+    };
+    return () => { clearInterval(poll); onChord = null; onKeys = null; };
+  },
+
+  place() {
+    $("place-status").textContent = "He's at the bottom right of your screen now.";
+    onPlaced = ({ spot } = {}) => {
+      const where = { "bottom-left": "bottom left", "bottom-centre": "bottom centre", "bottom-right": "bottom right" }[spot] || "there";
+      $("place-status").textContent = `✓ Got it. He stays at the ${where}.`;
+    };
+    return () => { onPlaced = null; };
   },
 
   practice() {

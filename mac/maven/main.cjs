@@ -2,7 +2,7 @@
 /* Maven (Memory And Voice ENgine), part 1: dictation only.
  *
  * Press Control+Option, talk, press again: the words are cleaned up and typed
- * where your cursor is. Lives in the menu bar. Shows a small mark top-right
+ * where your cursor is. Lives in the menu bar. Shows a small capsule with eyes at the bottom
  * while listening. Never speaks. Audio stays in memory only.
  *
  * Pipeline (the same cloud path the Braino Mac app proved out):
@@ -136,40 +136,180 @@ function buildTray() {
   ]));
 }
 
-/* ---------- the island: top-right, under the menu bar ---------- */
+/* ---------- the island: a small capsule in one of three bottom spots ----------
+   2026-10-26 (Itish): never the top, never "anywhere". Bottom-left,
+   bottom-centre or bottom-right of its display. Drag it and three faint spots
+   show; let go and it glides to the nearest one and stays there. */
 const ISLAND_W = 150, ISLAND_H = 96;
-/* Always on screen; drag it anywhere like Braino, and it stays where you leave it. */
+const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 14; // capsule inside the window: centred, 14px from the bottom
+const SPOT_MARGIN = 16;
+const SPOTS = ["bottom-left", "bottom-centre", "bottom-right"];
 const islandPosPath = () => path.join(app.getPath("userData"), "island.json");
-function savedIslandPos() { try { return JSON.parse(fs.readFileSync(islandPosPath(), "utf8")); } catch (_) { return null; } }
+let islandAllowed = false; // hidden until onboarding reaches "Put Maven where you like" (or is done)
+function savedSpot() {
+  try {
+    const s = JSON.parse(fs.readFileSync(islandPosPath(), "utf8"));
+    if (s && SPOTS.includes(s.spot)) return s;
+  } catch (_) {}
+  return { spot: "bottom-right", displayId: null };
+}
+function saveSpot(spot, displayId) {
+  try { fs.mkdirSync(path.dirname(islandPosPath()), { recursive: true }); fs.writeFileSync(islandPosPath(), JSON.stringify({ spot, displayId })); } catch (_) {}
+}
+function displayById(id) { return screen.getAllDisplays().find((d) => d.id === id) || screen.getPrimaryDisplay(); }
+/* The window bounds that put the capsule SPOT_MARGIN in from the work area edges. */
+function spotBounds(display, spot) {
+  const wa = display.workArea;
+  const capY = wa.y + wa.height - SPOT_MARGIN - CAP_H;
+  const capX = spot === "bottom-left" ? wa.x + SPOT_MARGIN
+    : spot === "bottom-centre" ? wa.x + Math.round((wa.width - CAP_W) / 2)
+    : wa.x + wa.width - SPOT_MARGIN - CAP_W;
+  return { x: Math.round(capX - (ISLAND_W - CAP_W) / 2), y: Math.round(capY - (ISLAND_H - CAP_BOTTOM - CAP_H)), width: ISLAND_W, height: ISLAND_H };
+}
 function placeIsland() {
+  if (!island || island.isDestroyed() || drag) return;
+  const s = savedSpot();
+  island.setBounds(spotBounds(displayById(s.displayId), s.spot));
+}
+let glideTimer = 0;
+function glideIsland(to, ms = 180) {
+  clearInterval(glideTimer);
   if (!island || island.isDestroyed()) return;
-  const saved = savedIslandPos();
-  const onScreen = saved && screen.getAllDisplays().some((d) => saved.x >= d.bounds.x - 40 && saved.x < d.bounds.x + d.bounds.width && saved.y >= d.bounds.y - 40 && saved.y < d.bounds.y + d.bounds.height);
-  if (onScreen) { island.setBounds({ x: saved.x, y: saved.y, width: ISLAND_W, height: ISLAND_H }); return; }
-  const wa = screen.getPrimaryDisplay().workArea; // below the menu bar
-  island.setBounds({ x: Math.round(wa.x + wa.width - ISLAND_W - 12), y: Math.round(wa.y + 6), width: ISLAND_W, height: ISLAND_H });
+  const from = island.getBounds();
+  const t0 = Date.now();
+  glideTimer = setInterval(() => {
+    if (!island || island.isDestroyed()) { clearInterval(glideTimer); return; }
+    const k = Math.min(1, (Date.now() - t0) / ms);
+    const e = 1 - Math.pow(1 - k, 3); // ease out
+    island.setBounds({ x: Math.round(from.x + (to.x - from.x) * e), y: Math.round(from.y + (to.y - from.y) * e), width: ISLAND_W, height: ISLAND_H });
+    if (k >= 1) clearInterval(glideTimer);
+  }, 16);
+}
+function setIslandAllowed(on) {
+  islandAllowed = Boolean(on);
+  if (!island || island.isDestroyed()) return;
+  if (islandAllowed) { placeIsland(); island.showInactive(); sendIsland("maven:state", { state: "idle" }); }
+  else island.hide();
 }
 function createIsland() {
   island = new BrowserWindow({
-    width: ISLAND_W, height: ISLAND_H, show: false, frame: false, transparent: true, resizable: false, movable: true,
+    width: ISLAND_W, height: ISLAND_H, show: false, frame: false, transparent: true, resizable: false, movable: false,
     focusable: false, skipTaskbar: true, hasShadow: false, alwaysOnTop: true, fullscreenable: false,
     webPreferences: { preload: path.join(__dirname, "renderer", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
   island.setAlwaysOnTop(true, "screen-saver");
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  island.setIgnoreMouseEvents(true, { forward: true }); // click-through, except the buttons (see maven:hover)
+  island.setIgnoreMouseEvents(true, { forward: true }); // click-through, except the capsule (see maven:hover)
   island.loadFile(path.join(__dirname, "renderer", "island.html"));
   placeIsland();
-  island.on("moved", () => { try { const [x, y] = island.getPosition(); fs.writeFileSync(islandPosPath(), JSON.stringify({ x, y })); } catch (_) {} });
-  island.once("ready-to-show", () => { island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
-  island.webContents.once("did-finish-load", () => { if (!island.isVisible()) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
+  island.once("ready-to-show", () => { if (islandAllowed) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
+  island.webContents.once("did-finish-load", () => { if (islandAllowed && !island.isVisible()) island.showInactive(); sendIsland("maven:state", { state: "idle" }); });
   island.on("closed", () => { island = null; });
 }
+
+/* The three faint target spots: a transparent, click-through window over the
+   display under the cursor, shown only while dragging. */
+let targets = null;
+const TARGETS_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent;overflow:hidden}
+.s{position:absolute;width:${CAP_W + 16}px;height:${CAP_H + 16}px;border-radius:${(CAP_H + 16) / 2}px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.55),0 0 0 1px rgba(0,0,0,.18);background:rgba(13,13,12,.10);transition:background .12s,box-shadow .12s}
+.s.on{background:rgba(13,13,12,.22);box-shadow:inset 0 0 0 2px rgba(255,255,255,.85),0 0 0 1px rgba(0,0,0,.25)}
+</style></head><body><script>
+window.draw=function(spots,active){document.body.innerHTML="";for(const s of spots){const d=document.createElement("div");d.className="s"+(s.name===active?" on":"");d.style.left=s.x+"px";d.style.top=s.y+"px";document.body.appendChild(d);}};
+</script></body></html>`;
+function ensureTargets() {
+  if (targets && !targets.isDestroyed()) return targets;
+  targets = new BrowserWindow({
+    show: false, frame: false, transparent: true, resizable: false, movable: false, focusable: false, skipTaskbar: true,
+    hasShadow: false, alwaysOnTop: true, fullscreenable: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  targets.setAlwaysOnTop(true, "screen-saver");
+  targets.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  targets.setIgnoreMouseEvents(true);
+  targets.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(TARGETS_HTML));
+  targets.on("closed", () => { targets = null; });
+  return targets;
+}
+function drawTargets(display, active) {
+  const t = ensureTargets();
+  const b = display.bounds;
+  const cur = t.getBounds();
+  if (cur.x !== b.x || cur.y !== b.y || cur.width !== b.width || cur.height !== b.height) t.setBounds(b);
+  const spots = SPOTS.map((name) => {
+    const w = spotBounds(display, name);
+    return { name, x: w.x + (ISLAND_W - CAP_W) / 2 - 8 - b.x, y: w.y + (ISLAND_H - CAP_BOTTOM - CAP_H) - 8 - b.y };
+  });
+  const js = `window.draw && window.draw(${JSON.stringify(spots)}, ${JSON.stringify(active)})`;
+  if (t.webContents.isLoading()) t.webContents.once("did-finish-load", () => t.webContents.executeJavaScript(js).catch(() => {}));
+  else t.webContents.executeJavaScript(js).catch(() => {});
+  if (!t.isVisible()) t.showInactive();
+  if (island && !island.isDestroyed()) island.moveTop(); // the capsule stays above its targets
+}
+function nearestSpot(display, capCx, capCy) {
+  let best = SPOTS[2], bestD = Infinity;
+  for (const name of SPOTS) {
+    const w = spotBounds(display, name);
+    const d = Math.hypot(w.x + ISLAND_W / 2 - capCx, w.y + ISLAND_H - CAP_BOTTOM - CAP_H / 2 - capCy);
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best;
+}
+
+/* Manual dragging: app-region drag gives no start/end, so main moves the
+   window with the cursor at ~60 fps while the button is down. */
+let drag = null;
+function capsuleCentre(b) { return { x: b.x + ISLAND_W / 2, y: b.y + ISLAND_H - CAP_BOTTOM - CAP_H / 2 }; }
+function dragStart() {
+  if (!island || island.isDestroyed() || drag) return;
+  clearInterval(glideTimer);
+  const p = screen.getCursorScreenPoint();
+  const b = island.getBounds();
+  drag = { dx: p.x - b.x, dy: p.y - b.y, startX: p.x, startY: p.y, moved: false, active: "", displayId: null, timer: 0, startedAt: Date.now() };
+  island.setIgnoreMouseEvents(false);
+  drag.timer = setInterval(dragTick, 16);
+}
+function dragTick() {
+  if (!drag || !island || island.isDestroyed()) return;
+  const p = screen.getCursorScreenPoint();
+  if (!drag.moved && Math.hypot(p.x - drag.startX, p.y - drag.startY) < 4) return; // a click, not a drag yet
+  drag.moved = true;
+  const x = p.x - drag.dx, y = p.y - drag.dy;
+  island.setBounds({ x, y, width: ISLAND_W, height: ISLAND_H });
+  const display = screen.getDisplayNearestPoint(p);
+  const c = capsuleCentre({ x, y });
+  const active = nearestSpot(display, c.x, c.y);
+  if (active !== drag.active || display.id !== drag.displayId) {
+    drag.active = active; drag.displayId = display.id;
+    drawTargets(display, active);
+  }
+  if (Date.now() - drag.startedAt > 30000) dragEnd(); // a lost mouseup never leaves it stuck to the cursor
+}
+function dragEnd() {
+  if (!drag) return;
+  const d = drag; drag = null;
+  clearInterval(d.timer);
+  if (targets && !targets.isDestroyed()) targets.hide();
+  if (!island || island.isDestroyed()) return;
+  if (!d.moved) return;
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const c = capsuleCentre(island.getBounds());
+  const spot = nearestSpot(display, c.x, c.y);
+  saveSpot(spot, display.id);
+  glideIsland(spotBounds(display, spot));
+  log("island.spot", { spot, display: display.id });
+  if (onboarding) onboarding.placed(spot);
+}
+/* During onboarding's placement step: show the spots without a drag, as a hint. */
+function showTargetsHint(on) {
+  if (on) { const s = savedSpot(); drawTargets(displayById(s.displayId), s.spot); }
+  else if (targets && !targets.isDestroyed() && !drag) targets.hide();
+}
+
 let islandHideTimer = 0;
 function islandShow(state, extra = {}) {
   if (!island || island.isDestroyed()) return;
   clearTimeout(islandHideTimer);
-  if (!island.isVisible()) island.showInactive();
+  if (islandAllowed && !island.isVisible()) island.showInactive();
   sendIsland("maven:state", { state, ...extra });
 }
 function islandHide(delay = 0) {
@@ -178,35 +318,85 @@ function islandHide(delay = 0) {
   islandHideTimer = setTimeout(() => sendIsland("maven:state", { state: "idle" }), delay);
 }
 ipcMain.on("maven:hover", (_e, over) => {
+  if (drag) return; // keep the mouse while dragging
   if (island && !island.isDestroyed()) island.setIgnoreMouseEvents(!over, { forward: true });
 });
+ipcMain.on("maven:drag", (_e, what) => { if (what === "start") dragStart(); else dragEnd(); });
 ipcMain.on("maven:action", (_e, action) => {
   if (action === "cancel") stopDictation("island cancel", { discard: true });
   else if (action === "done") stopDictation("island done");
 });
 
-/* ---------- key watcher ---------- */
+/* ---------- key watcher ----------
+   Compiled once into userData (so a launch is not a multi-second `xcrun swift`
+   compile that swallows the first presses), restarted after Accessibility is
+   granted (a tap made before that never receives events), and "ready" only
+   once the event tap is really enabled. */
 const pasteWaiters = [];
-function startKeys() {
-  if (!fs.existsSync(KEYS_SWIFT)) { log("keys.missing", {}); return; }
+let keysReady = false;
+let keysRestarting = false;
+function setKeysReady(v) {
+  if (keysReady === v) return;
+  keysReady = v;
+  log("keys.ready", { ready: v });
+  if (onboarding) onboarding.setKeysReady(v);
+}
+async function keysBinary() {
   const prebuilt = path.join(__dirname, "native", "MavenKeys");
-  const bin = fs.existsSync(prebuilt) ? prebuilt : null;
-  keys = spawn(bin || "xcrun", bin ? [] : ["swift", KEYS_SWIFT], { cwd: __dirname, stdio: ["pipe", "pipe", "pipe"] });
-  keys.stdout.on("data", (chunk) => {
-    for (const line of String(chunk || "").split(/\r?\n/)) {
+  if (fs.existsSync(prebuilt)) return prebuilt;
+  try {
+    const st = fs.statSync(KEYS_SWIFT);
+    const dir = path.join(app.getPath("userData"), "bin");
+    const out = path.join(dir, `MavenKeys-${Math.round(st.mtimeMs)}-${st.size}`);
+    if (fs.existsSync(out)) return out;
+    fs.mkdirSync(dir, { recursive: true });
+    log("keys.compiling", {});
+    await execFileP("/usr/bin/xcrun", ["swiftc", "-O", "-o", out, KEYS_SWIFT], { timeout: 180000 });
+    return out;
+  } catch (error) {
+    log("keys.compile_failed", { error: String(error?.message || error).slice(0, 300) });
+    return null; // fall back to `xcrun swift`
+  }
+}
+async function startKeys() {
+  if (keys || quitting) return;
+  if (!fs.existsSync(KEYS_SWIFT)) { log("keys.missing", {}); return; }
+  setKeysReady(false);
+  const bin = await keysBinary();
+  if (keys || quitting) return;
+  const proc = spawn(bin || "xcrun", bin ? [] : ["swift", KEYS_SWIFT], { cwd: __dirname, stdio: ["pipe", "pipe", "pipe"] });
+  keys = proc;
+  let buf = "";
+  proc.stdout.on("data", (chunk) => {
+    buf += String(chunk || "");
+    const lines = buf.split(/\r?\n/);
+    buf = lines.pop(); // a line split across chunks is kept for the next one
+    for (const line of lines) {
       const t = line.trim();
       if (!t) continue;
       if (t === "pasted" || t.startsWith("pasted\t")) { const w = pasteWaiters.shift(); if (w) w(t.split("\t")[1] || ""); continue; }
       if (t.startsWith("dictate-hold-")) { onChord(t.slice("dictate-hold-".length)); continue; }
+      if (t === "ready") setKeysReady(true);
       log("keys.status", { line: t });
     }
   });
-  keys.stderr.on("data", (c) => log("keys.stderr", { line: String(c).slice(0, 300) }));
-  keys.on("exit", (code) => {
+  proc.stderr.on("data", (c) => log("keys.stderr", { line: String(c).slice(0, 300) }));
+  proc.on("error", (error) => log("keys.spawn_failed", { error }));
+  proc.on("exit", (code) => {
     log("keys.exit", { code });
-    keys = null;
-    if (!quitting) setTimeout(startKeys, 3000);
+    if (keys === proc) keys = null;
+    setKeysReady(false);
+    while (pasteWaiters.length) pasteWaiters.shift()(null);
+    if (quitting) return;
+    if (keysRestarting) { keysRestarting = false; void startKeys(); }
+    else setTimeout(() => void startKeys(), 3000);
   });
+}
+function restartKeys(why) {
+  log("keys.restart", { why });
+  if (!keys) { void startKeys(); return; }
+  keysRestarting = true;
+  try { keys.kill(); } catch (_) {}
 }
 function nativePaste(timeoutMs = 400) {
   if (!keys || keys.killed || !keys.stdin || keys.stdin.destroyed) return Promise.resolve(null);
@@ -479,16 +669,29 @@ app.on("window-all-closed", (e) => { if (!quitting) e.preventDefault?.(); });
 app.on("before-quit", () => {
   quitting = true;
   try { keys && keys.kill(); } catch (_) {}
+  try { targets && !targets.isDestroyed() && targets.destroy(); } catch (_) {}
   try { heraInstance && heraInstance.destroy(); } catch (_) {}
 });
 app.whenReady().then(() => {
   if (app.dock) app.dock.hide();
   buildTray();
   createIsland();
-  startKeys();
-  onboarding = createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shell, session, log });
-  if (!onboarding.isDone()) onboarding.show();
+  onboarding = createOnboarding({
+    app, BrowserWindow, ipcMain, systemPreferences, shell, session, log,
+    keysReady: () => keysReady,
+    onAccessibilityGranted: () => restartKeys("accessibility granted"),
+    onPlaceStep: (on) => {
+      if (on) { saveSpot("bottom-right", screen.getPrimaryDisplay().id); setIslandAllowed(true); }
+      showTargetsHint(on);
+    },
+    onClosed: () => { showTargetsHint(false); setIslandAllowed(true); }, // finished or closed early: always shown after
+  });
+  if (onboarding.isDone()) setIslandAllowed(true);
+  else onboarding.show();
+  void startKeys();
   screen.on("display-metrics-changed", placeIsland);
+  screen.on("display-added", placeIsland);
+  screen.on("display-removed", placeIsland);
   log("maven.ready", { hasKey: Boolean(SUPABASE_ANON_KEY) });
 });
 

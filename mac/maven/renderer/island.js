@@ -58,6 +58,25 @@ window.maven.onLevel(({ v }) => {
 
 // Click-through everywhere except the capsule and its buttons.
 island.addEventListener("mouseenter", () => { island.classList.add("open"); window.maven.hover(true); });
-island.addEventListener("mouseleave", () => { island.classList.remove("open"); window.maven.hover(false); });
+island.addEventListener("mouseleave", () => { if (dragging) return; island.classList.remove("open"); window.maven.hover(false); });
+
+/* Manual drag: press on the capsule (not the buttons), main follows the cursor
+   and on release glides it to the nearest of the three bottom spots. */
+let dragging = false;
+island.querySelector(".face").addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  dragging = true;
+  island.classList.add("dragging");
+  window.maven.drag("start");
+});
+function endDrag() {
+  if (!dragging) return;
+  dragging = false;
+  island.classList.remove("dragging");
+  window.maven.drag("end");
+}
+window.addEventListener("mouseup", endDrag);
+window.addEventListener("blur", endDrag);
 island.querySelector(".x").addEventListener("click", () => window.maven.action("cancel"));
 island.querySelector(".ok").addEventListener("click", () => window.maven.action("done"));

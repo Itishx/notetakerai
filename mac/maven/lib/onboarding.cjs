@@ -4,9 +4,13 @@
 const fs = require("fs");
 const path = require("path");
 
-function createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shell, session, log = () => {} }) {
+function createOnboarding({
+  app, BrowserWindow, ipcMain, systemPreferences, shell, session, log = () => {},
+  keysReady = () => false, onAccessibilityGranted = () => {}, onPlaceStep = () => {}, onClosed = () => {},
+}) {
   let win = null;
   let step = "";
+  let lastAccessibility = null; // to spot the moment Accessibility turns on
   const statePath = () => path.join(app.getPath("userData"), "onboarding.json");
 
   function isDone() {
@@ -19,13 +23,22 @@ function createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shel
     let accessibility = false, microphone = false;
     try { accessibility = systemPreferences.isTrustedAccessibilityClient(false); } catch (_) {}
     try { microphone = systemPreferences.getMediaAccessStatus("microphone") === "granted"; } catch (_) {}
+    // Just granted: the key watcher's tap was made without it and must be re-made.
+    if (lastAccessibility === false && accessibility) { log("onboarding.accessibility_granted", {}); onAccessibilityGranted(); }
+    lastAccessibility = accessibility;
     return { accessibility, microphone };
   }
   function send(channel, payload) {
     if (win && !win.isDestroyed()) { try { win.webContents.send(channel, payload); } catch (_) {} }
   }
+  function bringForward() {
+    if (!win || win.isDestroyed()) return;
+    try { app.focus({ steal: true }); } catch (_) {}
+    win.show(); win.focus();
+  }
 
   ipcMain.handle("onboarding:perms", () => perms());
+  ipcMain.handle("onboarding:keys", () => ({ ready: Boolean(keysReady()), accessibility: perms().accessibility }));
   ipcMain.handle("onboarding:request", async (_e, which) => {
     if (which === "accessibility") {
       try { systemPreferences.isTrustedAccessibilityClient(true); } catch (_) {}
@@ -35,11 +48,21 @@ function createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shel
     }
     return perms();
   });
-  ipcMain.on("onboarding:step", (_e, s) => { step = String(s || ""); log("onboarding.step", { step }); });
+  ipcMain.on("onboarding:step", (_e, s) => {
+    const prev = step;
+    step = String(s || "");
+    log("onboarding.step", { step });
+    if (step === "place" && prev !== "place") onPlaceStep(true);
+    if (prev === "place" && step !== "place") onPlaceStep(false);
+    // System Settings had the focus after the permissions: without this the
+    // practice paste lands in whatever app is in front, not in the box.
+    if (step === "shortcut" || step === "practice") bringForward();
+  });
   ipcMain.on("onboarding:finish", () => { markDone(); log("onboarding.done", {}); if (win && !win.isDestroyed()) win.close(); });
 
   function show() {
-    if (win && !win.isDestroyed()) { win.show(); win.focus(); return; }
+    if (win && !win.isDestroyed()) { bringForward(); return; }
+    lastAccessibility = null;
     const partition = "persist:maven-onboarding";
     try { session.fromPartition(partition).setPermissionRequestHandler((_wc, p, cb) => cb(p === "media")); } catch (_) {}
     win = new BrowserWindow({
@@ -48,8 +71,12 @@ function createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shel
       webPreferences: { preload: path.join(__dirname, "..", "renderer", "onboarding-preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true, partition },
     });
     win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
-    win.once("ready-to-show", () => { try { app.focus({ steal: true }); } catch (_) {} win.show(); win.focus(); });
-    win.on("closed", () => { win = null; step = ""; });
+    win.once("ready-to-show", bringForward);
+    win.on("closed", () => {
+      if (step === "place") onPlaceStep(false);
+      win = null; step = "";
+      onClosed();
+    });
   }
 
   /* Called by main for every Control+Option press. Returns true when the
@@ -57,10 +84,15 @@ function createOnboarding({ app, BrowserWindow, ipcMain, systemPreferences, shel
   function onChord() {
     if (!win || win.isDestroyed()) return false;
     send("onboarding:chord", {});
-    return step === "shortcut";
+    return step === "shortcut" || step === "place";
   }
 
-  return { show, isDone, onChord, isOpen: () => Boolean(win && !win.isDestroyed()) };
+  return {
+    show, isDone, onChord,
+    isOpen: () => Boolean(win && !win.isDestroyed()),
+    setKeysReady: (ready) => send("onboarding:keys", { ready: Boolean(ready) }),
+    placed: (spot) => send("onboarding:placed", { spot }),
+  };
 }
 
 module.exports = { createOnboarding };

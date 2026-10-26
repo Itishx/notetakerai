@@ -10,10 +10,8 @@
 <div class="drag"></div>
 <main>
   <section data-step="welcome" class="on">
-    <svg class="mark" viewBox="0 0 64 64" aria-label="Maven">
-      <defs><linearGradient id="ink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16150f"/><stop offset=".45" stop-color="#22201a"/><stop offset="1" stop-color="#16150f" stop-opacity=".18"/></linearGradient></defs>
-      <g transform="rotate(41 32 32)"><rect x="20" y="6" width="10" height="52" rx="5" fill="url(#ink)"/><rect x="35" y="6" width="10" height="52" rx="5" fill="url(#ink)"/></g>
-    </svg>
+    <!-- Maven first appears here, not floating on the screen (2026-10-26). -->
+    <div class="capsule" id="welcome-capsule" aria-label="Maven"><span class="eye"></span><span class="eye"></span></div>
     <h1>Meet Maven</h1>
     <p class="lede">It writes what you say, wherever you type.</p>
     <button class="primary" data-go="next">Get started</button>
@@ -47,8 +45,15 @@
     <h1>Your shortcut</h1>
     <div class="keys"><kbd>⌃</kbd><kbd>⌥</kbd></div>
     <p class="lede">Press once to start, press again to stop.</p>
-    <p class="status" id="key-status">Try it now: press Control and Option together.</p>
+    <p class="status" id="key-status">Getting the shortcut ready…</p>
     <button class="primary hidden" id="key-continue" data-go="next">Continue</button>
+  </section>
+
+  <section data-step="place">
+    <h1>Put Maven where you like</h1>
+    <p class="lede">Drag Maven to a corner or the bottom. He stays there.</p>
+    <p class="status" id="place-status">He's at the bottom right of your screen now.</p>
+    <button class="primary" id="place-continue" data-go="next">Continue</button>
   </section>
 
   <section data-step="practice">
@@ -66,7 +71,7 @@
     <h1>You're set.</h1>
     <div class="keys small"><kbd>⌃</kbd><kbd>⌥</kbd></div>
     <p class="lede">Press once to start, press again to stop and paste.</p>
-    <p class="note">Maven lives in your menu bar. Drag the mark anywhere.</p>
+    <p class="note">Maven lives in your menu bar. Drag him to a corner or the bottom.</p>
     <button class="primary" id="finish">Start using Maven</button>
   </section>
 </main>

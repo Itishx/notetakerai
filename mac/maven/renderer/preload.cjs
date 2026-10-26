@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("maven", {
   onLevel: (fn) => ipcRenderer.on("maven:level", (_e, p) => fn(p)),
   hover: (over) => ipcRenderer.send("maven:hover", Boolean(over)),
   action: (a) => ipcRenderer.send("maven:action", a),
+  drag: (what) => ipcRenderer.send("maven:drag", what),
 });

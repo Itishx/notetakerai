@@ -5,7 +5,7 @@ import Foundation
 /* Maven's key watcher (trimmed from the Braino Mac key watcher, 26 Oct 2026).
    Listens only. It reports the Control+Option chord and takes one command on
    stdin, "paste", which sends a real Cmd+V.
-   stdout: maven-keys-ready, maven-tap-ready, needs-accessibility,
+   stdout: maven-keys-ready, ready (event tap enabled), needs-accessibility,
            event-tap-unavailable, dictate-hold-start / -end / -cancel,
            pasted<TAB><front app> */
 final class MavenKeys {
@@ -14,8 +14,10 @@ final class MavenKeys {
   private var chordHeld = false
   private var lastUnavailableLogAt: TimeInterval = 0
 
+  private var saidNeedsAccessibility = false
+
   func start() {
-    requestAccessibilityPrompt()
+    // No system prompt from here: onboarding asks for Accessibility and explains why.
     printLine("maven-keys-ready")
     tryStartEventTap()
     listenForCommands()
@@ -28,17 +30,10 @@ final class MavenKeys {
     RunLoop.main.run()
   }
 
-  private func requestAccessibilityPrompt() {
-    let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-    let options = [key: true] as CFDictionary
-    if !AXIsProcessTrustedWithOptions(options) {
-      printLine("needs-accessibility")
-    }
-  }
-
   private func tryStartEventTap() {
     guard AXIsProcessTrusted() else {
-      requestAccessibilityPrompt()
+      // Said once, not every 2 s (the old code re-prompted on every retry).
+      if !saidNeedsAccessibility { printLine("needs-accessibility"); saidNeedsAccessibility = true }
       return
     }
     let watched: [CGEventType] = [.flagsChanged, .keyDown]
@@ -66,7 +61,7 @@ final class MavenKeys {
       CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
     }
     CGEvent.tapEnable(tap: tap, enable: true)
-    printLine("maven-tap-ready")
+    printLine("ready")
   }
 
   private func handle(_ type: CGEventType, _ event: CGEvent) {
