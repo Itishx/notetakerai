@@ -206,10 +206,15 @@ const card = (() => {
     const wasOpen = open;
     fill(c);
     // Measure the natural height with the content laid out (still invisible).
-    el.style.height = "auto";
+    // Lay the body out in flow for a moment, so its real height is measured
+    // (as an absolute child it measured short and the card cut off the buttons).
     const body = $(".body");
-    ch = Math.min(206, Math.max(96, Math.ceil(body.scrollHeight)));
-    el.style.setProperty("--ch", ch + "px"); el.style.height = "";
+    const prev = body.getAttribute("style") || "";
+    body.style.position = "relative"; body.style.inset = "auto"; body.style.transform = "none"; body.style.transition = "none";
+    const natural = Math.ceil(body.getBoundingClientRect().height);
+    body.setAttribute("style", prev);
+    ch = Math.min(212, Math.max(96, natural));
+    el.style.setProperty("--ch", ch + "px");
     if (!wasOpen) {
       // Start as the pill, exactly, with no transition; then spring open.
       el.classList.remove("anim", "closing");

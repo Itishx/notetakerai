@@ -152,7 +152,7 @@ body.a-right .body { transform-origin: 100% 100%; } body.a-centre .body { transf
 .lbl .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lbl .right { color: rgba(246,243,234,.55); font-weight: 500; white-space: nowrap; flex: none; }
 .preview, .editor { background: rgba(255,255,255,.07); border-radius: 8px; padding: 8px 10px; color: rgba(246,243,234,.92); }
-.preview { max-height: 76px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; white-space: pre-wrap; word-break: break-word; }
+.preview { max-height: 62px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; word-break: break-word; }
 .editor { display: none; resize: none; border: 0; outline: none; font: inherit; margin: 0; height: 64px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
 #card.editing .preview { display: none; } #card.editing .editor { display: block; } #card.editing .edit { display: none; }
 .preview:empty, .opts:empty { display: none; }
@@ -178,3 +178,7 @@ body.a-right .body { transform-origin: 100% 100%; } body.a-centre .body { transf
    island's glow. Write (dictation) keeps the warm light; done is green for both. */
 body.do #cardwrap { filter: drop-shadow(0 0 .5px rgba(207,227,255,.75)) drop-shadow(0 0 8px rgba(90,150,255,.45)) drop-shadow(0 10px 22px rgba(0,0,0,.32)); }
 body.do .acts button:focus-visible, body.do .opts button:focus-visible { outline-color: rgba(120,170,255,.95); }
+
+/* The actions row is always visible; the preview gives way first. */
+.acts { flex: none; }
+.body { grid-template-rows: auto minmax(0, auto) auto; }
