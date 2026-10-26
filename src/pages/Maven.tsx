@@ -92,39 +92,39 @@ function useOnScreen<T extends HTMLElement>() {
   return [ref, on] as const;
 }
 
-/* raw: what you actually said; ~word~ is what Maven took out. fixed: what it
-   did, in plain words. That before/after is the whole point of the section. */
-type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; fixed: string[]; wait?: string; form?: string[] };
+/* raw: what you actually said; ~word~ is what Maven took out; out is what
+   lands. That before/after is the whole point of the section. */
+type MvScene = { group: "write" | "do"; reply?: string; app: string; raw: string; title: string; p: string; out: string[]; field: string; wait?: string; form?: string[] };
 const SCENES: MvScene[] = [
   /* It writes */
   { group: "write", app: "Slack", field: "To: Rahul Mehta", raw: "~um so~ tell rahul the deck is ~uh~ done numbers by ~five no wait~ six and the budget is twenty five thousand",
     title: "Talk messy. It writes clean.", p: "Ums go, full stops come in, and when you change your mind it keeps the last thing you said. Four things in a row become a list, and money and phone numbers come out the way you'd type them.",
-    out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."], fixed: ["Took out “um” and “uh”", "Kept six, not five", "₹25,000, not the words"] },
+    out: ["The deck is done. Numbers by 6 PM, and the budget is ₹25,000."] },
   { group: "write", app: "WhatsApp", field: "Neha: are we still on for friday?", raw: "reply to this ~um~ yes friday works see you at eight",
     title: "Replies to what's on your screen.", p: "Say “reply to this” and it reads the message you're looking at, then writes your answer right in the box. You press send.",
-    out: ["Yes, Friday works. See you at 8!"], fixed: ["Read Neha's message", "Wrote it in the reply box", "Left Send to you"] },
+    out: ["Yes, Friday works. See you at 8!"] },
   { group: "write", app: "Notes", field: "Launch list", raw: "add ~uh~ record the maven film to my launch list",
     title: "Say it once. It remembers.", p: "Your lists, the names you use and how they're spelled, your address and email. Tell it once and it knows which list you mean next time.",
-    out: ["- Send the deck to Rahul", "- Book the venue", "- Record the Maven film"], fixed: ["Knew which list", "Added it at the end"] },
+    out: ["- Send the deck to Rahul", "- Book the venue", "- Record the Maven film"] },
   /* It does */
   { group: "do", app: "Chrome", field: "New tab", raw: "maven could you please open youtube",
     title: "Opens and switches.", p: "Apps, tabs and websites. Say where you want to be and you're there. No hunting through the dock or forty tabs.",
-    out: ["youtube.com", "YouTube is open in a new tab."], fixed: ["Opened Chrome", "Went to YouTube"], reply: "YouTube. Open." },
+    out: ["youtube.com", "YouTube is open in a new tab."], reply: "YouTube. Open." },
   { group: "do", app: "Slack", field: "To: Rahul Mehta", raw: "tell rahul the deck is done",
     title: "Sends messages, with your yes.", p: "WhatsApp, Slack or Mail. It finds the person, writes the message, and stops. Nothing goes out until you say so.",
-    out: ["The deck is done."], fixed: ["Found Rahul in Slack", "Wrote the message", "Waiting for your yes"], reply: "Drafted. Send?" },
+    out: ["The deck is done."], reply: "Drafted. Send?" },
   { group: "do", app: "Chrome", field: "Checkout · Shipping address", raw: "fill in my address",
     title: "Fills forms.", p: "Names, addresses, emails, phone numbers, from what it already knows about you. It stops before Submit so you can check.",
-    form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], fixed: ["Filled 3 fields from what it knows", "Didn't press Submit"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
+    form: ["Full name", "Address", "City and PIN"], out: ["Itish Pande", "12, 4th Cross, Indiranagar", "Bengaluru 560038"], wait: "Waiting for your yes to submit", reply: "Filled. Your call." },
 ];
 
 function Raw({ text }: { text: string }) {
   return <>{text.split(/(~[^~]+~)/).filter(Boolean).map((t, i) => t.startsWith("~") ? <s key={i}>{t.slice(1, -1)}</s> : <span key={i}>{t}</span>)}</>;
 }
 
-/* The features as a switcher (2026-10-26, replaces the stacking deck): the
-   list on the left, one Mac window on the right playing the chosen one. It
-   moves on by itself every few seconds; a click takes over. */
+/* What it does (2026-10-26, calm rewrite): one scene at a time. A big Mac
+   window, then the title, one sentence and what you said. It moves on slowly
+   by itself; the arrows or dots take over. */
 function MvSwitcher() {
   const [ref, on] = useOnScreen<HTMLDivElement>();
   const [group, setGroup] = useState<"write" | "do">("write");
@@ -135,39 +135,35 @@ function MvSwitcher() {
   useEffect(() => {
     if (!on) return;
     setPhase(0);
-    const a = window.setTimeout(() => setPhase(1), 1800);
+    const a = window.setTimeout(() => setPhase(1), 1600);
     const b = held ? 0 : window.setTimeout(() => {
-      // Through "It writes", then on to "It does", and round again.
       if (at + 1 < list.length) setAt(at + 1);
       else { setGroup((g) => (g === "write" ? "do" : "write")); setAt(0); }
-    }, 6500);
+    }, 9000);
     return () => { clearTimeout(a); if (b) clearTimeout(b); };
   }, [on, at, held, group]);
   const s = list[at] || list[0];
+  const pick = (g: "write" | "do") => { setGroup(g); setAt(0); setHeld(true); };
+  const go = (d: number) => { setAt((at + d + list.length) % list.length); setHeld(true); };
   return (
-    <div ref={ref}>
-    <div className="mv-tabs mv-tabs-inline" role="tablist" aria-label="What Maven does">
-      <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => { setGroup("write"); setAt(0); setHeld(true); }}>It writes</button>
-      <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => { setGroup("do"); setAt(0); setHeld(true); }}>It does</button>
-    </div>
-    <div className="mv-stage2">
-      <div className="mv-chips" role="tablist" aria-label="Feature">
-        {list.map((x, i) => (
-          <button key={x.title} type="button" role="tab" aria-selected={i === at} className={i === at ? "on" : ""} onClick={() => { setAt(i); setHeld(true); }}>
-            {x.title}{i === at && !held && <span className="mv-chip-bar" key={group + at} />}
-          </button>
-        ))}
+    <div ref={ref} className="mv-one">
+      <div className="mv-tabs mv-tabs-inline" role="tablist" aria-label="What Maven does">
+        <button type="button" role="tab" aria-selected={group === "write"} className={group === "write" ? "on" : ""} onClick={() => pick("write")}>It writes</button>
+        <button type="button" role="tab" aria-selected={group === "do"} className={group === "do" ? "on" : ""} onClick={() => pick("do")}>It does</button>
       </div>
       <MvSceneWindow s={s} phase={phase} key={group + at} />
-      <div className="mv-cap2" key={"c" + group + at}>
-        <p className="mv-switch-p">{s.p}</p>
-        <div className="mv-said">
-          <p className="mv-said-k">What you said</p>
-          <p className="mv-said-raw">“<Raw text={s.raw} />”</p>
-          <ul className={"mv-fixed" + (phase ? " is-on" : "")}>{s.fixed.map((f) => <li key={f}>{f}</li>)}</ul>
-        </div>
+      <div className="mv-one-cap" key={"c" + group + at}>
+        <h3 className="mv-one-t">{s.title}</h3>
+        <p className="mv-one-p">{s.p}</p>
+        <p className="mv-one-said"><span>You said</span>“<Raw text={s.raw} />”</p>
       </div>
-    </div>
+      <div className="mv-one-nav">
+        <button type="button" aria-label="Previous" onClick={() => go(-1)}>‹</button>
+        <span className="mv-one-dots">
+          {list.map((x, i) => <button key={x.title} type="button" aria-label={x.title} className={i === at ? "on" : ""} onClick={() => { setAt(i); setHeld(true); }} />)}
+        </span>
+        <button type="button" aria-label="Next" onClick={() => go(1)}>›</button>
+      </div>
     </div>
   );
 }
@@ -517,16 +513,16 @@ export default function Maven() {
               <h2 className="mv-h2">Other apps stop at typing.<br />Maven keeps going.</h2>
               <p>Dictation apps are good at one thing: you talk, they type. Maven does that too. Then it uses your Mac for you, one small step at a time, and always asks before anything goes out.</p>
             </div>
-            <ol className="mv-track aff-reveal">
-              {BEYOND.map((r, i) => (
-                <li key={r.k} className={r.them ? "is-both" : "is-us"} style={{ animationDelay: `${i * 0.08}s` }}>
-                  {!r.them && i === BEYOND.findIndex((x) => !x.them) && <span className="mv-track-stop">Other apps stop here</span>}
-                  <i aria-hidden="true" />
-                  <span>{r.k}</span>
-                  <small>{r.them ? "Every dictation app" : "Only Maven"}</small>
-                </li>
-              ))}
-            </ol>
+            <div className="mv-vs aff-reveal">
+              <div className="mv-vs-col is-them">
+                <p className="mv-vs-k">Dictation apps</p>
+                <ul>{BEYOND.filter((r) => r.them).map((r) => <li key={r.k}>{r.k}</li>)}</ul>
+              </div>
+              <div className="mv-vs-col is-us">
+                <p className="mv-vs-k">Maven</p>
+                <ul>{BEYOND.map((r) => <li key={r.k} className={r.them ? "" : "is-more"}>{r.k}</li>)}</ul>
+              </div>
+            </div>
           </div>
         </section>
 
