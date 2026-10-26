@@ -254,7 +254,7 @@ const FAQ = [
 
 const MAVEN_FILM = "";
 /* "What it does" and "Beyond dictation" are off until they are redesigned from the PRD (2026-10-26). */
-const SHOW_DRAFT_SECTIONS = false;
+const SHOW_DRAFT_SECTIONS = true;
 
 /* ── The announcement letter (2026-10-26): the AffectiveOS page's voice and
    layout, text and diagrams only. ── */
