@@ -218,8 +218,7 @@ function MavenLetter() {
         <Viz caption="Figure 3. The same voice, two kinds of help."><FigTwoModes /></Viz>
         <p>
           <b>What it does, and what it doesn't.</b> Maven only does things that end in text: it types, sends,
-          fills, and gets you to the place where you type. One step at a time. Anything bigger, like planning a
-          trip or running a whole task across apps, is Braino's job, not Maven's.
+          fills, and gets you to the place where you type. One step at a time. Anything bigger, like planning a trip or running a whole task across apps, is out of scope on purpose.
         </p>
       </article>
 
