@@ -141,12 +141,41 @@ function addMemory(fact, word = "") {
 const LANGUAGES = ["en", "hi", "hinglish"];
 function getSettings() { const v = readJson(p("settings.json"), {}); return v && typeof v === "object" ? v : {}; }
 function setSetting(k, v) { const s = getSettings(); s[k] = v; writeJson(p("settings.json"), s); return s; }
-function getLanguage() { const l = String(getSettings().language || "en"); return LANGUAGES.includes(l) ? l : "en"; }
-function setLanguage(l) { setSetting("language", LANGUAGES.includes(String(l)) ? String(l) : "en"); return getLanguage(); }
+/* More than one language can be picked, and Auto is the default (2026-10-28).
+   Stored as settings.languages: ["auto"] or a subset of LANGUAGES. One pick
+   locks transcription to it; Auto or several lets Maven detect. */
+function getLanguages() {
+  const s = getSettings();
+  let v = Array.isArray(s.languages) ? s.languages.map(String) : (s.language ? [String(s.language)] : ["auto"]);
+  v = v.filter((l) => l === "auto" || LANGUAGES.includes(l));
+  return v.length ? v : ["auto"];
+}
+function setLanguages(list) {
+  let v = (Array.isArray(list) ? list : [list]).map(String).filter((l) => l === "auto" || LANGUAGES.includes(l));
+  if (!v.length || v.includes("auto")) v = ["auto"];
+  setSetting("languages", v); setSetting("language", v.length === 1 && v[0] !== "auto" ? v[0] : "auto");
+  return getLanguages();
+}
+/* What transcription is told: one language, or "auto". */
+function getLanguage() { const v = getLanguages(); return v.length === 1 && v[0] !== "auto" ? v[0] : "auto"; }
+function setLanguage(l) { return setLanguages([l]); }
+/* What was actually spoken, from the text: Devanagari -> hi, Roman with
+   Hindi words -> hinglish, else en; limited to the languages picked. */
+const HINGLISH_WORDS = /\b(hai|hain|nahi|nahin|kya|kal|baje|haan|acha|accha|theek|mujhe|tum|aap|bhej|karo|kar|raha|rahi|tha|thi|yaar|matlab|bhai|bolo|kholo|dena|lena|abhi|kyun|kaise)\b/gi;
+function detectLanguage(text, allowed = getLanguages()) {
+  const t = String(text || "");
+  const deva = (t.match(/[\u0900-\u097F]/g) || []).length, letters = (t.match(/\p{L}/gu) || []).length || 1;
+  const words = t.split(/\s+/).filter(Boolean).length || 1;
+  const hg = (t.match(HINGLISH_WORDS) || []).length;
+  let guess = deva / letters > 0.3 ? "hi" : hg / words >= 0.15 ? "hinglish" : "en";
+  const ok = allowed.includes("auto") ? LANGUAGES : allowed;
+  if (!ok.includes(guess)) guess = ok.includes("en") && guess !== "hi" ? "en" : ok[0];
+  return guess;
+}
 
 /* ---------- the record of every Do command ---------- */
 function appendCommand(row) {
   try { fs.mkdirSync(p("training"), { recursive: true }); fs.appendFileSync(p("training", "commands.jsonl"), JSON.stringify(row) + "\n"); } catch (_) {}
 }
 
-module.exports = { LANGUAGES, getSettings, setSetting, getLanguage, setLanguage, getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };
+module.exports = { LANGUAGES, getSettings, setSetting, getLanguage, setLanguage, getLanguages, setLanguages, detectLanguage, getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };

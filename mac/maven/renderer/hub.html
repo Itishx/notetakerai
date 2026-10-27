@@ -64,28 +64,59 @@
   </section>
 
   <section id="settings" class="page">
-    <header class="head"><h1>Settings</h1></header>
-    <div class="rows">
-      <div class="row"><span>Write (dictation)</span><kbd id="set-shortcut">⌃⌥</kbd></div>
-      <div class="row"><span>Do (one small job)</span><kbd id="set-do">fn ⌃</kbd></div>
-      <label class="row"><span>Language</span><select id="set-language"><option value="en">English</option><option value="hi">Hindi (हिन्दी)</option><option value="hinglish">Hinglish (Roman letters)</option></select></label>
-      <div class="row"><span>Microphone</span><em id="set-mic">System default</em></div>
-      <label class="row"><span>Launch at login</span><input type="checkbox" id="set-login"></label>
-      <div class="row"><span>Onboarding</span><button id="set-onboard">Show again</button></div>
-      <div class="row"><span>Your data</span><button id="set-data">Open folder</button></div>
-      <div class="row"><span>History</span><button id="set-delete" class="danger">Delete all history</button></div>
+    <header class="head"><h1>Settings</h1><p class="sub">Everything here stays on this Mac.</p></header>
+
+    <div class="st-group">
+      <h2 class="st-h">Shortcuts</h2>
+      <div class="st-panel">
+        <div class="st-row"><div><b>Write</b><small>Type anything, cleaned up</small></div><span class="st-keys" id="set-shortcut">⌃⌥</span></div>
+        <div class="st-row"><div><b>Do</b><small>One small job, after your yes when it sends</small></div><span class="st-keys" id="set-do">fn ⌃</span></div>
+        <p class="st-note">Press once to start, press again to stop.</p>
+      </div>
     </div>
-    <h2 class="subhead">My details</h2>
-    <p class="sub">For "fill in my address". Maven pastes one into the box you're in, after you say yes. It never presses Submit. Kept on this Mac.</p>
-    <form class="rows" id="details-form">
-      <label class="row"><span>Name</span><input name="name" autocomplete="off"></label>
-      <label class="row"><span>Email</span><input name="email" type="email" autocomplete="off"></label>
-      <label class="row"><span>Phone</span><input name="phone" autocomplete="off"></label>
-      <label class="row"><span>Address</span><textarea name="address" rows="2"></textarea></label>
-      <div class="row"><span id="details-status"></span><button>Save</button></div>
-    </form>
-    <div class="rows">
-      <div class="row"><span>About</span><em>Maven by Affective · <span id="set-version"></span></em></div>
+
+    <div class="st-group">
+      <h2 class="st-h">Languages</h2>
+      <div class="st-panel">
+        <div class="st-row st-col"><div><b>What you speak</b><small>Pick one to lock it, or Auto to let Maven tell which one you're speaking.</small></div>
+          <div class="st-chips" id="set-langs" role="group" aria-label="Languages">
+            <button type="button" data-l="auto">Auto</button>
+            <button type="button" data-l="en">English</button>
+            <button type="button" data-l="hi">हिन्दी Hindi</button>
+            <button type="button" data-l="hinglish">Hinglish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="st-group">
+      <h2 class="st-h">General</h2>
+      <div class="st-panel">
+        <div class="st-row"><div><b>Microphone</b></div><em id="set-mic">System default</em></div>
+        <label class="st-row"><div><b>Launch at login</b><small>Maven is there when your Mac starts</small></div><span class="st-switch"><input type="checkbox" id="set-login"><i></i></span></label>
+        <div class="st-row"><div><b>Onboarding</b></div><button class="st-btn" id="set-onboard">Show again</button></div>
+      </div>
+    </div>
+
+    <div class="st-group">
+      <h2 class="st-h">My details</h2>
+      <p class="st-note st-out">For "fill in my address". Maven pastes one into the box you're in, after you say yes. It never presses Submit.</p>
+      <form class="st-panel" id="details-form">
+        <label class="st-row"><div><b>Name</b></div><input class="st-in" name="name" autocomplete="off"></label>
+        <label class="st-row"><div><b>Email</b></div><input class="st-in" name="email" type="email" autocomplete="off"></label>
+        <label class="st-row"><div><b>Phone</b></div><input class="st-in" name="phone" autocomplete="off"></label>
+        <label class="st-row st-col"><div><b>Address</b></div><textarea class="st-in" name="address" rows="2"></textarea></label>
+        <div class="st-row"><span id="details-status" class="st-ok"></span><button class="st-btn st-primary">Save</button></div>
+      </form>
+    </div>
+
+    <div class="st-group">
+      <h2 class="st-h">Your data</h2>
+      <div class="st-panel">
+        <div class="st-row"><div><b>Data folder</b><small>History, Dictionary, Snippets and training data</small></div><button class="st-btn" id="set-data">Open</button></div>
+        <div class="st-row"><div><b>History</b><small>Every dictation, on this Mac</small></div><button class="st-btn st-danger" id="set-delete">Delete all</button></div>
+        <div class="st-row"><div><b>About</b></div><em>Maven by Affective · <span id="set-version"></span></em></div>
+      </div>
     </div>
   </section>
 </main>

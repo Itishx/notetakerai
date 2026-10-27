@@ -652,7 +652,7 @@ function printDictation(d) {
   const lines = [
     "",
     `[MAVEN] ── ${sec(d.audio.ms)} spoken · ${d.pasted.ok ? `pasted into ${d.pasted.app || "the front app"}` : "copied (no text box)"} · total ${sec(d.totalMs)}`,
-    `  heard   (${d.heard.provider || "?"}${d.language && d.language !== "en" ? ", " + d.language : ""}, ${sec(d.textMs)}): "${d.raw}"`,
+    `  heard   (${d.heard.provider || "?"}, ${dictationLanguage() === "auto" ? "auto→" : ""}${d.language || "en"}, ${sec(d.textMs)}): "${d.raw}"`,
     `  cleanup ${cleanLine}`,
     used ? `  final   "${d.finalText}"` : "  final   same as heard",
     `  changes removed ${diff.removed.length ? diff.removed.map((w) => `"${w}"`).join(", ") : "nothing"}${diff.added.length ? ` · added ${diff.added.map((w) => `"${w}"`).join(", ")}` : ""}`,
@@ -716,7 +716,9 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
       islandHide(1400); return;
     }
     if (mode === "do") { await runDo({ raw: heard.transcript.trim(), heard, audio, t0, textMs }); return; }
-    const language = dictationLanguage();
+    // Auto or several languages: transcribe unlocked, then read the language from the text.
+    const asked = dictationLanguage();
+    const language = asked === "auto" ? mavenStore.detectLanguage(heard.transcript) : asked;
     const raw = language === "en" ? spokenNumbersToDigits(heard.transcript.trim()) : heard.transcript.trim();
     const quick = quickTidy(raw, language);
     const c0 = Date.now();

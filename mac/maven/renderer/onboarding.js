@@ -47,9 +47,17 @@ $("finish").addEventListener("click", () => api.finish());
 const ENTER = {
   language() {
     const cards = [...document.querySelectorAll("[data-lang]")];
-    const mark = (l) => cards.forEach((c) => c.classList.toggle("active", c.dataset.lang === l));
-    api.getLanguage().then((l) => mark(l || "en")).catch(() => {});
-    const onPick = (e) => { const l = e.currentTarget.dataset.lang; mark(l); api.setLanguage(l); };
+    // One or more languages; Auto is the default and clears the others (2026-10-28).
+    let picked = ["auto"];
+    const mark = () => cards.forEach((c) => c.classList.toggle("active", picked.includes(c.dataset.lang)));
+    api.getLanguage().then((l) => { picked = Array.isArray(l) ? l : [l && l !== "en" ? l : "auto"]; mark(); }).catch(() => mark());
+    const onPick = (e) => {
+      const l = e.currentTarget.dataset.lang;
+      if (l === "auto") picked = ["auto"];
+      else { picked = picked.filter((x) => x !== "auto"); picked = picked.includes(l) ? picked.filter((x) => x !== l) : [...picked, l]; }
+      if (!picked.length) picked = ["auto"];
+      mark(); api.setLanguage(picked);
+    };
     cards.forEach((c) => c.addEventListener("click", onPick));
     return () => cards.forEach((c) => c.removeEventListener("click", onPick));
   },

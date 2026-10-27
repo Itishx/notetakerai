@@ -8,6 +8,8 @@ const DICTATION_VOCABULARY = "Braino, BrainoHERA, HERA, Braino Mac, Wispr Flow, 
 const DICTATION_HINTS = {
   hi: "नमस्ते, आज की मीटिंग शाम छह बजे है। कृपया रिपोर्ट भेज दीजिए। Maven, WhatsApp, Gmail.",
   hinglish: "Haan, kal meeting 6 baje hai. Main report bhej dunga, tum WhatsApp pe check kar lena. Theek hai, thanks.",
+  // Auto (2026-10-28): no language lock; the hint mixes all three so Whisper keeps whatever was spoken.
+  auto: "Okay, the meeting is at 6. नमस्ते, रिपोर्ट भेज दीजिए। Haan, kal WhatsApp pe check kar lena. Maven, Gmail, Slack.",
 } as const;
 import {
   buildMeetingCaptionTranscript,
@@ -93,8 +95,8 @@ serve(async (req) => {
     const mode: RecordingMode = body.mode === "meeting" ? "meeting" : "lecture";
     // Opt-in: absent for lectures and meetings, "en" for the Mac's command mic.
     // Maven dictation also sends "hinglish" (Hindi in Roman letters, 2026-10-27).
-    const dictationLanguage = body.dictation === true && (body.language === "hi" || body.language === "hinglish") ? body.language as "hi" | "hinglish" : undefined;
-    const requestedLanguage = dictationLanguage === "hinglish" ? undefined
+    const dictationLanguage = body.dictation === true && (body.language === "hi" || body.language === "hinglish" || body.language === "auto") ? body.language as "hi" | "hinglish" | "auto" : undefined;
+    const requestedLanguage = dictationLanguage === "hinglish" || dictationLanguage === "auto" ? undefined
       : typeof body.language === "string" && /^[a-z]{2}$/.test(body.language)
       ? body.language
       : undefined;
@@ -408,7 +410,7 @@ async function transcribeSegment({
   dictationLanguage,
 }: {
   /** Maven only: "hi" (Devanagari) or "hinglish" (Hindi in Roman letters). */
-  dictationLanguage?: "hi" | "hinglish";
+  dictationLanguage?: "hi" | "hinglish" | "auto";
   segment: AudioSegmentPayload;
   mode: RecordingMode;
   knownSpeakerReferences: KnownSpeakerReference[];

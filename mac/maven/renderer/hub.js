@@ -141,9 +141,21 @@ api.getSettings().then((s) => {
   $("#set-mic").textContent = s.microphone;
   $("#set-version").textContent = `version ${s.version}`;
   $("#set-login").checked = s.launchAtLogin;
-  $("#set-language").value = s.language || "en";
+  paintLangs(Array.isArray(s.languages) ? s.languages : [s.language || "auto"]);
 });
-$("#set-language").addEventListener("change", (e) => api.setSetting("language", e.target.value));
+/* Languages: Auto, or any mix of English, Hindi and Hinglish. */
+let langs = ["auto"];
+function paintLangs(v) {
+  langs = v && v.length ? v : ["auto"];
+  document.querySelectorAll("#set-langs button").forEach((b) => b.setAttribute("aria-pressed", langs.includes(b.dataset.l)));
+}
+document.querySelectorAll("#set-langs button").forEach((b) => b.addEventListener("click", () => {
+  const l = b.dataset.l;
+  let next = l === "auto" ? ["auto"] : langs.filter((x) => x !== "auto");
+  if (l !== "auto") next = next.includes(l) ? next.filter((x) => x !== l) : [...next, l];
+  if (!next.length) next = ["auto"];
+  paintLangs(next); api.setSetting("languages", next);
+}));
 /* My details */
 api.getDetails().then((d) => { const f = $("#details-form"); for (const k of ["name", "email", "phone", "address"]) f[k].value = (d && d[k]) || ""; });
 $("#details-form").addEventListener("submit", async (e) => {
