@@ -294,7 +294,7 @@ const card = (() => {
   function edit() {
     el.classList.add("editing");
     const ed = $(".editor"); ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length);
-    window.maven.card({ do: "activity" });
+    window.maven.card({ do: "editing" }); // main focuses the island only now, and stops catching Enter/Esc system-wide
   }
   $(".yes").addEventListener("click", primary);
   $(".no").addEventListener("click", cancel);
@@ -316,5 +316,8 @@ const card = (() => {
   });
   wrap.addEventListener("mouseenter", () => { if (open) window.maven.hover(true); });
   wrap.addEventListener("mouseleave", () => { if (open && !document.hasFocus()) window.maven.hover(false); });
+  /* Enter / Esc caught system-wide by the key watcher while the card asks
+     (2026-10-27): the island never needs key focus to be answered. */
+  window.maven.onCardKey((k) => { if (k === "enter") primary(); else if (k === "esc") cancel(); });
   return { open: openCard, close: closeCard, sent, isOpen: () => open };
 })();

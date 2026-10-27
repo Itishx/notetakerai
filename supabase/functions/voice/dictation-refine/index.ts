@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import EXAMPLES from "./examples.json" with { type: "json" };
+import { HIL_SYSTEM_PROMPT, HIL_VERSION } from "../../_shared/human-intelligence/hil-system-prompt.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 /* Dictation clean-up (rewritten 2026-10-25 against Itish's 1,446-line dataset,
    training/dictation/). Two layers:
@@ -133,39 +135,69 @@ const INTENT_LANGUAGE_NOTE = `
 LANGUAGE
 - The command may be in Hindi or Hinglish. Read it the same way: "YouTube kholo" / "यूट्यूब खोलो" = open YouTube, "Rahul ko bolo main late hoon" = send_message to Rahul. message stays in the language and script the speaker used. reply3 stays English.`;
 
+/* Maven Do through HIL (2026-10-27, Itish: "let Maven run OpenAI HIL, we need
+   data anyway"). The HIL prompt is imported, never copied, so it stays the single
+   source of truth; the Maven block narrows it to Maven's jobs and Maven's JSON.
+   Fixed text first (HIL + Maven block + action guide) so OpenAI caches it. The
+   "why" is one sentence of HIL's reasoning, kept as teacher data. */
+const MAVEN_HIL_BLOCK = `
+
+# Maven restriction (this overrides the output format above)
+You are reasoning for Maven, a small Mac assistant with a fixed job list. Think the way the Human Intelligence Layer above thinks, but Maven may only choose ONE of these actions: open_app, open_url, switch_app, send_message, reply, fill, add_to_list, remember, help, none. Exactly one step. Anything outside these, or anything needing more than one step, is {"action":"none","reply3":"Not my job."}.
+Do NOT return the restated_goal/steps/checks/verdict object. Return only this JSON object:
+{"action": ..., "app"?, "url"?, "person"?, "message"?, "subject"?, "list"?, "item"?, "detail"?, "fact"?, "word"?, "draft"?: boolean, "reply3": string, "why": "<one short sentence: your reasoning for this choice>"}
+A reply with no words given is {"action":"reply","message":"","draft":true}. The action guide follows.
+
+`;
+
 async function intentFor(transcript: string, openaiKey: string | undefined, language = "en") {
-  const messages = [{ role: "system", content: INTENT_PROMPT + (language !== "en" ? INTENT_LANGUAGE_NOTE : "") }, { role: "user", content: transcript }];
+  const langNote = language !== "en" ? INTENT_LANGUAGE_NOTE : "";
+  const userMsg = { role: "user", content: transcript };
   const groqKey = Deno.env.get("GROQ_API_KEY");
-  const call = (url: string, key: string, m: string) => fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: m, temperature: 0, response_format: { type: "json_object" }, messages, ...(m.includes("gpt-oss") ? { reasoning_effort: "low" } : {}) }),
-  }).catch(() => null);
-  let response: Response | null = null, provider = "groq", model = "";
-  if (groqKey) {
+  const call = (url: string, key: string, body: Record<string, unknown>, ms = 0) => {
+    const ctl = new AbortController();
+    const timer = ms ? setTimeout(() => ctl.abort(), ms) : 0;
+    return fetch(url, {
+      method: "POST", signal: ctl.signal,
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+      .catch(() => null).finally(() => timer && clearTimeout(timer));
+  };
+  let res: { ok: boolean; status: number; data: any } | null = null, provider = "openai", model = BRAINO_TEXT_MODEL;
+  if (openaiKey) {
+    res = await call(OPENAI_ENDPOINT, openaiKey, {
+      model, reasoning_effort: BRAINO_TEXT_REASONING_EFFORT, response_format: { type: "json_object" },
+      prompt_cache_key: `maven-hil-${HIL_VERSION}`,
+      messages: [{ role: "system", content: HIL_SYSTEM_PROMPT + MAVEN_HIL_BLOCK + INTENT_PROMPT + langNote }, userMsg],
+    }, 6000);
+    if (res && !res.ok) console.error("openai hil intent failed", res.status, res.data?.error?.message);
+  }
+  if ((!res || !res.ok) && groqKey) {
+    provider = "groq";
+    const messages = [{ role: "system", content: INTENT_PROMPT + langNote }, userMsg];
     for (const m of [GROQ_SPARE_MODEL, GROQ_MODEL]) {
       model = m;
-      response = await call(GROQ_ENDPOINT, groqKey, m);
-      if (response?.ok) break;
-      if (response) console.error("groq intent failed", m, response.status);
+      res = await call(GROQ_ENDPOINT, groqKey, { model: m, temperature: 0, response_format: { type: "json_object" }, messages, reasoning_effort: "low" });
+      if (res?.ok) break;
+      if (res) console.error("groq intent failed", m, res.status);
     }
   }
-  if ((!response || !response.ok) && openaiKey) {
-    provider = "openai"; model = DICTATION_REFINEMENT_MODEL;
-    response = await call(OPENAI_ENDPOINT, openaiKey, model);
-  }
-  if (!response || !response.ok) return { error: "Intent request failed", status: response?.status || 503 };
-  const data = await response.json().catch(() => ({}));
+  if (!res || !res.ok) return { error: "Intent request failed", status: res?.status || 503 };
+  const data = res.data;
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* none below */ }
   const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "help", "none"];
   const intent: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(parsed)) if (typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
+  for (const [k, v] of Object.entries(parsed)) if (k !== "why" && typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
   if (parsed.draft === true || parsed.draft === "true") intent.draft = true;
   if (intent.action === "reply" && intent.draft && !intent.message) intent.message = "";
-  if (!ACTIONS.includes(intent.action)) intent.action = "none";
+  if (!ACTIONS.includes(intent.action as string)) { intent.action = "none"; intent.reply3 = "Not my job."; }
   intent.reply3 = (String(intent.reply3 || "") || (intent.action === "none" ? "Not my job." : "Done.")).split(/\s+/).slice(0, 3).join(" ");
-  return { intent, provider, model, cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens || 0 };
+  const why = typeof parsed.why === "string" ? parsed.why.replace(/[—–]/g, ",").trim().slice(0, 400) : "";
+  const cachedTokens = data?.usage?.prompt_tokens_details?.cached_tokens || 0;
+  console.log("maven intent", JSON.stringify({ provider, model, cachedTokens, prompt: data?.usage?.prompt_tokens, out: data?.usage?.completion_tokens }));
+  return { intent, provider, model, why, cachedTokens, usage: data?.usage || null };
 }
 
 /* Maven "Do" reply drafting (2026-10-27): what is on screen + what the user
@@ -268,7 +300,8 @@ serve(async (req) => {
       const t0 = Date.now();
       const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"), language);
       if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
-      return json({ ...r, durationMs: Date.now() - t0 });
+      const ms = Date.now() - t0;
+      return json({ ...r, ms, durationMs: ms });
     }
     // "rules" leaves the examples out (used by the eval to measure each layer).
     const mode = body?.mode === "rules" ? "rules" : "examples";

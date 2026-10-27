@@ -409,6 +409,7 @@ async function startKeys() {
       if (t === "copied" || t.startsWith("copied\t")) { const w = copyWaiters.shift(); if (w) w(t.split("\t")[1] || ""); continue; }
       if (t.startsWith("dictate-hold-")) { onChord(t.slice("dictate-hold-".length)); continue; }
       if (t.startsWith("do-hold-")) { onChord(t.slice("do-hold-".length), "do"); continue; }
+      if (t === "ask-enter" || t === "ask-esc") { askKeysOn = false; void onCard({ do: t === "ask-enter" ? "key-enter" : "key-esc" }); continue; }
       if (t === "ready") setKeysReady(true);
       log("keys.status", { line: t });
     }
@@ -418,6 +419,7 @@ async function startKeys() {
   proc.on("exit", (code) => {
     log("keys.exit", { code });
     if (keys === proc) keys = null;
+    askKeysOn = false; // a new watcher starts with ask mode off
     setKeysReady(false);
     while (pasteWaiters.length) pasteWaiters.shift()(null);
     while (copyWaiters.length) copyWaiters.shift()(null);
@@ -431,6 +433,18 @@ function restartKeys(why) {
   if (!keys) { void startKeys(); return; }
   keysRestarting = true;
   try { keys.kill(); } catch (_) {}
+}
+/* Ask mode (2026-10-27): while the island asks, the key watcher catches Return
+   and Esc system-wide (and swallows them), so answering never depends on which
+   window has focus. Off on answer, fold, edit, quit, restart, and after 25 s
+   (the watcher enforces the 25 s itself too). */
+let askKeysOn = false, askKeysTimer = 0;
+function setAskKeys(on) {
+  clearTimeout(askKeysTimer);
+  if (on === askKeysOn && !on) return;
+  askKeysOn = on;
+  try { if (keys && !keys.killed && keys.stdin && !keys.stdin.destroyed) keys.stdin.write(on ? "ask-on\n" : "ask-off\n"); } catch (_) {}
+  if (on) askKeysTimer = setTimeout(() => setAskKeys(false), 25000);
 }
 /* Cmd+C through the key watcher (Do mode reading a selection). null when it can't. */
 const copyWaiters = [];
@@ -475,7 +489,8 @@ function onChord(kind, mode = "write") {
   }
   if (kind === "start") {
     if (mode === "write" && onboarding && onboarding.onChord()) return; // the shortcut step only checks the keys
-    if (mode === "do" && doAsk) return; // the island is asking: answer it first (Enter / Esc)
+    if (mode === "do" && doAsk && phase !== "listening" && phase !== "starting") { void startDictation("fn+Control", "confirm"); return; } // say "send" / "cancel"
+    if (mode === "do" && takeMode === "confirm") mode = "confirm";
     toggleDictation(mode === "do" ? "fn+Control" : "Control+Option", mode);
   }
 }
@@ -487,21 +502,21 @@ function toggleDictation(source, mode = "write") {
 
 let phaseTimer = 0, phaseJobs = [];
 async function startDictation(source, mode = "write") {
-  if (doAsk) void endAsk("interrupted by a new take");
+  if (doAsk && mode !== "confirm") void endAsk("interrupted by a new take");
   phase = "starting";
   takeMode = mode;
   startedAt = Date.now();
   stopQueued = null;
   session_ += 1;
-  islandShow("listening", { mode });
+  if (mode === "confirm") armFold(); // the card stays up while you answer by voice
+  else islandShow("listening", { mode });
   // Wake the transcriber while you talk (an OPTIONS call: no model, no cost).
   fetch(`${SUPABASE_URL}/functions/v1/transcribe-and-notes`, { method: "OPTIONS" }).catch(() => {});
   const r = await hera().start().catch((error) => ({ ok: false, error: String(error?.message || error) }));
   if (!r?.ok) {
     log("dictation.start_failed", { error: r?.error || "" });
     phase = "idle";
-    islandShow("note", { note: "Mic not available." });
-    islandHide(1600);
+    if (mode !== "confirm") { islandShow("note", { note: "Mic not available." }); islandHide(1600); }
     return;
   }
   phase = "listening";
@@ -518,7 +533,8 @@ function stopDictation(reason, opts = {}) {
   if (phase === "starting") { stopQueued = { reason, opts }; return; }
   if (phase !== "listening") return;
   phase = "finishing";
-  if (takeMode === "do" && !opts.discard) islandShow("thinking"); // eyes drift, slow dim light, while it works out the job
+  if (takeMode === "confirm") { /* the card stays */ }
+  else if (takeMode === "do" && !opts.discard) islandShow("thinking"); // eyes drift, slow dim light, while it works out the job
   else islandHide(); // the moment you press, the listening state goes; the text follows
   void finishDictation(reason, Boolean(opts.discard), session_, takeMode);
 }
@@ -686,6 +702,7 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
     if (session_ === mySession) phase = "idle";
     return;
   }
+  if (mode === "confirm") { await confirmByVoice(audio, mySession); return; }
   try {
     if (!audio?.audioBase64) { log("dictation.empty", { reason, error: audio?.error || "" }); if (mode === "do") { islandShow("reply", { note: "Again?", face: "again" }); islandHide(1600); } else islandHide(); return; }
     const phased = await collectPhases(audio);
@@ -751,7 +768,7 @@ async function intentFor(raw) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data?.intent?.action) { log("do.intent_failed", { status: res.status }); return null; }
-    return { intent: data.intent, model: `${data.provider || "?"} ${data.model || ""}`.trim() };
+    return { intent: data.intent, model: `${data.provider || "?"} ${data.model || ""}`.trim(), provider: String(data.provider || ""), why: String(data.why || ""), cachedTokens: data.cachedTokens || 0 };
   } catch (error) {
     log("do.intent_failed", { error: error?.name === "AbortError" ? "timeout" : String(error?.message || error) });
     return null;
@@ -767,15 +784,16 @@ function reply(text, face = "done", ms = 1700) {
 }
 
 /* ---------- the island asking ---------- */
-let doAsk = null; // { spec, rec, draft, front, onYes, onChoose, timer }
+let doAsk = null; // { spec, rec, draft, front, onYes, onChoose, timer, editing }
+/* Only for the Edit field: typing needs real key focus. Answering never does. */
 function takeFocus() {
   if (!island || island.isDestroyed()) return;
   try { island.setFocusable(true); island.setIgnoreMouseEvents(false); app.focus({ steal: true }); island.focus(); } catch (_) {}
 }
-async function giveFocusBack(front) {
+async function giveFocusBack(front, tookFocus = true) {
   if (!island || island.isDestroyed()) return;
   try { island.blur(); island.setFocusable(false); island.setIgnoreMouseEvents(true, { forward: true }); } catch (_) {}
-  if (front && front !== "Electron" && front !== "Maven") await actions.activate(front);
+  if (tookFocus && front && front !== "Electron" && front !== "Maven") await actions.activate(front);
 }
 function armFold() {
   if (!doAsk) return;
@@ -786,9 +804,10 @@ function armFold() {
 async function ask(spec, rec, handlers) {
   const front = doAsk ? doAsk.front : await actions.frontApp();
   if (doAsk) clearTimeout(doAsk.timer);
-  doAsk = { spec, rec, draft: String(spec.preview || ""), front, ...handlers };
+  doAsk = { spec, rec, draft: String(spec.preview || ""), front, editing: false, ...handlers };
   islandShow("ask", { card: spec });
-  takeFocus();
+  try { if (island && !island.isDestroyed()) island.setIgnoreMouseEvents(false); } catch (_) {} // buttons clickable, focus untouched
+  setAskKeys(true); // Enter / Esc reach the card from any app
   armFold();
 }
 /* Ends the question without doing it: cancelled, folded, or interrupted. */
@@ -797,10 +816,11 @@ async function endAsk(why) {
   if (!job) return;
   doAsk = null;
   clearTimeout(job.timer);
+  setAskKeys(false);
   const keep = /folded/.test(why) && job.draft && job.spec.kind !== "choose";
   if (keep) clipboard.writeText(job.draft);
   islandShow("idle");
-  await giveFocusBack(job.front);
+  await giveFocusBack(job.front, job.editing);
   if (keep) reply("On your clipboard.", "nope", 1800);
   job.rec.result = why + (keep ? ", draft on clipboard" : "");
   finishDo(job.rec);
@@ -808,13 +828,22 @@ async function endAsk(why) {
 async function onCard(a) {
   const job = doAsk;
   if (!job) return;
+  if (a.do === "key-enter" || a.do === "key-esc") {
+    // From the key watcher: the renderer answers exactly as its own keydown would (choose / edited text).
+    job.rec.answeredBy = a.do === "key-enter" ? "enter" : "esc";
+    sendIsland("maven:cardkey", a.do === "key-enter" ? "enter" : "esc");
+    return;
+  }
+  if (a.do === "editing") { job.editing = true; setAskKeys(false); takeFocus(); armFold(); return; }
   if (a.do === "activity") { armFold(); return; }
   if (a.do === "cancel") { await endAsk("cancelled"); return; }
-  if (a.do === "choose" && job.onChoose) { clearTimeout(job.timer); await job.onChoose(Number(a.choice) || 0); return; }
+  if (a.do === "choose" && job.onChoose) { clearTimeout(job.timer); setAskKeys(false); if (job.editing) await giveFocusBack(job.front); await job.onChoose(Number(a.choice) || 0); return; }
   if (a.do === "primary" && job.onYes) {
     const text = typeof a.text === "string" && a.text.trim() ? a.text.trim() : job.draft;
     doAsk = null;
     clearTimeout(job.timer);
+    setAskKeys(false);
+    if (job.editing) await giveFocusBack(job.front);
     const a0 = Date.now();
     try { job.rec.result = await job.onYes(text, job); }
     catch (error) { job.rec.result = `failed: ${String(error?.message || error).slice(0, 160)}`; islandShow("idle"); reply("Not my job.", "nope"); }
@@ -822,6 +851,23 @@ async function onCard(a) {
     if (text !== job.draft) job.rec.edited = text;
     finishDo(job.rec);
   }
+}
+
+/* Voice answer to the card (fn+Control while it asks): a short match, no intent call. */
+const SAY_YES = /^(send( it)?|yes|yeah|yep|haan|haa|ha|han|bhej( do| de)?|हाँ|हां|भेज( दो| दे)?|ok(ay)?|do it)$/i;
+const SAY_NO = /^(cancel|no|nope|nahi|nahin|mat|नहीं|रहने दो|stop)$/i;
+async function confirmByVoice(audio, mySession) {
+  try {
+    if (!doAsk) return;
+    const heard = audio?.audioBase64 ? await transcribeAudio({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "maven-confirm.webm" }).catch(() => null) : null;
+    const said = String(heard?.transcript || "").normalize("NFC").toLowerCase().replace(/[^\p{L}\p{M}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    const job = doAsk;
+    if (!job) return;
+    log("do.confirm_voice", { said });
+    if (SAY_YES.test(said)) { job.rec.answeredBy = `voice "${said}"`; sendIsland("maven:cardkey", "enter"); }
+    else if (SAY_NO.test(said)) { job.rec.answeredBy = `voice "${said}"`; sendIsland("maven:cardkey", "esc"); }
+    else { if (!job.editing) setAskKeys(true); armFold(); } // not a yes or no: the card keeps asking
+  } finally { if (session_ === mySession) { phase = "idle"; takeMode = "write"; } }
 }
 
 /* ---------- the actions ---------- */
@@ -1043,7 +1089,7 @@ async function runDo({ raw, heard, audio, t0, textMs }) {
   const r = await intentFor(raw);
   rec.intentMs = Date.now() - i0;
   if (!r) { reply("Again?", "again"); rec.result = "intent failed"; finishDo(rec); return; }
-  rec.intent = r.intent; rec.model = r.model;
+  rec.intent = r.intent; rec.model = r.model; rec.provider = r.provider; rec.why = r.why; rec.cachedTokens = r.cachedTokens;
   const a0 = Date.now();
   try { rec.result = await doAction(r.intent, rec); }
   catch (error) { rec.result = `failed: ${String(error?.message || error).slice(0, 160)}`; reply("Not my job.", "nope"); }
@@ -1061,6 +1107,8 @@ function finishDo(rec) {
     `[MAVEN DO] ── ${i.action || "none"} · ${rec.result} · total ${sec(totalMs)}`,
     `  heard   (${rec.heardBy || "?"}, ${sec(rec.textMs)}): "${rec.heard}"`,
     `  intent  (${rec.model || "failed"}, ${sec(rec.intentMs)}): ${JSON.stringify(rec.intent || {})}`,
+    `  why     ${rec.why || "(none)"}  [teacher hil · ${rec.model || "?"}${rec.cachedTokens ? ` · ${rec.cachedTokens} cached` : ""}]`,
+    ...(rec.answeredBy ? [`  answer  ${rec.answeredBy}`] : []),
     `  action  ${i.action || "none"}${i.app ? ` · ${i.app}` : ""}${i.person ? ` · to ${i.person}` : ""}${rec.chose ? ` (chose ${rec.chose})` : ""}${rec.edited ? " · edited" : ""}`,
     ...(rec.contextSource ? [`  screen  ${rec.contextSource}${rec.draft ? ` · draft: "${rec.draft.slice(0, 120)}"` : ""}`] : []),
     `  result  ${rec.result}`,
@@ -1070,6 +1118,7 @@ function finishDo(rec) {
   mavenStore.init(app.getPath("userData"));
   mavenStore.appendCommand({
     at: rec.at, spokenSec: rec.spokenSec, heardBy: rec.heardBy, heard: rec.heard, intent: rec.intent, model: rec.model,
+    provider: rec.provider || "", why: rec.why || "", teacher: "hil", cachedTokens: rec.cachedTokens || 0, answeredBy: rec.answeredBy || "",
     action: i.action || "none", result: rec.result, chose: rec.chose || "", edited: rec.edited || "",
     ...(rec.contextSource ? { contextSource: rec.contextSource } : {}), ...(rec.draft ? { draft: rec.draft } : {}),
     textSec: +(rec.textMs / 1000).toFixed(1), intentSec: +(rec.intentMs / 1000).toFixed(1), actSec: +(rec.actMs / 1000).toFixed(1), sendSec: +((rec.sendMs || 0) / 1000).toFixed(1), totalSec: +(totalMs / 1000).toFixed(1),
@@ -1082,6 +1131,8 @@ app.on("activate", () => { if (app.isReady()) openHub(); });
 app.on("window-all-closed", (e) => { if (!quitting) e.preventDefault?.(); });
 app.on("before-quit", () => {
   quitting = true;
+  setAskKeys(false); // never leave Return / Esc swallowed
+  try { keys && keys.stdin && keys.stdin.end(); } catch (_) {}
   try { keys && keys.kill(); } catch (_) {}
   try { targets && !targets.isDestroyed() && targets.destroy(); } catch (_) {}
   try { heraInstance && heraInstance.destroy(); } catch (_) {}

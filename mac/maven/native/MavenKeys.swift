@@ -8,7 +8,11 @@ import Foundation
    stdin, "paste", which sends a real Cmd+V.
    stdout: maven-keys-ready, ready (event tap enabled), needs-accessibility,
            event-tap-unavailable, dictate-hold-start / -end / -cancel, do-hold-start / -end / -cancel,
-           pasted<TAB><front app> */
+           pasted<TAB><front app>, ask-enter / ask-esc
+   stdin "ask-on" / "ask-off" (2026-10-27): while the island asks, Return
+   (36, keypad 76) and Escape (53) are caught system-wide and swallowed, so
+   the answer never depends on window focus and never reaches WhatsApp. Ask
+   mode ends on ask-off, after 25 s, or when stdin closes (Maven quit). */
 final class MavenKeys {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
@@ -16,6 +20,12 @@ final class MavenKeys {
   private var lastUnavailableLogAt: TimeInterval = 0
 
   private var saidNeedsAccessibility = false
+  private var askOnAt: TimeInterval = 0 // 0 = ask mode off
+  private var asking: Bool {
+    if askOnAt == 0 { return false }
+    if ProcessInfo.processInfo.systemUptime - askOnAt > 25 { askOnAt = 0; return false }
+    return true
+  }
 
   func start() {
     // No system prompt from here: onboarding asks for Accessibility and explains why.
@@ -37,14 +47,14 @@ final class MavenKeys {
       if !saidNeedsAccessibility { printLine("needs-accessibility"); saidNeedsAccessibility = true }
       return
     }
-    let watched: [CGEventType] = [.flagsChanged, .keyDown]
+    let watched: [CGEventType] = [.flagsChanged, .keyDown, .keyUp]
     var mask: CGEventMask = 0
     for type in watched { mask |= CGEventMask(1) << CGEventMask(type.rawValue) }
     let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
       place: .headInsertEventTap,
-      options: .listenOnly,
+      options: .defaultTap, // not listen-only: ask mode swallows Return / Esc
       eventsOfInterest: mask,
       callback: MavenKeys.handleEvent,
       userInfo: refcon
@@ -65,11 +75,24 @@ final class MavenKeys {
     printLine("ready")
   }
 
-  private func handle(_ type: CGEventType, _ event: CGEvent) {
+  /* true = swallow the event. Only Return / Esc, only while asking, no modifiers. */
+  private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
+    if (type == .keyDown || type == .keyUp) && asking {
+      let code = event.getIntegerValueField(.keyboardEventKeycode)
+      let mods = event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift])
+      if mods.isEmpty && (code == 36 || code == 76 || code == 53) {
+        if type == .keyDown && event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+          askOnAt = 0 // one answer per question; main turns it back on if it asks again
+          printLine(code == 53 ? "ask-esc" : "ask-enter")
+        }
+        return true
+      }
+    }
+    if type == .keyUp { return false }
     if type == .keyDown {
       // A real key while a chord is down: it was a shortcut, not speech.
       if !chordHeld.isEmpty { printLine("\(chordHeld)-hold-cancel"); chordHeld = "" }
-      return
+      return false
     }
     let f = event.flags
     let ctrl = f.contains(.maskControl), opt = f.contains(.maskAlternate), fn = f.contains(.maskSecondaryFn)
@@ -81,6 +104,7 @@ final class MavenKeys {
       if !want.isEmpty { printLine("\(want)-hold-start") }
       chordHeld = want
     }
+    return false
   }
 
   /* "paste" on stdin sends Cmd+V as a real keyboard event (~20ms); "copy" sends
@@ -88,12 +112,17 @@ final class MavenKeys {
   private func listenForCommands() {
     let thread = Thread {
       while let line = readLine(strippingNewline: true) {
-        if line.trimmingCharacters(in: .whitespaces) == "paste" {
+        let cmd = line.trimmingCharacters(in: .whitespaces)
+        if cmd == "ask-on" || cmd == "ask-off" {
+          DispatchQueue.main.async { [weak self] in self?.askOnAt = cmd == "ask-on" ? ProcessInfo.processInfo.systemUptime : 0 }
+        } else if line.trimmingCharacters(in: .whitespaces) == "paste" {
           DispatchQueue.main.async { [weak self] in self?.pasteNow() }
         } else if line.trimmingCharacters(in: .whitespaces) == "copy" {
           DispatchQueue.main.async { [weak self] in self?.copyNow() }
         }
       }
+      // stdin closed: Maven is gone. Never leave Return / Esc swallowed.
+      DispatchQueue.main.async { [weak self] in self?.askOnAt = 0; exit(0) }
     }
     thread.name = "maven.keys.stdin"
     thread.start()
@@ -141,8 +170,8 @@ final class MavenKeys {
       }
       return Unmanaged.passUnretained(event)
     }
-    guard type == .flagsChanged || type == .keyDown else { return Unmanaged.passUnretained(event) }
-    owner.handle(type, event)
+    guard type == .flagsChanged || type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
+    if owner.handle(type, event) { return nil }
     return Unmanaged.passUnretained(event)
   }
 }
