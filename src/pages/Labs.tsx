@@ -7,6 +7,7 @@ import "./affective-home.css";
 import "./affectiveos-page.css";
 import "./labs.css";
 import { LABS_POSTS } from "@/lib/labsPosts";
+import { BrainoMascot } from "@/components/BrainoMascot";
 
 /* ============================================================================
    /labs — Affective Labs (2026-10-03). Where we play with AI and tech that is
@@ -95,9 +96,10 @@ export default function Labs() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
+            <Link to="/maven">Maven</Link>
+            <a href="#braino">Braino</a>
             <Link to="/foundry">Braino Foundry</Link>
             <a href="#writing">Writing</a>
-            <Link to="/braino">Braino</Link>
             <Link to="/about">About</Link>
             <Link to="/foundry/app" className="aff-nav-go">Open Foundry</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
@@ -125,6 +127,28 @@ export default function Labs() {
           <img src="/speak.jpg" alt="A MacBook on a sunlit terrace above the sea, Braino's notch sending a deck and booking a follow-up." width={1672} height={941} loading="eager" decoding="async" />
         </figure>
       </header>
+
+      {/* Braino lives here now (2026-10-28): Maven is the product out front; Braino is
+          the bigger thing people find in the lab. */}
+      <section className="lb-sec" id="braino">
+        <div className="aff-wrap">
+          <div className="hb6-box">
+            <div className="hb6-head">
+              <div>
+                <p className="ah-kicker">In the lab</p>
+                <div className="hb5-name"><h2>Braino</h2><BrainoMascot size={88} className="hb4-him" /></div>
+                <p className="hb6-line">A companion who lives in your Mac's notch. He sees your screen, hears you, talks back, does the work in your apps and remembers you. He's not ready for everyone yet, so he lives here while he grows.</p>
+              </div>
+              <div className="hb6-side">
+                <div className="hb5-go">
+                  <Link to="/braino" className="aff-cta">Meet Braino</Link>
+                  <Link to="/foundry" className="aff-cta aff-cta-ghost">Braino Foundry</Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="lb-sec">
         <div className="aff-wrap">
