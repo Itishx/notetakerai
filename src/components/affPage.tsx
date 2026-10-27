@@ -101,7 +101,7 @@ export function useAffReveal(deps: unknown[] = []) {
 
 /* `braino` puts his name in the corner instead of the company's, for his own page. */
 export function AffNav({ theme, onToggle, links, braino = false, go, brand }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean; go?: [string, string]; brand?: [string, string] }) {
-  const items = links || [["Braino", "/braino"], ["Foundry", "/foundry"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
+  const items = links || [["Maven", "/maven"], ["AffectiveOS", "/affectiveos"], ["Labs", "/labs"], ["About", "/about"]];
   return (
     <nav className="aff-nav">
       <div className="aff-nav-in">
@@ -114,7 +114,7 @@ export function AffNav({ theme, onToggle, links, braino = false, go, brand }: { 
         )}
         <div className="aff-nav-links">
           {items.map(([label, to]) => to.startsWith("#") ? <a key={to} href={to}>{label}</a> : <Link key={to} to={to}>{label}</Link>)}
-          <Link to={go ? go[1] : "/braino#early-access"} className="aff-nav-go">{go ? go[0] : "Join the waitlist"}</Link>
+          <Link to={go ? go[1] : "/maven"} className="aff-nav-go">{go ? go[0] : "Get Maven for Mac"}</Link>
           <AffThemeToggle theme={theme as "light" | "dark"} onToggle={onToggle} />
         </div>
       </div>
@@ -134,20 +134,21 @@ export function AffFooter() {
               <p>Building tech that makes life more affective.</p>
               <p className="aff-foot-where">Bengaluru.</p>
             </div>
-            <nav className="aff-foot-col aff-tree" aria-label="Braino">
-              <h4><Link to="/braino">Braino</Link></h4>
-              <ul>
-                <li><Link to="/braino">For everyday life</Link></li>
-                <li><Link to="/foundry">For your startup</Link></li>
-                <li><Link to="/braino#early-access">Join the waitlist</Link></li>
-              </ul>
-            </nav>
+
             <nav className="aff-foot-col aff-tree" aria-label="Maven">
               <h4><Link to="/maven">Maven</Link></h4>
               <ul>
                 <li><Link to="/maven">Agentic dictation</Link></li>
                 <li><Link to="/maven#pricing">Pricing</Link></li>
                 <li><Link to="/maven#letter">The announcement</Link></li>
+              </ul>
+            </nav>
+            <nav className="aff-foot-col aff-tree" aria-label="Labs">
+              <h4><Link to="/labs">Labs</Link></h4>
+              <ul>
+                <li><Link to="/braino">Braino</Link></li>
+                <li><Link to="/foundry">Braino Foundry</Link></li>
+                <li><Link to="/labs">Everything in the lab</Link></li>
               </ul>
             </nav>
             <nav className="aff-foot-col">

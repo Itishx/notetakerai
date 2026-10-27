@@ -874,3 +874,10 @@
 
 /* Second product card on the homepage: Braino Foundry. */
 .hb6-also { margin: 18px 0 0; font-size: 16px; color: var(--a-ink-soft); } .hb6-also a { color: var(--a-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Maven on the home page (2026-10-28) */
+.mv-home-film { max-width: 1100px; margin-inline: auto; }
+.mv-home-film .mv-mac { border-radius: 16px; }
+.hb5-name .hb4-him .mv-face { --k: 1.6; }
+.mv-home-endface { display: flex; justify-content: center; margin-bottom: 18px; }
+.mv-home-endface .mv-face { --k: 2; }

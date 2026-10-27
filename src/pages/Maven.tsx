@@ -308,7 +308,7 @@ function useOnScreen<T extends HTMLElement>() {
 /* The hero film in code: a real Mac, an empty email, Maven listening in the
    bottom-right corner, then the words land at the cursor and it glows green. */
 const FILM_WORDS = ["Hey Neha,", "Can we move tomorrow's call to 5:30 PM? I'll send the deck before that.", "Thanks,", "Itish"];
-function MvSceneFilm() {
+export function MvSceneFilm() {
   const calm = useCalm();
   const [step, setStep] = useState<"listen" | "happy" | "rest">("listen");
   useEffect(() => {
@@ -653,7 +653,7 @@ export default function Maven() {
             <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
             <a href="#see" className="aff-cta aff-cta-ghost">See it work</a>
           </div>
-          <p className="mv-note">Mac only for now. Windows is next.</p>
+          <p className="mv-note">English, Hindi and Hinglish. Mac only for now, Windows is next.</p>
         </>}>
           <h1 className="aff-h1 mv-h1">
             <span className="aff-h1-line">Say it once.</span>
