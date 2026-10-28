@@ -204,7 +204,7 @@ const card = (() => {
   const $ = (s) => el.querySelector(s);
   const PW = 58, PH = 30;
   // Bar is wide and low; the help list keeps the taller card width.
-  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : document.body.classList.contains("l-bar") && kind !== "help" ? 480 : 300);
+  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : kind === "help" ? 500 : document.body.classList.contains("l-bar") ? 480 : 300);
   let pillText = "";
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
@@ -247,12 +247,12 @@ const card = (() => {
         const t = document.createElement("b"); t.textContent = g.title;
         const k = document.createElement("kbd"); k.textContent = g.shortcut || "";
         h.append(t, k);
-        const rows = document.createElement("div");
+        // Short chips, no long examples (the card was cramped); the example is the tooltip.
+        const rows = document.createElement("div"); rows.className = "jchips";
         for (const j of g.jobs) {
-          const r = document.createElement("div"); r.className = "jr";
-          const n = document.createElement("span"); n.textContent = j.short || j.job;
-          const e = document.createElement("i"); e.textContent = `“${j.example}”`;
-          r.append(n, e); rows.append(r);
+          const c = document.createElement("span"); c.className = "jc";
+          c.textContent = j.short || j.job; c.title = `“${j.example}”`;
+          rows.append(c);
         }
         grp.append(h, rows); jobs.append(grp);
       }
@@ -271,7 +271,7 @@ const card = (() => {
     body.style.position = "relative"; body.style.inset = "auto"; body.style.transform = "none"; body.style.transition = "none";
     const natural = Math.ceil(body.getBoundingClientRect().height);
     body.setAttribute("style", prev);
-    ch = Math.min(212, Math.max(kind === "pill" || kind === "think" ? 34 : 96, natural)); // slim bars stay slim
+    ch = Math.min(290, Math.max(kind === "pill" || kind === "think" ? 34 : 96, natural)); // window is 320 tall now // slim bars stay slim
     el.style.setProperty("--ch", ch + "px");
     if (!wasOpen) {
       // Start as the pill, exactly, with no transition; then spring open.

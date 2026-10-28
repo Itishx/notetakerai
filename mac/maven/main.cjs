@@ -152,7 +152,7 @@ function buildTray() {
    sits at the window's bottom edge, on the side matching its spot (left spot:
    left side), so the card grows up and toward the screen centre. Everything
    outside the visible shape is click-through. */
-const ISLAND_W = 560, ISLAND_H = 240; // wide enough for the Bar layout (2026-10-28)
+const ISLAND_W = 560, ISLAND_H = 320; // wide enough for the Bar layout (2026-10-28)
 const CAP_W = 58, CAP_H = 30, CAP_BOTTOM = 26, CAP_SIDE = 26; // capsule inside the window
 let anchorSpot = "bottom-right"; // which side of the window the capsule is drawn on
 const capOffsetX = (spot) => spot === "bottom-left" ? CAP_SIDE : spot === "bottom-centre" ? (ISLAND_W - CAP_W) / 2 : ISLAND_W - CAP_SIDE - CAP_W;

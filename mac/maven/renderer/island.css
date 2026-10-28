@@ -16,7 +16,7 @@
    - Keep it brief and glanceable: a title, one muted 3-word status, one preview,
      at most three actions; it opens only when there are words to see. */
 html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
-body { width: 560px; height: 240px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+body { width: 560px; height: 320px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
 #island { position: absolute; bottom: 26px; width: 58px; height: 30px; display: flex; align-items: center; justify-content: center;
   opacity: 0; transform: scale(.85); transition: opacity .14s ease, transform .2s cubic-bezier(.34,1.3,.45,1); }
 #island.on { opacity: 1; transform: scale(1); }
@@ -266,3 +266,23 @@ body.t-paper .opts button kbd { background: #ebe5d9; }
 /* slim bars: pill reply and thinking sit at ~36px, words centred */
 #card.k-pill .body, #card.k-think .body { padding-top: 0 !important; padding-bottom: 0 !important; gap: 0; height: 36px; align-content: center; }
 #card.k-pill .lbl, #card.k-think .lbl { padding-top: 0; }
+
+/* ── Help card, redone (2026-10-28): wide, two columns, short chips ── */
+#card.k-help .body { padding: 14px 16px 14px 44px !important; gap: 12px !important; }
+#card.k-help .jobs { display: grid; grid-template-columns: 1fr 1.7fr; gap: 16px; }
+#card.k-help .jg { display: grid; gap: 8px; align-content: start; min-width: 0; }
+#card.k-help .jh { display: flex; align-items: baseline; gap: 8px; }
+#card.k-help .jh b { font-size: 13px; font-weight: 600; }
+#card.k-help .jh kbd { font: 600 11px ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 5px; background: rgba(255,255,255,.13); }
+#card.k-help .jchips { display: flex; flex-wrap: wrap; gap: 6px; }
+#card.k-help .jc { font-size: 12px; line-height: 1; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.09); white-space: nowrap; }
+body.do #card.k-help .jg:last-child .jc { box-shadow: inset 0 0 0 1px rgba(150,190,255,.35); }
+#card.k-help .acts { justify-content: flex-end; }
+body.t-paper #card.k-help .jc, body.t-paper #card.k-help .jh kbd { background: #ebe5d9; }
+
+#card.k-help .jg { display: flex !important; flex-direction: column; gap: 8px; grid-template-columns: none !important; }
+#card.k-help .jh { flex-direction: row; }
+#card.k-help .jobs { margin-top: 2px; }
+#card.k-help .acts { margin-top: 4px; }
+
+#card.k-help .jobs { gap: 24px; grid-template-columns: 1fr 1.55fr; }
