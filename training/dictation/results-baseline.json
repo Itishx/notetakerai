@@ -1,0 +1,2892 @@
+[
+ {
+  "id": "1418",
+  "category": "spoken_punct",
+  "input": "can you proofread comma this paragraph for me period",
+  "output": "Can you proofread, this paragraph for me.",
+  "got": "Can you proofread, comma, this paragraph for me?",
+  "ms": 1182,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "436",
+  "category": "spoken_punct",
+  "input": "please review the attached proposal and let me know comma your thoughts period",
+  "output": "Please review the attached proposal and let me know, your thoughts.",
+  "got": "Please review the attached proposal and let me know, your thoughts.",
+  "ms": 1747,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1106",
+  "category": "spoken_punct",
+  "input": "what's the status of comma the invoice period",
+  "output": "What's the status of, the invoice.",
+  "got": "What's the status of comma the invoice period?",
+  "ms": 1838,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "42",
+  "category": "spoken_punct",
+  "input": "i forgot my comma charger at home period",
+  "output": "I forgot my, charger at home.",
+  "got": "I forgot my comma charger at home.",
+  "ms": 1863,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "121",
+  "category": "spoken_punct",
+  "input": "hey priya comma new paragraph please make the headline shorter and punchier new paragraph best comma new line itish",
+  "output": "Hey Priya,\n\nPlease make the headline shorter and punchier.\n\nBest,\nItish",
+  "got": "Hey Priya,\n\nPlease make the headline shorter and punchier.\n\nBest,\nItish",
+  "ms": 2098,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1085",
+  "category": "spoken_punct",
+  "input": "hey meera comma new paragraph our onboarding flow is too long so let's cut two steps new paragraph thanks comma new line itish",
+  "output": "Hey Meera,\n\nOur onboarding flow is too long, so let's cut two steps.\n\nThanks,\nItish",
+  "got": "Hey Meera,\n\nOur onboarding flow is too long, so let's cut two steps.\n\nThanks,\nItish",
+  "ms": 2221,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1326",
+  "category": "spoken_punct",
+  "input": "let's circle back comma on this after lunch period",
+  "output": "Let's circle back, on this after lunch.",
+  "got": "Let's circle back, on this after lunch period.",
+  "ms": 1224,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1258",
+  "category": "spoken_punct",
+  "input": "hello vikram comma new paragraph can you remind me what we decided last time new paragraph thanks comma new line itish",
+  "output": "Hello Vikram,\n\nCan you remind me what we decided last time?\n\nThanks,\nItish",
+  "got": "Hello Vikram,\n\nCan you remind me what we decided last time?\n\nThanks,\nItish",
+  "ms": 805,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "876",
+  "category": "spoken_punct",
+  "input": "hi rahul comma new paragraph let's not overthink this one new paragraph regards comma new line itish",
+  "output": "Hi Rahul,\n\nLet's not overthink this one.\n\nRegards,\nItish",
+  "got": "Hi Rahul,\n\nLet's not overthink this one.\n\nRegards,\nItish",
+  "ms": 902,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "314",
+  "category": "spoken_punct",
+  "input": "my flight lands at midnight so don't wait up exclamation mark",
+  "output": "My flight lands at midnight, so don't wait up!",
+  "got": "My flight lands at midnight, so don't wait up!",
+  "ms": 1040,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "636",
+  "category": "spoken_punct",
+  "input": "i'll be out of office from monday comma to wednesday period",
+  "output": "I'll be out of office from Monday, to Wednesday.",
+  "got": "I'll be out of office from Monday to Wednesday.",
+  "ms": 1008,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "579",
+  "category": "spoken_punct",
+  "input": "is there anything else you comma need from me period",
+  "output": "Is there anything else you, need from me.",
+  "got": "Is there anything else you, comma, need from me?",
+  "ms": 834,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "693",
+  "category": "spoken_punct",
+  "input": "hey rohan comma new paragraph why is the build failing on the main branch new paragraph cheers comma new line itish",
+  "output": "Hey Rohan,\n\nWhy is the build failing on the main branch?\n\nCheers,\nItish",
+  "got": "Hey Rohan,\n\nWhy is the build failing on the main branch?\n\nCheers,\nItish",
+  "ms": 895,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "404",
+  "category": "spoken_punct",
+  "input": "let me know if you comma need anything else period",
+  "output": "Let me know if you, need anything else.",
+  "got": "Let me know if you, comma, need anything else.",
+  "ms": 1154,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1251",
+  "category": "spoken_punct",
+  "input": "hi priya comma new paragraph can you proofread this paragraph for me new paragraph cheers comma new line itish",
+  "output": "Hi Priya,\n\nCan you proofread this paragraph for me?\n\nCheers,\nItish",
+  "got": "Hi Priya,\n\nCan you proofread this paragraph for me?\n\nCheers,\nItish",
+  "ms": 966,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1396",
+  "category": "spoken_punct",
+  "input": "dear arjun comma new paragraph don't forget to bring your laptop new paragraph thanks comma new line itish",
+  "output": "Dear Arjun,\n\nDon't forget to bring your laptop.\n\nThanks,\nItish",
+  "got": "Dear Arjun,\n\nDon't forget to bring your laptop.\n\nThanks,\nItish",
+  "ms": 1112,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "819",
+  "category": "spoken_punct",
+  "input": "the new pricing page is comma live now period",
+  "output": "The new pricing page is, live now.",
+  "got": "The new pricing page is, comma, live now.",
+  "ms": 906,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "206",
+  "category": "spoken_punct",
+  "input": "hi rahul comma new paragraph please don't share this with anyone outside the team new paragraph thanks comma new line itish",
+  "output": "Hi Rahul,\n\nPlease don't share this with anyone outside the team.\n\nThanks,\nItish",
+  "got": "Hi Rahul,\n\nPlease don't share this with anyone outside the team.\n\nThanks,\nItish",
+  "ms": 990,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "614",
+  "category": "spoken_punct",
+  "input": "can you share the document with the whole team exclamation mark",
+  "output": "Can you share the document with the whole team!",
+  "got": "Can you share the document with the whole team!",
+  "ms": 774,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "565",
+  "category": "spoken_punct",
+  "input": "hello neha comma new paragraph let me think about it and get back to you new paragraph cheers comma new line itish",
+  "output": "Hello Neha,\n\nLet me think about it and get back to you.\n\nCheers,\nItish",
+  "got": "Hello Neha,\n\nLet me think about it and get back to you.\n\nCheers,\nItish",
+  "ms": 954,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1097",
+  "category": "spoken_punct",
+  "input": "that sounds comma great let's do it period",
+  "output": "That sounds, great, let's do it.",
+  "got": "That sounds, great. Let's do it.",
+  "ms": 803,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "602",
+  "category": "spoken_punct",
+  "input": "hello ishita comma new paragraph tell rahul that the demo went really well new paragraph cheers comma new line itish",
+  "output": "Hello Ishita,\n\nTell Rahul that the demo went really well.\n\nCheers,\nItish",
+  "got": "Hello Ishita,\n\nTell Rahul that the demo went really well.\n\nCheers,\nItish",
+  "ms": 1013,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "841",
+  "category": "spoken_punct",
+  "input": "dear neha comma new paragraph never mind i found it new paragraph thanks comma new line itish",
+  "output": "Dear Neha,\n\nNever mind, I found it.\n\nThanks,\nItish",
+  "got": "Dear Neha,\n\nNever mind, I found it.\n\nThanks,\nItish",
+  "ms": 911,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "710",
+  "category": "spoken_punct",
+  "input": "thanks that really helped a lot exclamation mark",
+  "output": "Thanks, that really helped a lot!",
+  "got": "Thanks, that really helped a lot!",
+  "ms": 845,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "50",
+  "category": "spoken_punct",
+  "input": "that's all for today thank you everyone exclamation mark",
+  "output": "That's all for today, thank you everyone!",
+  "got": "That's all for today. Thank you, everyone!",
+  "ms": 891,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "27",
+  "category": "spoken_punct",
+  "input": "hello neha comma new paragraph i forgot my charger at home new paragraph cheers comma new line itish",
+  "output": "Hello Neha,\n\nI forgot my charger at home.\n\nCheers,\nItish",
+  "got": "Hello Neha,\n\nI forgot my charger at home.\n\nCheers,\nItish",
+  "ms": 800,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1114",
+  "category": "spoken_punct",
+  "input": "what time does the comma event start period",
+  "output": "What time does the, event start.",
+  "got": "What time does the comma event start?",
+  "ms": 830,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1100",
+  "category": "spoken_punct",
+  "input": "hello meera comma new paragraph the new pricing page is live now new paragraph cheers comma new line itish",
+  "output": "Hello Meera,\n\nThe new pricing page is live now.\n\nCheers,\nItish",
+  "got": "Hello Meera,\n\nThe new pricing page is live now.\n\nCheers,\nItish",
+  "ms": 815,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "566",
+  "category": "spoken_punct",
+  "input": "i don't think we have enough data yet exclamation mark",
+  "output": "I don't think we have enough data yet!",
+  "got": "I don't think we have enough data yet!",
+  "ms": 831,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1341",
+  "category": "spoken_punct",
+  "input": "hey siddharth comma new paragraph let's not overthink this one new paragraph best comma new line itish",
+  "output": "Hey Siddharth,\n\nLet's not overthink this one.\n\nBest,\nItish",
+  "got": "Hey Siddharth,\n\nLet's not overthink this one.\n\nBest,\nItish",
+  "ms": 904,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1229",
+  "category": "spoken_punct",
+  "input": "where should comma we meet for dinner period",
+  "output": "Where should, we meet for dinner.",
+  "got": "Where should we meet for dinner?",
+  "ms": 931,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1143",
+  "category": "spoken_punct",
+  "input": "hey bhaskar comma new paragraph how long will the export take new paragraph thanks comma new line itish",
+  "output": "Hey Bhaskar,\n\nHow long will the export take?\n\nThanks,\nItish",
+  "got": "Hey Bhaskar,\n\nHow long will the export take?\n\nThanks,\nItish",
+  "ms": 955,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "355",
+  "category": "spoken_punct",
+  "input": "i need a break my brain is fried exclamation mark",
+  "output": "I need a break, my brain is fried!",
+  "got": "I need a break. My brain is fried!",
+  "ms": 937,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "315",
+  "category": "spoken_punct",
+  "input": "hi arjun comma new paragraph you're right i should have checked earlier new paragraph thanks comma new line itish",
+  "output": "Hi Arjun,\n\nYou're right, I should have checked earlier.\n\nThanks,\nItish",
+  "got": "Hi Arjun,\n\nYou're right, I should have checked earlier.\n\nThanks,\nItish",
+  "ms": 904,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "292",
+  "category": "spoken_punct",
+  "input": "open the comma settings and turn on dark mode period",
+  "output": "Open the, settings and turn on dark mode.",
+  "got": "Open the comma settings and turn on dark mode.",
+  "ms": 977,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "353",
+  "category": "spoken_punct",
+  "input": "hello ishita comma new paragraph that's a fair point but i disagree new paragraph cheers comma new line itish",
+  "output": "Hello Ishita,\n\nThat's a fair point, but I disagree.\n\nCheers,\nItish",
+  "got": "Hello Ishita,\n\nThat's a fair point, but I disagree.\n\nCheers,\nItish",
+  "ms": 911,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "35",
+  "category": "spoken_punct",
+  "input": "hello rohan comma new paragraph i'll send you the final draft by tonight new paragraph best comma new line itish",
+  "output": "Hello Rohan,\n\nI'll send you the final draft by tonight.\n\nBest,\nItish",
+  "got": "Hello Rohan,\n\nI'll send you the final draft by tonight.\n\nBest,\nItish",
+  "ms": 1177,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1207",
+  "category": "spoken_punct",
+  "input": "let's try a different approach this time exclamation mark",
+  "output": "Let's try a different approach this time!",
+  "got": "Let's try a different approach this time!",
+  "ms": 839,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1239",
+  "category": "spoken_punct",
+  "input": "i'll draft the email and you can review it question mark",
+  "output": "I'll draft the email and you can review it?",
+  "got": "I'll draft the email and you can review it?",
+  "ms": 954,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "882",
+  "category": "spoken_punct",
+  "input": "could we make the button bigger and a comma bit greener period",
+  "output": "Could we make the button bigger and a, bit greener.",
+  "got": "Could we make the button bigger and a comma bit greener.",
+  "ms": 798,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "649",
+  "category": "spoken_punct",
+  "input": "hey aditya comma new paragraph you're right i should have checked earlier new paragraph thanks comma new line itish",
+  "output": "Hey Aditya,\n\nYou're right, I should have checked earlier.\n\nThanks,\nItish",
+  "got": "Hey Aditya,\n\nYou're right, I should have checked earlier.\n\nThanks,\nItish",
+  "ms": 865,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1302",
+  "category": "spoken_punct",
+  "input": "hey vikram comma new paragraph we should add punctuation and capitalization automatically new paragraph regards comma new line itish",
+  "output": "Hey Vikram,\n\nWe should add punctuation and capitalization automatically.\n\nRegards,\nItish",
+  "got": "Hey Vikram,\n\nWe should add punctuation and capitalization automatically.\n\nRegards,\nItish",
+  "ms": 888,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "824",
+  "category": "multi_sentence",
+  "input": "keep the tone friendly but professional how long will the you know export take",
+  "output": "Keep the tone friendly but professional. How long will the export take?",
+  "got": "Keep the tone friendly but professional. How long will the, you know, export take?",
+  "ms": 895,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "554",
+  "category": "multi_sentence",
+  "input": "i mean what's the status of the invoice thanks that really helped a lot",
+  "output": "What's the status of the invoice? Thanks, that really helped a lot.",
+  "got": "I mean, what's the status of the invoice? Thanks, that really helped a lot.",
+  "ms": 826,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "103",
+  "category": "multi_sentence",
+  "input": "so the weather is lovely so let's walk to the office my flight lands at midnight so don't wait up",
+  "output": "The weather is lovely, so let's walk to the office. My flight lands at midnight, so don't wait up.",
+  "got": "So the weather is lovely, so let's walk to the office. My flight lands at midnight, so don't wait up.",
+  "ms": 844,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1017",
+  "category": "multi_sentence",
+  "input": "could you explain how the billing works i don't think we have enough data yet",
+  "output": "Could you explain how the billing works? I don't think we have enough data yet.",
+  "got": "Could you explain how the billing works? I don't think we have enough data yet.",
+  "ms": 881,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1006",
+  "category": "multi_sentence",
+  "input": "we should add punctuation and capitalization automatically i'd like to introduce you to my co founder",
+  "output": "We should add punctuation and capitalization automatically. I'd like to introduce you to my co-founder.",
+  "got": "We should add punctuation and capitalization automatically. I'd like to introduce you to my co-founder.",
+  "ms": 1047,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "477",
+  "category": "multi_sentence",
+  "input": "let's circle back on this after lunch please send me the notes from yesterday's meeting",
+  "output": "Let's circle back on this after lunch. Please send me the notes from yesterday's meeting.",
+  "got": "Let's circle back on this after lunch. Please send me the notes from yesterday's meeting.",
+  "ms": 844,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "281",
+  "category": "multi_sentence",
+  "input": "i mean write a message to ankit saying i'll be late please make the headline shorter and punchier",
+  "output": "Write a message to Ankit saying I'll be late. Please make the headline shorter and punchier.",
+  "got": "Write Ankit: I'll be late.",
+  "ms": 774,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1139",
+  "category": "multi_sentence",
+  "input": "um i need a break my brain is fried can you remind me what we decided last time",
+  "output": "I need a break, my brain is fried. Can you remind me what we decided last time?",
+  "got": "Um, I need a break. My brain is fried. Can you remind me what we decided last time?",
+  "ms": 925,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "653",
+  "category": "multi_sentence",
+  "input": "please make the headline shorter and punchier could you explain how the billing works",
+  "output": "Please make the headline shorter and punchier. Could you explain how the billing works?",
+  "got": "Please make the headline shorter and punchier. Could you explain how the billing works?",
+  "ms": 834,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "814",
+  "category": "multi_sentence",
+  "input": "let's not overthink this one okay i'm heading out now see you tomorrow",
+  "output": "Let's not overthink this one. Okay, I'm heading out now, see you tomorrow.",
+  "got": "Let's not overthink this one, okay? I'm heading out now. See you tomorrow.",
+  "ms": 835,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "535",
+  "category": "multi_sentence",
+  "input": "we got our first ten paying paying customers today the new pricing page is live now",
+  "output": "We got our first ten paying customers today. The new pricing page is live now.",
+  "got": "We got our first ten paying, paying customers today. The new pricing page is live now.",
+  "ms": 861,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "83",
+  "category": "multi_sentence",
+  "input": "could you explain how the billing um works the model keeps hallucinating on long inputs",
+  "output": "Could you explain how the billing works? The model keeps hallucinating on long inputs.",
+  "got": "Could you explain how the billing, um, works? The model keeps hallucinating on long inputs.",
+  "ms": 888,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1118",
+  "category": "multi_sentence",
+  "input": "can you remind me what we decided last time let me know if you need anything else that sounds great let's do it",
+  "output": "Can you remind me what we decided last time? Let me know if you need anything else. That sounds great, let's do it.",
+  "got": "Can you remind me what we decided last time? Let me know if you need anything else. That sounds great. Let's do it.",
+  "ms": 951,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "657",
+  "category": "multi_sentence",
+  "input": "okay so i'm really excited about this opportunity make sure the numbers add up before you send it",
+  "output": "I'm really excited about this opportunity. Make sure the numbers add up before you send it.",
+  "got": "Okay, so I'm really excited about this opportunity. Make sure the numbers add up before you send it.",
+  "ms": 865,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "5",
+  "category": "multi_sentence",
+  "input": "let's keep the first version simple and ship it fast write a message to ankit saying i'll be late",
+  "output": "Let's keep the first version simple and ship it fast. Write a message to Ankit saying I'll be late.",
+  "got": "Let's keep the first version simple and ship it fast. Write a message to Ankit saying I'll be late.",
+  "ms": 907,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "65",
+  "category": "multi_sentence",
+  "input": "could you explain how how the billing works i just finished the first version of the app",
+  "output": "Could you explain how the billing works? I just finished the first version of the app.",
+  "got": "Could you explain how how the billing works? I just finished the first version of the app.",
+  "ms": 907,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1262",
+  "category": "multi_sentence",
+  "input": "like i need a break my brain is fried honestly i think the second option is better let's keep the first version like simple and ship it fast",
+  "output": "I need a break, my brain is fried. Honestly, I think the second option is better. Let's keep the first version simple and ship it fast.",
+  "got": "Like, I need a break. My brain is fried, honestly. I think the second option is better. Let's keep the first version like simple and ship it fast.",
+  "ms": 962,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "449",
+  "category": "multi_sentence",
+  "input": "uh please add this to the agenda for friday's meeting can you proofread this paragraph for me i love how clean the interface interface looks",
+  "output": "Please add this to the agenda for Friday's meeting. Can you proofread this paragraph for me? I love how clean the interface looks.",
+  "got": "Uh, please add this to the agenda for Friday's meeting. Can you proofread this paragraph for me? I love how clean the interface, interface looks.",
+  "ms": 953,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "64",
+  "category": "multi_sentence",
+  "input": "hmm can you share the document with the whole team let's keep the first version simple and ship it fast",
+  "output": "Can you share the document with the whole team? Let's keep the first version simple and ship it fast.",
+  "got": "Hmm, can you share the document with the whole team? Let's keep the first version simple and ship it fast.",
+  "ms": 882,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "624",
+  "category": "multi_sentence",
+  "input": "i'm working from home today the client loved you know the new design",
+  "output": "I'm working from home today. The client loved the new design.",
+  "got": "I'm working from home today. The client loved, you know, the new design.",
+  "ms": 889,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "348",
+  "category": "multi_sentence",
+  "input": "um who is joining the call today the mic is picking up too much background noise okay i'm heading out now see you tomorrow",
+  "output": "Who is joining the call today? The mic is picking up too much background noise. Okay, I'm heading out now, see you tomorrow.",
+  "got": "Um, who is joining the call today? The mic is picking up too much background noise. Okay, I'm heading out now. See you tomorrow.",
+  "ms": 937,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "793",
+  "category": "multi_sentence",
+  "input": "right so i'll draft the email and you can review it you know how long will will the export take could you explain how the billing works",
+  "output": "I'll draft the email and you can review it. How long will the export take? Could you explain how the billing works?",
+  "got": "Right, so I'll draft the email and you can review it. You know, how long will the export take? Could you explain how the billing works?",
+  "ms": 813,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "290",
+  "category": "multi_sentence",
+  "input": "hmm i'm working from home today please add this to the agenda for friday's friday's meeting",
+  "output": "I'm working from home today. Please add this to the agenda for Friday's meeting.",
+  "got": "Hmm, I'm working from home today. Please add this to the agenda for Friday's Friday's meeting.",
+  "ms": 853,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "828",
+  "category": "multi_sentence",
+  "input": "i'll send you the final draft by tonight it's raining heavily in bangalore today",
+  "output": "I'll send you the final draft by tonight. It's raining heavily in Bangalore today.",
+  "got": "I'll send you the final draft by tonight. It's raining heavily in Bangalore today.",
+  "ms": 792,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1405",
+  "category": "multi_sentence",
+  "input": "we're we're launching on product hunt next week who is joining the call today",
+  "output": "We're launching on Product Hunt next week. Who is joining the call today?",
+  "got": "We're, we're launching on Product Hunt next week. Who is joining the call today?",
+  "ms": 860,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1254",
+  "category": "multi_sentence",
+  "input": "like that sounds great let's do it it's raining heavily in bangalore today",
+  "output": "That sounds great, let's do it. It's raining heavily in Bangalore today.",
+  "got": "Like that sounds great. Let's do it. It's raining heavily in Bangalore today.",
+  "ms": 752,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "821",
+  "category": "multi_sentence",
+  "input": "hmm sorry i missed your call please add this to the agenda for friday's meeting",
+  "output": "Sorry, I missed your call. Please add this to the agenda for Friday's meeting.",
+  "got": "Hmm, sorry I missed your call. Please add this to the agenda for Friday's meeting.",
+  "ms": 863,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "969",
+  "category": "multi_sentence",
+  "input": "happy birthday hope you have an amazing day let's not overthink this this one",
+  "output": "Happy birthday, hope you have an amazing day! Let's not overthink this one.",
+  "got": "Happy birthday. Hope you have an amazing day. Let's not overthink this one.",
+  "ms": 931,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "433",
+  "category": "multi_sentence",
+  "input": "i mean i'm still waiting on the feedback from the design team please turn off the notifications like during the meeting",
+  "output": "I'm still waiting on the feedback from the design team. Please turn off the notifications during the meeting.",
+  "got": "I mean, I'm still waiting on the feedback from the design team. Please turn off the notifications like during the meeting.",
+  "ms": 866,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "613",
+  "category": "multi_sentence",
+  "input": "like i'm really excited about this opportunity what time does the event start",
+  "output": "I'm really excited about this opportunity. What time does the event start?",
+  "got": "Like, I'm really excited about this opportunity. What time does the event start?",
+  "ms": 951,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "806",
+  "category": "multi_sentence",
+  "input": "the model keeps hallucinating on long inputs congratulations on you know the new role",
+  "output": "The model keeps hallucinating on long inputs. Congratulations on the new role!",
+  "got": "The model keeps hallucinating on long inputs. Congratulations on, you know, the new role.",
+  "ms": 945,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "186",
+  "category": "multi_sentence",
+  "input": "i don't think we have enough data yet can you proofread this paragraph for me",
+  "output": "I don't think we have enough data yet. Can you proofread this paragraph for me?",
+  "got": "I don't think we have enough data yet. Can you proofread this paragraph for me?",
+  "ms": 837,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1170",
+  "category": "multi_sentence",
+  "input": "right so the weather is lovely so let's walk to the office we're hiring a designer and a backend engineer",
+  "output": "The weather is lovely, so let's walk to the office. We're hiring a designer and a backend engineer.",
+  "got": "Right, so the weather is lovely, so let's walk to the office. We're hiring a designer and a backend engineer.",
+  "ms": 896,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "973",
+  "category": "multi_sentence",
+  "input": "uh so that sounds great let's do it he said he'd call back like like in an hour how long will the export take",
+  "output": "That sounds great, let's do it. He said he'd call back in an hour. How long will the export take?",
+  "got": "Uh, so that sounds great. Let's do it. He said he'd call back, like, like in an hour. How long will the export take?",
+  "ms": 1147,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1374",
+  "category": "multi_sentence",
+  "input": "let me think about it and get back to you write a message to ankit saying i'll be late",
+  "output": "Let me think about it and get back to you. Write a message to Ankit saying I'll be late.",
+  "got": "Let me think about it and get back to you. Write a message to Ankit saying I'll be late.",
+  "ms": 817,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "541",
+  "category": "multi_sentence",
+  "input": "the client loved the new design please don't share this with anyone outside the team",
+  "output": "The client loved the new design. Please don't share this with anyone outside the team.",
+  "got": "The client loved the new design. Please don't share this with anyone outside the team.",
+  "ms": 893,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "63",
+  "category": "multi_sentence",
+  "input": "add milk and eggs to my shopping list can you proofread this paragraph for me",
+  "output": "Add milk and eggs to my shopping list. Can you proofread this paragraph for me?",
+  "got": "Add milk and eggs to my shopping list. Can you proofread this paragraph for me?",
+  "ms": 895,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "295",
+  "category": "multi_sentence",
+  "input": "the client loved the new design let me think about it and get back to you",
+  "output": "The client loved the new design. Let me think about it and get back to you.",
+  "got": "The client loved the new design. Let me think about it and get back to you.",
+  "ms": 844,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "531",
+  "category": "multi_sentence",
+  "input": "i'll send you the final draft by you know tonight tonight what time does the event start",
+  "output": "I'll send you the final draft by tonight. What time does the event start?",
+  "got": "I'll send you the final draft by, you know, tonight. Tonight, what time does the event start?",
+  "ms": 1055,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "465",
+  "category": "multi_sentence",
+  "input": "please don't share this with anyone outside the team let's try a different approach this time keep the tone friendly but professional",
+  "output": "Please don't share this with anyone outside the team. Let's try a different approach this time. Keep the tone friendly but professional.",
+  "got": "Please don't share this with anyone outside the team. Let's try a different approach this time. Keep the tone friendly but professional.",
+  "ms": 954,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "146",
+  "category": "multi_sentence",
+  "input": "right so i'm um running about ten minutes late never mind i found it",
+  "output": "I'm running about ten minutes late. Never mind, I found it.",
+  "got": "Right, so I'm, um, running about 10 minutes late. Never mind, I found it.",
+  "ms": 863,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "387",
+  "category": "multi_sentence",
+  "input": "uh so the client loved the new design let me know if you um need anything else",
+  "output": "The client loved the new design. Let me know if you need anything else.",
+  "got": "Uh, so the client loved the new design. Let me know if you, um, need anything else.",
+  "ms": 911,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1230",
+  "category": "multi_sentence",
+  "input": "okay so okay so could we make the button bigger and a bit greener that's a fair point but i disagree",
+  "output": "Could we make the button bigger and a bit greener? That's a fair point, but I disagree.",
+  "got": "Okay, so, okay, so could we make the button bigger and a bit greener? That's a fair point, but I disagree.",
+  "ms": 901,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1271",
+  "category": "multi_sentence",
+  "input": "you're right i should have checked earlier i'm not sure that's the right approach i've been meaning to ask you something",
+  "output": "You're right, I should have checked earlier. I'm not sure that's the right approach. I've been meaning to ask you something.",
+  "got": "You're right, I should have checked earlier. I'm not sure that's the right approach. I've been meaning to ask you something.",
+  "ms": 1584,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "998",
+  "category": "multi_sentence",
+  "input": "the client loved the new design let's not overthink this one",
+  "output": "The client loved the new design. Let's not overthink this one.",
+  "got": "The client loved the new design. Let's not overthink this one.",
+  "ms": 831,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1295",
+  "category": "multi_sentence",
+  "input": "can you share the document with the whole team please turn off the notifications during the meeting",
+  "output": "Can you share the document with the whole team? Please turn off the notifications during the meeting.",
+  "got": "Can you share the document with the whole team? Please turn off the notifications during the meeting.",
+  "ms": 769,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "972",
+  "category": "multi_sentence",
+  "input": "please add this to the agenda for friday's meeting i'll draft the email and you can review it that's all for uh today thank you everyone",
+  "output": "Please add this to the agenda for Friday's meeting. I'll draft the email and you can review it. That's all for today, thank you everyone.",
+  "got": "Please add this to the agenda for Friday's meeting. I'll draft the email and you can review it. That's all for, uh, today. Thank you, everyone.",
+  "ms": 918,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "459",
+  "category": "multi_sentence",
+  "input": "please review the attached proposal and um let me know your thoughts let me think about it and get back to you",
+  "output": "Please review the attached proposal and let me know your thoughts. Let me think about it and get back to you.",
+  "got": "Please review the attached proposal and, um, let me know your thoughts. Let me think about it and get back to you.",
+  "ms": 930,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "13",
+  "category": "multi_sentence",
+  "input": "like the deadline is tight but we can make it happy birthday hope you have an amazing day",
+  "output": "The deadline is tight, but we can make it. Happy birthday, hope you have an amazing day!",
+  "got": "Like the deadline is tight, but we can make it. Happy birthday! Hope you have an amazing day.",
+  "ms": 1549,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1327",
+  "category": "multi_sentence",
+  "input": "write a message to ankit saying i'll be late honestly i think the second option is better",
+  "output": "Write a message to Ankit saying I'll be late. Honestly, I think the second option is better.",
+  "got": "I'll be late. Honestly, I think the second option is better.",
+  "ms": 966,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "422",
+  "category": "multi_sentence",
+  "input": "i'll be out of office from monday to wednesday is the dataset ready for training",
+  "output": "I'll be out of office from Monday to Wednesday. Is the dataset ready for training?",
+  "got": "I'll be out of office from Monday to Wednesday. Is the dataset ready for training?",
+  "ms": 880,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "152",
+  "category": "multi_sentence",
+  "input": "i mean he said he'd call back in an hour open the settings and turn on dark mode",
+  "output": "He said he'd call back in an hour. Open the settings and turn on dark mode.",
+  "got": "I mean, he said he'd call back in an hour. Open the settings and turn on dark mode.",
+  "ms": 988,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1196",
+  "category": "list_numbered",
+  "input": "you know my to do list you know is one call the bank two renew the domain three send the invoice",
+  "output": "My to-do list:\n1. Call the bank\n2. Renew the domain\n3. Send the invoice",
+  "got": "You know my to-do list, you know, is one: call the bank; two: renew the domain; three: send the invoice.",
+  "ms": 954,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1332",
+  "category": "list_numbered",
+  "input": "my to do list is one write the newsletter two prepare the pitch three book tickets four call the bank five go to the gym",
+  "output": "My to-do list:\n1. Write the newsletter\n2. Prepare the pitch\n3. Book tickets\n4. Call the bank\n5. Go to the gym",
+  "got": "My to-do list is: one, write the newsletter; two, prepare the pitch; three, book tickets; four, call the bank; five, go to the gym.",
+  "ms": 986,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1380",
+  "category": "list_numbered",
+  "input": "my to do list is one pay the electricity bill two call the bank three go to the gym",
+  "output": "My to-do list:\n1. Pay the electricity bill\n2. Call the bank\n3. Go to the gym",
+  "got": "My to-do list is: one, pay the electricity bill; two, call the bank; three, go to the gym.",
+  "ms": 901,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "582",
+  "category": "list_numbered",
+  "input": "so my to do list is one review the the pull request two book you know tickets three renew the domain four update the website",
+  "output": "My to-do list:\n1. Review the pull request\n2. Book tickets\n3. Renew the domain\n4. Update the website",
+  "got": "So my to-do list is: one, review the pull request; two, book, you know, tickets; three, renew the domain; four, update the website.",
+  "ms": 935,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1436",
+  "category": "list_numbered",
+  "input": "you know my to do list is one reply to priya two pay the electricity bill three prepare the pitch four book tickets",
+  "output": "My to-do list:\n1. Reply to Priya\n2. Pay the electricity bill\n3. Prepare the pitch\n4. Book tickets",
+  "got": "You know my to-do list is: one, reply to Priya; two, pay the electricity bill; three, prepare the pitch; four, book tickets.",
+  "ms": 1020,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "742",
+  "category": "list_numbered",
+  "input": "my to do list is one buy milk two clean the desk three prepare the pitch four send the invoice five pay the electricity bill",
+  "output": "My to-do list:\n1. Buy milk\n2. Clean the desk\n3. Prepare the pitch\n4. Send the invoice\n5. Pay the electricity bill",
+  "got": "My to-do list is: one, buy milk; two, clean the desk; three, prepare the pitch; four, send the invoice; five, pay the electricity bill.",
+  "ms": 1029,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "911",
+  "category": "list_numbered",
+  "input": "my to do list is one update the website two pay the electricity bill three reply to priya four buy milk",
+  "output": "My to-do list:\n1. Update the website\n2. Pay the electricity bill\n3. Reply to Priya\n4. Buy milk",
+  "got": "My to-do list is: one, update the website; two, pay the electricity bill; three, reply to Priya; four, buy milk.",
+  "ms": 944,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1379",
+  "category": "list_numbered",
+  "input": "you know my to do list is one send the invoice two update the website three pay the electricity bill",
+  "output": "My to-do list:\n1. Send the invoice\n2. Update the website\n3. Pay the electricity bill",
+  "got": "You know my to-do list is one: send the invoice; two: update the website; three: pay the electricity bill.",
+  "ms": 947,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "111",
+  "category": "list_numbered",
+  "input": "my to do list is one write the newsletter two update the website three buy milk four renew the domain five review the pull request",
+  "output": "My to-do list:\n1. Write the newsletter\n2. Update the website\n3. Buy milk\n4. Renew the domain\n5. Review the pull request",
+  "got": "My to-do list is: one, write the newsletter; two, update the website; three, buy milk; four, renew the domain; five, review the pull request.",
+  "ms": 1017,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1219",
+  "category": "amount_correction",
+  "input": "pay the vendor seven hundred i i mean five thousand",
+  "output": "Pay the vendor ₹5,000.",
+  "got": "Pay the vendor seven hundred, I, I mean five thousand.",
+  "ms": 859,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "517",
+  "category": "amount_correction",
+  "input": "uh so the price is one thousand five hundred rupees no no seven thousand five hundred rupees",
+  "output": "The price is ₹7,500.",
+  "got": "Uh, so the price is 1,500 rupees. No, no, 7,500 rupees.",
+  "ms": 1064,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "235",
+  "category": "amount_correction",
+  "input": "uh so the budget is twelve thousand hmm no five hundred",
+  "output": "The budget is ₹500.",
+  "got": "Uh, so the budget is twelve thousand, hmm, no, five hundred.",
+  "ms": 807,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1325",
+  "category": "amount_correction",
+  "input": "the budget is ten thousand wait make it five thousand",
+  "output": "The budget is ₹5,000.",
+  "got": "The budget is $10,000. Wait, make it $5,000.",
+  "ms": 985,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1345",
+  "category": "amount_correction",
+  "input": "so send arjun ten thousand or or actually seven thousand uh five hundred",
+  "output": "Send Arjun ₹7,500.",
+  "got": "So send Arjun 10,000 or, or actually 7,500.",
+  "ms": 1259,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "483",
+  "category": "amount_correction",
+  "input": "right so pay the vendor seven hundred wait make it eight hundred",
+  "output": "Pay the vendor ₹800.",
+  "got": "Right, so pay the vendor seven hundred—wait, make it eight hundred.",
+  "ms": 879,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1028",
+  "category": "amount_correction",
+  "input": "the price is is ten thousand rupees wait make it sixty thousand",
+  "output": "The price is ₹60,000.",
+  "got": "The price is is 10,000 rupees. Wait, make it 60,000.",
+  "ms": 836,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1016",
+  "category": "amount_correction",
+  "input": "pay the vendor one thousand five hundred no one thousand two hundred",
+  "output": "Pay the vendor ₹1,200.",
+  "got": "Pay the vendor one thousand five hundred, no, one thousand two hundred.",
+  "ms": 840,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "298",
+  "category": "amount_correction",
+  "input": "right so pay the vendor twenty five thousand no no make it two thousand five hundred",
+  "output": "Pay the vendor ₹2,500.",
+  "got": "Right, so pay the vendor twenty-five thousand—no, no, make it two thousand five hundred.",
+  "ms": 808,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1145",
+  "category": "amount_correction",
+  "input": "the price is sixty thousand rupees sorry i mean ten thousand rupees",
+  "output": "The price is ₹10,000.",
+  "got": "The price is 60,000 rupees. Sorry, I mean 10,000 rupees.",
+  "ms": 841,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "749",
+  "category": "amount_correction",
+  "input": "uh so the budget is twelve thousand no no you know make it eight hundred",
+  "output": "The budget is ₹800.",
+  "got": "Uh, so the budget is twelve thousand. No, no, you know, make it eight hundred.",
+  "ms": 952,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "360",
+  "category": "amount_correction",
+  "input": "um we charge four thousand five hundred per month actually make it twenty five thousand",
+  "output": "We charge ₹25,000 per month.",
+  "got": "Um, we charge four thousand five hundred per month. Actually, make it twenty-five thousand.",
+  "ms": 954,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1284",
+  "category": "amount_correction",
+  "input": "um send divya five hundred wait no one thousand you know two hundred",
+  "output": "Send Divya ₹1,200.",
+  "got": "Um, send Divya five hundred—wait, no, one thousand. You know, two hundred.",
+  "ms": 815,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1003",
+  "category": "amount_correction",
+  "input": "uh pay the vendor seven hundred wait make it one thousand two hundred",
+  "output": "Pay the vendor ₹1,200.",
+  "got": "Uh, pay the vendor seven hundred—wait, make it one thousand two hundred.",
+  "ms": 889,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "843",
+  "category": "amount_correction",
+  "input": "right so send karan seven thousand five hundred wait no seven hundred",
+  "output": "Send Karan ₹700.",
+  "got": "Right, so send Karan 7,500—wait, no, 700.",
+  "ms": 843,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "889",
+  "category": "amount_correction",
+  "input": "okay so send rohan five thousand or or actually one thousand two hundred",
+  "output": "Send Rohan ₹1,200.",
+  "got": "Okay, so send Rohan 1,000 or, or actually 1,200.",
+  "ms": 869,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1285",
+  "category": "amount_correction",
+  "input": "send priya one thousand two hundred no no make it twelve thousand",
+  "output": "Send Priya ₹12,000.",
+  "got": "Send Priya one thousand two hundred. No, no, make it twelve thousand.",
+  "ms": 674,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1191",
+  "category": "amount_correction",
+  "input": "the budget is two thousand five hundred wait no one thousand two hundred",
+  "output": "The budget is ₹1,200.",
+  "got": "The budget is 2,500—wait, no, 1,200.",
+  "ms": 848,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "591",
+  "category": "amount_correction",
+  "input": "send ishita five hundred you know no no no make it forty thousand",
+  "output": "Send Ishita ₹40,000.",
+  "got": "Send Ishita five hundred. You know, no, no, no, make it forty thousand.",
+  "ms": 1015,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1072",
+  "category": "amount_correction",
+  "input": "you know the budget is twenty five thousand wait no five hundred",
+  "output": "The budget is ₹500.",
+  "got": "You know the budget is twenty-five thousand—wait, no, five hundred.",
+  "ms": 970,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "865",
+  "category": "amount_correction",
+  "input": "pay the vendor sixty thousand actually twenty five thousand",
+  "output": "Pay the vendor ₹25,000.",
+  "got": "Pay the vendor sixty thousand, actually twenty-five thousand.",
+  "ms": 937,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "123",
+  "category": "amount_correction",
+  "input": "uh send shashank seven hundred actually like make it four thousand five hundred hundred",
+  "output": "Send Shashank ₹4,500.",
+  "got": "Uh, send Shashank seven hundred, actually, like make it four thousand five hundred hundred.",
+  "ms": 1005,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "94",
+  "category": "phone",
+  "input": "um my number like is six two nine three nine six eight eight zero one",
+  "output": "My number is 62939 68801.",
+  "got": "Um, my number is 629-396-8801.",
+  "ms": 866,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "937",
+  "category": "phone",
+  "input": "my number is seven seven seven two zero two three nine seven nine two",
+  "output": "My number is 77202 39792.",
+  "got": "My number is 777-202-39792.",
+  "ms": 800,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "617",
+  "category": "phone",
+  "input": "whatsapp me at nine eight five five six nine six eight eight two",
+  "output": "WhatsApp me at 98556 96882.",
+  "got": "WhatsApp me at 985 569 6882",
+  "ms": 816,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "20",
+  "category": "phone",
+  "input": "so my number uh is seven two two four six zero nine seven one one",
+  "output": "My number is 72246 09711.",
+  "got": "So my number, uh, is 722-460-9711.",
+  "ms": 821,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "619",
+  "category": "phone",
+  "input": "uh call me on six four three three two nine six seven three six",
+  "output": "Call me on 64332 96736.",
+  "got": "Uh, call me on 643-329-6736.",
+  "ms": 881,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1303",
+  "category": "metrics",
+  "input": "revenue jumped forty five percent to seven lakh",
+  "output": "Revenue jumped 45% to 7 lakh.",
+  "got": "Revenue jumped 45% to seven lakh.",
+  "ms": 772,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1346",
+  "category": "metrics",
+  "input": "traffic jumped ninety five point five percent to twenty nine crore",
+  "output": "Traffic jumped 95.5% to 29 crore.",
+  "got": "Traffic jumped 95.5% to 29 crore.",
+  "ms": 901,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1068",
+  "category": "phone",
+  "input": "uh so whatsapp whatsapp me at seven eight three seven four nine nine nine eight five",
+  "output": "WhatsApp me at 78374 99985.",
+  "got": "Uh, so WhatsApp me at 783-749-9985.",
+  "ms": 929,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "790",
+  "category": "metrics",
+  "input": "hmm traffic jumped fifty four percent to thirty seven thousand",
+  "output": "Traffic jumped 54% to 37 thousand.",
+  "got": "Hmm, traffic jumped 54% to 37,000.",
+  "ms": 842,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "599",
+  "category": "metrics",
+  "input": "um signups dropped eighteen percent to thirty uh two thousand",
+  "output": "Signups dropped 18% to 32 thousand.",
+  "got": "Um, signups dropped 18% to 30,000.",
+  "ms": 1013,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "437",
+  "category": "metrics",
+  "input": "right so revenue dropped sixty three percent to twenty six lakh",
+  "output": "Revenue dropped 63% to 26 lakh.",
+  "got": "Right, so revenue dropped 63% to 26 lakh.",
+  "ms": 893,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "963",
+  "category": "metrics",
+  "input": "revenue dropped sixty two percent to fourteen thousand",
+  "output": "Revenue dropped 62% to 14 thousand.",
+  "got": "Revenue dropped 62% to $14,000.",
+  "ms": 748,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "901",
+  "category": "metrics",
+  "input": "okay so traffic grew thirty one percent to twenty one lakh",
+  "output": "Traffic grew 31% to 21 lakh.",
+  "got": "Okay, so traffic grew 31% to 21 lakh.",
+  "ms": 866,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "879",
+  "category": "metrics",
+  "input": "okay so traffic grew seventy five like percent to thirty seven lakh",
+  "output": "Traffic grew 75% to 37 lakh.",
+  "got": "Okay, so traffic grew 75% to 37 lakh.",
+  "ms": 872,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "101",
+  "category": "metrics",
+  "input": "churn dropped sixty six percent to eight crore",
+  "output": "Churn dropped 66% to 8 crore.",
+  "got": "Churn dropped 66% to 8 crore.",
+  "ms": 786,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "412",
+  "category": "metrics",
+  "input": "i mean signups jumped two percent uh to thirty six crore",
+  "output": "Signups jumped 2% to 36 crore.",
+  "got": "I mean signups jumped 2% uh to 36 crore.",
+  "ms": 958,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "664",
+  "category": "metrics",
+  "input": "retention grew five five percent to twenty thousand",
+  "output": "Retention grew 5% to 20 thousand.",
+  "got": "Retention grew 5.5% to 20,000.",
+  "ms": 954,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "581",
+  "category": "metrics",
+  "input": "churn grew fifty five point five percent to six lakh",
+  "output": "Churn grew 55.5% to 6 lakh.",
+  "got": "Churn grew 55.5% to 6 lakh.",
+  "ms": 868,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "336",
+  "category": "metrics",
+  "input": "signups grew five percent to eleven thousand",
+  "output": "Signups grew 5% to 11 thousand.",
+  "got": "Signups grew 5% to 11,000.",
+  "ms": 789,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "389",
+  "category": "metrics",
+  "input": "i mean downloads dropped eighty eight percent to thirty five lakh",
+  "output": "Downloads dropped 88% to 35 lakh.",
+  "got": "I mean downloads dropped 88% to 35 lakh.",
+  "ms": 830,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "288",
+  "category": "metrics",
+  "input": "uh conversion jumped sixty nine percent to twenty like one crore",
+  "output": "Conversion jumped 69% to 21 crore.",
+  "got": "Uh, conversion jumped 69% to 21 crore.",
+  "ms": 939,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "343",
+  "category": "metrics",
+  "input": "you know downloads uh grew sixty percent to nine thousand",
+  "output": "Downloads grew 60% to 9 thousand.",
+  "got": "You know, downloads, uh, grew 60% to 9,000.",
+  "ms": 785,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1222",
+  "category": "metrics",
+  "input": "retention grew sixty five point five percent to fifteen thousand",
+  "output": "Retention grew 65.5% to 15 thousand.",
+  "got": "Retention grew 65.5% to 15,000.",
+  "ms": 904,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "594",
+  "category": "metrics",
+  "input": "churn grew forty seven percent to twenty five lakh",
+  "output": "Churn grew 47% to 25 lakh.",
+  "got": "Churn grew 47% to 25 lakh.",
+  "ms": 887,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "516",
+  "category": "day_correction",
+  "input": "okay so i'm free on thursday scratch that wednesday",
+  "output": "I'm free on Wednesday.",
+  "got": "Okay, so I'm free on Thursday. Scratch that, Wednesday.",
+  "ms": 794,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "87",
+  "category": "day_correction",
+  "input": "the deadline is thursday like wait no monday",
+  "output": "The deadline is Monday.",
+  "got": "The deadline is Thursday. Like, wait, no, Monday.",
+  "ms": 937,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "447",
+  "category": "day_correction",
+  "input": "you know move the meeting to sunday sunday or actually friday",
+  "output": "Move the meeting to Friday.",
+  "got": "You know, move the meeting to Sunday, Sunday, or actually Friday.",
+  "ms": 790,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1130",
+  "category": "day_correction",
+  "input": "like move the meeting to thursday sorry i mean sunday",
+  "output": "Move the meeting to Sunday.",
+  "got": "Like move the meeting to Thursday. Sorry, I mean Sunday.",
+  "ms": 999,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1409",
+  "category": "day_correction",
+  "input": "i'm free on friday no maybe wednesday",
+  "output": "I'm free on Wednesday.",
+  "got": "I'm free on Friday. No, maybe Wednesday.",
+  "ms": 767,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1422",
+  "category": "day_correction",
+  "input": "send the report by thursday scratch that wednesday",
+  "output": "Send the report by Wednesday.",
+  "got": "Send the report by Thursday—scratch that, Wednesday.",
+  "ms": 734,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "173",
+  "category": "day_correction",
+  "input": "move the meeting to monday scratch that saturday",
+  "output": "Move the meeting to Saturday.",
+  "got": "Move the meeting to Monday. Scratch that, Saturday.",
+  "ms": 831,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "980",
+  "category": "day_correction",
+  "input": "the deadline is tuesday wait no sunday",
+  "output": "The deadline is Sunday.",
+  "got": "The deadline is Tuesday. Wait, no, Sunday.",
+  "ms": 838,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1055",
+  "category": "day_correction",
+  "input": "hmm i'm free on tuesday actually sunday",
+  "output": "I'm free on Sunday.",
+  "got": "Hmm, I'm free on Tuesday. Actually, Sunday.",
+  "ms": 851,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "102",
+  "category": "day_correction",
+  "input": "i'm free on sunday no no um make it friday",
+  "output": "I'm free on Friday.",
+  "got": "I'm free on Sunday. No, no, um, make it Friday.",
+  "ms": 918,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1320",
+  "category": "day_correction",
+  "input": "i mean the launch is on sunday wait make it monday",
+  "output": "The launch is on Monday.",
+  "got": "I mean the launch is on Sunday. Wait, make it Monday.",
+  "ms": 883,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "907",
+  "category": "day_correction",
+  "input": "the deadline is tuesday i mean monday",
+  "output": "The deadline is Monday.",
+  "got": "The deadline is Tuesday. I mean Monday.",
+  "ms": 793,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "192",
+  "category": "day_correction",
+  "input": "uh the launch is on tuesday no no make it monday",
+  "output": "The launch is on Monday.",
+  "got": "Uh, the launch is on Tuesday. No, no, make it Monday.",
+  "ms": 782,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "982",
+  "category": "day_correction",
+  "input": "hmm let's do it on monday or actually friday",
+  "output": "Let's do it on Friday.",
+  "got": "Hmm, let's do it on Monday or actually Friday.",
+  "ms": 815,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "132",
+  "category": "day_correction",
+  "input": "so i'm free on wednesday actually sunday",
+  "output": "I'm free on Sunday.",
+  "got": "So I'm free on Wednesday, actually Sunday.",
+  "ms": 939,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "801",
+  "category": "day_correction",
+  "input": "uh send send the report by thursday wait make um it tuesday",
+  "output": "Send the report by Tuesday.",
+  "got": "Uh, send the report by Thursday. Wait, make, um, it Tuesday.",
+  "ms": 911,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1308",
+  "category": "day_correction",
+  "input": "the the deadline is sunday wait um no friday",
+  "output": "The deadline is Friday.",
+  "got": "The deadline is Sunday. Wait, um, no, Friday.",
+  "ms": 756,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1273",
+  "category": "day_correction",
+  "input": "um send the you know report by monday no let's say saturday",
+  "output": "Send the report by Saturday.",
+  "got": "Um, send the, you know, report by Monday. No, let's say Saturday.",
+  "ms": 924,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "30",
+  "category": "day_correction",
+  "input": "move the meeting meeting to thursday actually uh make it sunday",
+  "output": "Move the meeting to Sunday.",
+  "got": "Move the meeting meeting to Thursday. Actually, uh, make it Sunday.",
+  "ms": 765,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "17",
+  "category": "day_correction",
+  "input": "okay so the launch is um on tuesday wait no monday",
+  "output": "The launch is on Monday.",
+  "got": "Okay, so the launch is, um, on Tuesday—wait, no, Monday.",
+  "ms": 1045,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "220",
+  "category": "time_correction",
+  "input": "push the review to four am i mean seven forty five a m tomorrow",
+  "output": "Push the review to 7:45 AM tomorrow.",
+  "got": "Push the review to 4:00 a.m. I mean 7:45 a.m. tomorrow.",
+  "ms": 907,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1094",
+  "category": "time_correction",
+  "input": "you know let's have the call at eight fifteen pm hmm no one thirty pm with the team",
+  "output": "Let's have the call at 1:30 PM with the team.",
+  "got": "You know, let's have the call at 8:15 p.m. Hmm, no, 1:30 p.m. with the team.",
+  "ms": 919,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "131",
+  "category": "time_correction",
+  "input": "uh so let's have the call at ten thirty pm i mean two tomorrow",
+  "output": "Let's have the call at 2 PM tomorrow.",
+  "got": "Uh, so let's have the call at 10:30 p.m. I mean 2 tomorrow.",
+  "ms": 1133,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1383",
+  "category": "time_correction",
+  "input": "okay so dinner is at three a m actually ten with the team",
+  "output": "Dinner is at 10 AM with the team.",
+  "got": "Okay, so dinner is at 3 a.m., actually 10 with the team.",
+  "ms": 842,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1213",
+  "category": "time_correction",
+  "input": "set the standup you know for eleven am actually eight eight fifteen a m tomorrow",
+  "output": "Set the standup for 8:15 AM tomorrow.",
+  "got": "Set the standup, you know, for 11:00 a.m., actually 8:15 a.m. tomorrow.",
+  "ms": 841,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "327",
+  "category": "time_correction",
+  "input": "the demo is at two thirty p m wait no nine nine thirty with the team",
+  "output": "The demo is at 9:30 PM with the team.",
+  "got": "The demo is at 2:30 p.m. Wait, no, 9:30 with the team.",
+  "ms": 810,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "929",
+  "category": "time_correction",
+  "input": "remind me to call mom at eleven thirty a m sorry i mean one forty five",
+  "output": "Remind me to call Mom at 1:45 AM.",
+  "got": "Remind me to call Mom at 11:30 a.m. Sorry, I mean 1:45.",
+  "ms": 886,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "400",
+  "category": "time_correction",
+  "input": "dinner is at ten thirty a m scratch that one forty five tomorrow",
+  "output": "Dinner is at 1:45 AM tomorrow.",
+  "got": "Dinner is at 10:30 a.m. Scratch that, 1:45 tomorrow.",
+  "ms": 923,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "912",
+  "category": "time_correction",
+  "input": "hmm schedule the interview for six a m or actually four with the team",
+  "output": "Schedule the interview for 4 AM with the team.",
+  "got": "Hmm, schedule the interview for 6 a.m. or actually 4 with the team.",
+  "ms": 782,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "673",
+  "category": "time_correction",
+  "input": "right so schedule the interview for four thirty a m hmm no six uh if that works",
+  "output": "Schedule the interview for 6 AM if that works.",
+  "got": "Right, so schedule the interview for 4:30 a.m. Hmm, no, six, uh, if that works.",
+  "ms": 859,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1307",
+  "category": "time_correction",
+  "input": "okay so i want to meet at eight thirty am no let's say seven thirty with the team",
+  "output": "I want to meet at 7:30 AM with the team.",
+  "got": "Okay, so I want to meet at 7:30 a.m. with the team.",
+  "ms": 777,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "106",
+  "category": "time_correction",
+  "input": "let's have the call at eleven a m uh no let's say one tomorrow",
+  "output": "Let's have the call at 1 AM tomorrow.",
+  "got": "Let's have the call at 11 a.m. Uh, no, let's say 1 tomorrow.",
+  "ms": 824,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "266",
+  "category": "time_correction",
+  "input": "the demo is at two pm wait make it five forty five with like the team",
+  "output": "The demo is at 5:45 PM with the team.",
+  "got": "The demo is at 2 p.m. Wait, make it 5:45 with, like, the team.",
+  "ms": 948,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "395",
+  "category": "time_correction",
+  "input": "the flight leaves at eleven a m no maybe six am if that works",
+  "output": "The flight leaves at 6 AM if that works.",
+  "got": "The flight leaves at 11 a.m. No, maybe 6 a.m. if that works.",
+  "ms": 941,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "329",
+  "category": "time_correction",
+  "input": "um remind me to uh call mom at seven fifteen pm or actually five thirty if that works",
+  "output": "Remind me to call Mom at 5:30 PM if that works.",
+  "got": "Um, remind me to, uh, call Mom at 7:15 p.m. or actually 5:30 if that works.",
+  "ms": 985,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "473",
+  "category": "time_correction",
+  "input": "i want to meet at two am actually one fifteen a m tomorrow",
+  "output": "I want to meet at 1:15 AM tomorrow.",
+  "got": "I want to meet at 2:00 a.m., actually 1:15 a.m. tomorrow.",
+  "ms": 753,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1270",
+  "category": "time_correction",
+  "input": "um book the conference room for four pm or actually twelve forty five tomorrow",
+  "output": "Book the conference room for 12:45 PM tomorrow.",
+  "got": "Um, book the conference room for 4:00 p.m. or actually 12:45 tomorrow.",
+  "ms": 817,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "232",
+  "category": "time_correction",
+  "input": "can we catch up at ten am no let's say twelve fifteen am with the team",
+  "output": "Can we catch up at 12:15 AM with the team?",
+  "got": "Can we catch up at 10 a.m.? No, let's say 12:15 a.m. with the team.",
+  "ms": 904,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1305",
+  "category": "time_correction",
+  "input": "i'll be there by two thirty a m um hmm no four fifteen am with the team",
+  "output": "I'll be there by 4:15 AM with the team.",
+  "got": "I'll be there by 2:30 a.m. um hmm no 4:15 a.m. with the team",
+  "ms": 882,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "198",
+  "category": "time_correction",
+  "input": "push the review to five thirty pm pm actually make it four thirty",
+  "output": "Push the review to 4:30 PM.",
+  "got": "Push the review to 5:30 p.m. p.m. actually make it 4:30.",
+  "ms": 820,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "961",
+  "category": "time_correction",
+  "input": "uh i'll be there by three a like m scratch that twelve tomorrow",
+  "output": "I'll be there by 12 AM tomorrow.",
+  "got": "Uh, I'll be there by 3 a.m. Like, m—scratch that, 12 tomorrow.",
+  "ms": 928,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "263",
+  "category": "time_correction",
+  "input": "so push the review to two p m hmm no twelve tomorrow",
+  "output": "Push the review to 12 PM tomorrow.",
+  "got": "So push the review to 2 p.m. hmm no 12 tomorrow",
+  "ms": 985,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "538",
+  "category": "time_correction",
+  "input": "set the standup for three p m no maybe one pm if that works",
+  "output": "Set the standup for 1 PM if that works.",
+  "got": "Set the standup for 3 p.m. No, maybe 1 p.m. if that works.",
+  "ms": 1378,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "863",
+  "category": "time_correction",
+  "input": "book the conference room for two thirty am no let's say eight thirty if that works",
+  "output": "Book the conference room for 8:30 AM if that works.",
+  "got": "Book the conference room for 2:30 a.m. No, let's say 8:30 if that works.",
+  "ms": 1048,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "859",
+  "category": "time_correction",
+  "input": "the flight leaves at three thirty am no no make you know it nine fifteen with the team",
+  "output": "The flight leaves at 9:15 AM with the team.",
+  "got": "The flight leaves at 3:30 a.m. No, no, make you know it 9:15 with the team.",
+  "ms": 949,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "303",
+  "category": "time_correction",
+  "input": "schedule the interview for twelve fifteen p m i mean five p m",
+  "output": "Schedule the interview for 5 PM.",
+  "got": "Schedule the interview for 12:15 p.m. I mean 5 p.m.",
+  "ms": 931,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1148",
+  "category": "time_correction",
+  "input": "i'll be you know there by four a m i mean four thirty",
+  "output": "I'll be there by 4:30 AM.",
+  "got": "I'll be, you know, there by 4 a.m., I mean 4:30.",
+  "ms": 937,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1296",
+  "category": "time_correction",
+  "input": "push the review to eight thirty am no let's say nine forty five like tomorrow",
+  "output": "Push the review to 9:45 AM tomorrow.",
+  "got": "Push the review to 8:30 a.m. No, let's say 9:45 like tomorrow.",
+  "ms": 947,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "31",
+  "category": "time_correction",
+  "input": "the demo is at eleven fifteen am no maybe eight",
+  "output": "The demo is at 8 AM.",
+  "got": "The demo is at 11:15 a.m. No, maybe eight.",
+  "ms": 695,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "405",
+  "category": "time_correction",
+  "input": "you know let's grab lunch at three am actually make it seven like am tomorrow",
+  "output": "Let's grab lunch at 7 AM tomorrow.",
+  "got": "You know, let's grab lunch at 3 a.m. Actually, make it 7 a.m. tomorrow.",
+  "ms": 780,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "789",
+  "category": "time_correction",
+  "input": "remind me to call mom at twelve p m uh hmm no four thirty if that works",
+  "output": "Remind me to call Mom at 4:30 PM if that works.",
+  "got": "Remind me to call Mom at 12:00 p.m. Uh hmm no 4:30 if that works.",
+  "ms": 1205,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1120",
+  "category": "time_correction",
+  "input": "can we catch up at two pm scratch that five fifteen fifteen tomorrow",
+  "output": "Can we catch up at 5:15 PM tomorrow?",
+  "got": "Can we catch up at 2 p.m.? Scratch that, 5:15 tomorrow.",
+  "ms": 964,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1338",
+  "category": "time_correction",
+  "input": "you know the flight leaves at eight a m no let's say eleven tomorrow",
+  "output": "The flight leaves at 11 AM tomorrow.",
+  "got": "You know the flight leaves at 8 a.m.? No, let's say 11 tomorrow.",
+  "ms": 1599,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "932",
+  "category": "time_correction",
+  "input": "can we catch up at three fifteen am wait make it eight tomorrow",
+  "output": "Can we catch up at 8 AM tomorrow?",
+  "got": "Can we catch up at 3:15 a.m.? Wait, make it 8:00 tomorrow.",
+  "ms": 870,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "282",
+  "category": "time_correction",
+  "input": "i mean push the review to nine forty five am no no no make it nine",
+  "output": "Push the review to 9 AM.",
+  "got": "I mean push the review to 9:45 a.m. No no no, make it nine.",
+  "ms": 1372,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "753",
+  "category": "time_correction",
+  "input": "wake me up at seven fifteen pm wait no three p m tomorrow",
+  "output": "Wake me up at 3 PM tomorrow.",
+  "got": "Wake me up at 7:15 p.m. wait no 3 p.m. tomorrow",
+  "ms": 951,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1304",
+  "category": "time_correction",
+  "input": "the flight leaves at four p m actually two fifteen tomorrow",
+  "output": "The flight leaves at 2:15 PM tomorrow.",
+  "got": "The flight leaves at 4 p.m., actually 2:15 tomorrow.",
+  "ms": 1009,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1087",
+  "category": "time_correction",
+  "input": "like let's grab lunch at one a uh m hmm no four thirty a m tomorrow",
+  "output": "Let's grab lunch at 4:30 AM tomorrow.",
+  "got": "Like, let's grab lunch at 1 a.m. Uh, mmm, no, 4:30 a.m. tomorrow.",
+  "ms": 875,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "543",
+  "category": "time_correction",
+  "input": "dinner is at six forty um five pm hmm no two thirty",
+  "output": "Dinner is at 2:30 PM.",
+  "got": "Dinner is at 6:40, um, 5 p.m., hmm, no, 2:30.",
+  "ms": 1042,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "148",
+  "category": "time_correction",
+  "input": "so dinner is at like eleven forty five a m sorry i mean ten if that works",
+  "output": "Dinner is at 10 AM if that works.",
+  "got": "So dinner is at like 11:45 a.m., sorry, I mean 10, if that works.",
+  "ms": 903,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1224",
+  "category": "time_correction",
+  "input": "i want to meet at one a m no maybe three",
+  "output": "I want to meet at 3 AM.",
+  "got": "I want to meet at 1 a.m. No, maybe 3.",
+  "ms": 995,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "113",
+  "category": "time_correction",
+  "input": "so so dinner is at five pm or like actually seven",
+  "output": "Dinner is at 7 PM.",
+  "got": "So, so dinner is at 5 p.m. or like actually 7?",
+  "ms": 899,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1056",
+  "category": "time_correction",
+  "input": "i'll be there by five p m sorry i mean eight with the team",
+  "output": "I'll be there by 8 PM with the team.",
+  "got": "I'll be there by 5 p.m. Sorry, I mean 8 with the team.",
+  "ms": 901,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1190",
+  "category": "time_correction",
+  "input": "i mean i'll be there by six a m hmm no one with the team",
+  "output": "I'll be there by 1 AM with the team.",
+  "got": "I mean, I'll be there by 6 a.m. Hmm, no one with the team.",
+  "ms": 912,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "371",
+  "category": "time_correction",
+  "input": "the demo is at eleven thirty pm scratch that twelve forty five pm tomorrow",
+  "output": "The demo is at 12:45 PM tomorrow.",
+  "got": "The demo is at 11:30 p.m. Scratch that, 12:45 p.m. tomorrow.",
+  "ms": 879,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1267",
+  "category": "time_correction",
+  "input": "i want to meet at six fifteen p m scratch that three thirty pm if that works",
+  "output": "I want to meet at 3:30 PM if that works.",
+  "got": "I want to meet at 6:15 p.m. Scratch that, 3:30 p.m., if that works.",
+  "ms": 871,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "758",
+  "category": "time_correction",
+  "input": "like i want to meet at ten thirty pm wait no ten thirty tomorrow",
+  "output": "I want to meet at 10:30 PM tomorrow.",
+  "got": "Like, I want to meet at 10:30 p.m. Wait, no, 10:30 tomorrow.",
+  "ms": 865,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "361",
+  "category": "time_correction",
+  "input": "book the conference room for six fifteen pm actually make it ten like thirty if that works",
+  "output": "Book the conference room for 10:30 PM if that works.",
+  "got": "Book the conference room for 6:15 p.m. Actually, make it 10:30 if that works.",
+  "ms": 859,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "960",
+  "category": "time_correction",
+  "input": "right so the flight leaves at six pm no no make it one thirty uh p m",
+  "output": "The flight leaves at 1:30 PM.",
+  "got": "Right, so the flight leaves at 6:00 p.m. No, no, make it 1:30 p.m.",
+  "ms": 1392,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "518",
+  "category": "time_correction",
+  "input": "uh can we catch up at four p m you know no no no make it three if that works",
+  "output": "Can we catch up at 3 PM if that works?",
+  "got": "Uh, can we catch up at 4 p.m.? You know, no, no, no, make it 3 if that works.",
+  "ms": 1038,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1382",
+  "category": "time_correction",
+  "input": "so let's grab lunch at nine nine a m sorry i mean five uh thirty with the team",
+  "output": "Let's grab lunch at 5:30 AM with the team.",
+  "got": "So let's grab lunch at 9:00 a.m. Sorry, I mean 5:30 with the team.",
+  "ms": 1029,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "610",
+  "category": "time_correction",
+  "input": "remind me to call mom at at two pm wait make it five thirty with the team",
+  "output": "Remind me to call Mom at 5:30 PM with the team.",
+  "got": "Remind me to call Mom at 2:00 p.m. Wait, make it 5:30 with the team.",
+  "ms": 1061,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "658",
+  "category": "date_time",
+  "input": "the meeting is on may sixteenth at twelve p m",
+  "output": "The meeting is on May 16 at 12 PM.",
+  "got": "The meeting is on May 16th at 12 p.m.",
+  "ms": 870,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "791",
+  "category": "date_time",
+  "input": "um my birthday is on september sixteenth",
+  "output": "My birthday is on September 16.",
+  "got": "Um, my birthday is on September 16th.",
+  "ms": 879,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1107",
+  "category": "date_time",
+  "input": "submit it before before uh march thirteenth",
+  "output": "Submit it before March 13.",
+  "got": "Submit it before before uh March 13.",
+  "ms": 792,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1288",
+  "category": "date_time",
+  "input": "we ship on march uh twenty first",
+  "output": "We ship on March 21.",
+  "got": "We ship on March 21st.",
+  "ms": 849,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "773",
+  "category": "date_time",
+  "input": "the hackathon is on july thirteenth at four p m",
+  "output": "The hackathon is on July 13 at 4 PM.",
+  "got": "The hackathon is on July 13th at 4 p.m.",
+  "ms": 865,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "249",
+  "category": "date_time",
+  "input": "hmm we ship on february ninth",
+  "output": "We ship on February 9.",
+  "got": "Hmm, we ship on February 9.",
+  "ms": 895,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "155",
+  "category": "date_time",
+  "input": "hmm we ship on march twenty seventh",
+  "output": "We ship on March 27.",
+  "got": "Hmm, we ship on March 27th.",
+  "ms": 1211,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "752",
+  "category": "date_time",
+  "input": "like my birthday is on october eighteenth",
+  "output": "My birthday is on October 18.",
+  "got": "Like my birthday is on October eighteenth.",
+  "ms": 917,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "714",
+  "category": "date_time",
+  "input": "hmm my birthday is on may twenty seventh",
+  "output": "My birthday is on May 27.",
+  "got": "Hmm, my birthday is on May 27th.",
+  "ms": 849,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "268",
+  "category": "date_time",
+  "input": "i mean my birthday is on april twenty third",
+  "output": "My birthday is on April 23.",
+  "got": "I mean my birthday is on April 23rd.",
+  "ms": 819,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1220",
+  "category": "date_time",
+  "input": "my birthday is on january twentieth",
+  "output": "My birthday is on January 20.",
+  "got": "My birthday is on January twentieth.",
+  "ms": 856,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "767",
+  "category": "date_time",
+  "input": "submit it before march like twenty second",
+  "output": "Submit it before March 22.",
+  "got": "Submit it before March 22.",
+  "ms": 850,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "183",
+  "category": "date_time",
+  "input": "the hackathon is on on november seventeenth at two p m",
+  "output": "The hackathon is on November 17 at 2 PM.",
+  "got": "The hackathon is on November 17 at 2 p.m.",
+  "ms": 867,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "765",
+  "category": "date_time",
+  "input": "i mean we ship on february twenty sixth",
+  "output": "We ship on February 26.",
+  "got": "I mean we ship on February 26th.",
+  "ms": 721,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1081",
+  "category": "date_time",
+  "input": "the meeting is on july july first at five thirty pm",
+  "output": "The meeting is on July 1 at 5:30 PM.",
+  "got": "The meeting is on July 1st at 5:30 p.m.",
+  "ms": 1003,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "887",
+  "category": "date_time",
+  "input": "submit it before september seventh",
+  "output": "Submit it before September 7.",
+  "got": "Submit it before September 7.",
+  "ms": 864,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "124",
+  "category": "date_time",
+  "input": "hmm submit it like before august fifteenth",
+  "output": "Submit it before August 15.",
+  "got": "Hmm, submit it like before August 15th.",
+  "ms": 840,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1047",
+  "category": "date_time",
+  "input": "we ship ship on may first",
+  "output": "We ship on May 1.",
+  "got": "We ship ship on May 1st.",
+  "ms": 739,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "855",
+  "category": "date_time",
+  "input": "we ship on august sixteenth",
+  "output": "We ship on August 16.",
+  "got": "We ship on August 16th.",
+  "ms": 837,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "243",
+  "category": "date_time",
+  "input": "uh my birthday is on september seventh",
+  "output": "My birthday is on September 7.",
+  "got": "Uh, my birthday is on September 7.",
+  "ms": 786,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1217",
+  "category": "list_bullets",
+  "input": "i mean i need to buy eggs bread onions and paneer",
+  "output": "I need to buy eggs, bread, onions, and paneer.",
+  "got": "I mean, I need to buy eggs, bread, onions, and paneer.",
+  "ms": 734,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "324",
+  "category": "list_bullets",
+  "input": "i need to buy tomatoes bread you know onions and butter",
+  "output": "I need to buy tomatoes, bread, onions, and butter.",
+  "got": "I need to buy tomatoes, bread, you know, onions, and butter.",
+  "ms": 846,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "458",
+  "category": "list_bullets",
+  "input": "i mean grocery list bullet butter bullet coffee bullet bananas bullet oats bullet rice bullet bread",
+  "output": "Grocery list:\n- Butter\n- Coffee\n- Bananas\n- Oats\n- Rice\n- Bread",
+  "got": "I mean grocery list:\n- butter\n- coffee\n- bananas\n- oats\n- rice\n- bread",
+  "ms": 922,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "43",
+  "category": "list_bullets",
+  "input": "i need to buy paneer onions and bananas",
+  "output": "I need to buy paneer, onions, and bananas.",
+  "got": "I need to buy paneer, onions, and bananas.",
+  "ms": 763,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "987",
+  "category": "list_bullets",
+  "input": "uh so i need to buy bread milk tomatoes paneer oats and coffee",
+  "output": "I need to buy bread, milk, tomatoes, paneer, oats, and coffee.",
+  "got": "Uh, so I need to buy bread, milk, tomatoes, paneer, oats, and coffee.",
+  "ms": 899,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "364",
+  "category": "list_bullets",
+  "input": "grocery list bullet onions you know bullet eggs bullet butter bullet curd bullet bread",
+  "output": "Grocery list:\n- Onions\n- Eggs\n- Butter\n- Curd\n- Bread",
+  "got": "Grocery list:\n- Onions\n- You know\n- Eggs\n- Butter\n- Curd\n- Bread",
+  "ms": 785,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "338",
+  "category": "list_bullets",
+  "input": "i need to buy tomatoes coffee and bananas",
+  "output": "I need to buy tomatoes, coffee, and bananas.",
+  "got": "I need to buy tomatoes, coffee, and bananas.",
+  "ms": 870,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "575",
+  "category": "list_bullets",
+  "input": "uh so grocery list bullet rice bullet milk bullet bullet oats bullet butter bullet bread",
+  "output": "Grocery list:\n- Rice\n- Milk\n- Oats\n- Butter\n- Bread",
+  "got": "Uh, so grocery list: bullet rice, bullet milk, bullet bullet oats, bullet butter, bullet bread.",
+  "ms": 908,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "540",
+  "category": "sentence",
+  "input": "write a message to ankit saying i'll be late",
+  "output": "Write a message to Ankit saying I'll be late.",
+  "got": "I'll be late, Ankit.",
+  "ms": 897,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1156",
+  "category": "sentence",
+  "input": "uh add milk and like eggs to my shopping list",
+  "output": "Add milk and eggs to my shopping list.",
+  "got": "Uh, add milk and, like, eggs to my shopping list.",
+  "ms": 927,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "176",
+  "category": "sentence",
+  "input": "i'll follow up with them on on monday",
+  "output": "I'll follow up with them on Monday.",
+  "got": "I'll follow up with them on on Monday.",
+  "ms": 861,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "271",
+  "category": "sentence",
+  "input": "congratulations on the new role",
+  "output": "Congratulations on the new role!",
+  "got": "Congratulations on the new role.",
+  "ms": 688,
+  "exact": false,
+  "close": true
+ },
+ {
+  "id": "858",
+  "category": "sentence",
+  "input": "okay so is there anything else you need from me",
+  "output": "Is there anything else you need from me?",
+  "got": "Okay, so is there anything else you need from me?",
+  "ms": 893,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1419",
+  "category": "sentence",
+  "input": "why is the build failing on the main branch",
+  "output": "Why is the build failing on the main branch?",
+  "got": "Why is the build failing on the main branch?",
+  "ms": 909,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "954",
+  "category": "sentence",
+  "input": "i've been meaning to ask you something",
+  "output": "I've been meaning to ask you something.",
+  "got": "I've been meaning to ask you something.",
+  "ms": 710,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1272",
+  "category": "sentence",
+  "input": "can you share the document with the whole team team",
+  "output": "Can you share the document with the whole team?",
+  "got": "Can you share the document with the whole team team?",
+  "ms": 860,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "240",
+  "category": "sentence",
+  "input": "sorry i missed your call",
+  "output": "Sorry, I missed your call.",
+  "got": "Sorry, I missed your call.",
+  "ms": 907,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "639",
+  "category": "sentence",
+  "input": "do you have time for a quick call tomorrow",
+  "output": "Do you have time for a quick call tomorrow?",
+  "got": "Do you have time for a quick call tomorrow?",
+  "ms": 1031,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "439",
+  "category": "sentence",
+  "input": "can you share the document with the whole team",
+  "output": "Can you share the document with the whole team?",
+  "got": "Can you share the document with the whole team?",
+  "ms": 954,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1357",
+  "category": "sentence",
+  "input": "i've been like meaning to ask you something",
+  "output": "I've been meaning to ask you something.",
+  "got": "I've been like meaning to ask you something.",
+  "ms": 931,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "337",
+  "category": "sentence",
+  "input": "can you remind me what we decided last uh time",
+  "output": "Can you remind me what we decided last time?",
+  "got": "Can you remind me what we decided last, uh, time?",
+  "ms": 790,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "277",
+  "category": "sentence",
+  "input": "could we you know make the button bigger and a bit greener",
+  "output": "Could we make the button bigger and a bit greener?",
+  "got": "Could we, you know, make the button bigger and a bit greener?",
+  "ms": 1167,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "939",
+  "category": "sentence",
+  "input": "thanks that really helped a um um lot",
+  "output": "Thanks, that really helped a lot.",
+  "got": "Thanks, that really helped a um um lot.",
+  "ms": 985,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "381",
+  "category": "sentence",
+  "input": "you know we're hiring a designer and a backend engineer",
+  "output": "We're hiring a designer and a backend engineer.",
+  "got": "You know we're hiring a designer and a backend engineer.",
+  "ms": 918,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1042",
+  "category": "sentence",
+  "input": "uh so honestly i think the second option is like better",
+  "output": "Honestly, I think the second option is better.",
+  "got": "Uh, so honestly, I think the second option is, like, better.",
+  "ms": 812,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "472",
+  "category": "sentence",
+  "input": "i'll take care of it don't worry",
+  "output": "I'll take care of it, don't worry.",
+  "got": "I'll take care of it, don't worry.",
+  "ms": 789,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "251",
+  "category": "sentence",
+  "input": "right so is there anything else you need from me",
+  "output": "Is there anything else you need from me?",
+  "got": "Right, so is there anything else you need from me?",
+  "ms": 880,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "179",
+  "category": "sentence",
+  "input": "never mind i found it",
+  "output": "Never mind, I found it.",
+  "got": "Never mind, I found it.",
+  "ms": 761,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "696",
+  "category": "sentence",
+  "input": "let me know if you need anything else",
+  "output": "Let me know if you need anything else.",
+  "got": "Let me know if you need anything else.",
+  "ms": 927,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "761",
+  "category": "sentence",
+  "input": "i mean i um just finished the first version of the app",
+  "output": "I just finished the first version of the app.",
+  "got": "I mean, I, um, just finished the first version of the app.",
+  "ms": 861,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "75",
+  "category": "sentence",
+  "input": "the deadline is tight but we can make it",
+  "output": "The deadline is tight, but we can make it.",
+  "got": "The deadline is tight, but we can make it.",
+  "ms": 701,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "576",
+  "category": "sentence",
+  "input": "you know where should we meet for dinner",
+  "output": "Where should we meet for dinner?",
+  "got": "You know where should we meet for dinner?",
+  "ms": 902,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "601",
+  "category": "sentence",
+  "input": "you know we should talk to like more users before we build anything else",
+  "output": "We should talk to more users before we build anything else.",
+  "got": "You know, we should talk to, like, more users before we build anything else.",
+  "ms": 850,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "487",
+  "category": "sentence",
+  "input": "um thanks that really helped a lot",
+  "output": "Thanks, that really helped a lot.",
+  "got": "Um, thanks, that really helped a lot.",
+  "ms": 872,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1177",
+  "category": "email",
+  "input": "you you can reach me at pooja dot singh at braino dot co dot in",
+  "output": "You can reach me at pooja.singh@braino.co.in.",
+  "got": "You you can reach me at pooja.singh@braino.co.in",
+  "ms": 910,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "259",
+  "category": "email",
+  "input": "send it to rohan dot k at yahoo dot io io",
+  "output": "Send it to rohan.k@yahoo.io.",
+  "got": "send it to rohan.k@yahoo.io.io",
+  "ms": 823,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "706",
+  "category": "email",
+  "input": "you can reach me at sneha underscore singh at braino dot in",
+  "output": "You can reach me at sneha_singh@braino.in.",
+  "got": "You can reach me at sneha_singh@braino.in.",
+  "ms": 852,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "229",
+  "category": "email",
+  "input": "send it to aditya at outlook dot in",
+  "output": "Send it to aditya@outlook.in.",
+  "got": "Send it to Aditya at outlook.in.",
+  "ms": 723,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "520",
+  "category": "email",
+  "input": "send it to karan dot k you know at yahoo dot in",
+  "output": "Send it to karan.k@yahoo.in.",
+  "got": "send it to karan.k you know at yahoo.in",
+  "ms": 779,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "455",
+  "category": "email",
+  "input": "so you can reach me at arjun dot singh at braino dot com",
+  "output": "You can reach me at arjun.singh@braino.com.",
+  "got": "So you can reach me at arjun.singh@braino.com.",
+  "ms": 797,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "57",
+  "category": "email",
+  "input": "like send it to pooja at mesa dot io",
+  "output": "Send it to pooja@mesa.io.",
+  "got": "like send it to pooja at mesa.io",
+  "ms": 920,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "216",
+  "category": "email",
+  "input": "you can reach me at vikram at gmail dot co dot in",
+  "output": "You can reach me at vikram@gmail.co.in.",
+  "got": "You can reach me at vikram@gmail.co.in.",
+  "ms": 1097,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "284",
+  "category": "email",
+  "input": "you can can reach me at sneha dot um k at mesa dot co dot in",
+  "output": "You can reach me at sneha.k@mesa.co.in.",
+  "got": "You can can reach me at sneha.umk@mesa.co.in",
+  "ms": 762,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "367",
+  "category": "email",
+  "input": "okay so you can reach me at rohan dot pande at braino dot io",
+  "output": "You can reach me at rohan.pande@braino.io.",
+  "got": "Okay, so you can reach me at rohan.pande@braino.io.",
+  "ms": 844,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "392",
+  "category": "email",
+  "input": "uh so send it to sneha at mesa dot like in",
+  "output": "Send it to sneha@mesa.in.",
+  "got": "Uh, so send it to Sneha at mesa dot like in.",
+  "ms": 772,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "1365",
+  "category": "email",
+  "input": "you can reach me at meera underscore singh at gmail dot in",
+  "output": "You can reach me at meera_singh@gmail.in.",
+  "got": "You can reach me at meera_singh@gmail.in.",
+  "ms": 786,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "787",
+  "category": "email",
+  "input": "you can reach me at ishita underscore k at mesa dot co dot in",
+  "output": "You can reach me at ishita_k@mesa.co.in.",
+  "got": "You can reach me at ishita_k@mesa.co.in.",
+  "ms": 800,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1233",
+  "category": "email",
+  "input": "my email is like vikram at gmail dot co dot in",
+  "output": "My email is vikram@gmail.co.in.",
+  "got": "My email is like vikram at gmail dot co dot in.",
+  "ms": 823,
+  "exact": false,
+  "close": false
+ }
+]

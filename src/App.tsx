@@ -104,7 +104,6 @@ const NotionSync = lazy(() => import("./pages/NotionSync.tsx"));
 const GlassPreview = lazy(() => import("./pages/GlassPreview.tsx"));
 const Auth = lazy(() => import("./pages/Auth.tsx"));
 const ExtensionAuth = lazy(() => import("./pages/ExtensionAuth.tsx"));
-const MavenChromeDocs = lazy(() => import("./pages/MavenChromeDocs.tsx"));
 const Premium = lazy(() => import("./pages/Premium.tsx"));
 const BrowserAgent = lazy(() => import("./pages/BrowserAgent.tsx"));
 const Delegate = lazy(() => import("./pages/Delegate.tsx"));
@@ -161,6 +160,9 @@ const ImportChromeLoginsDocs = lazy(() => import("./pages/ImportChromeLoginsDocs
 const MacTaskBoardDocs = lazy(() => import("./pages/MacTaskBoardDocs.tsx"));
 const MacTypeBarDocs = lazy(() => import("./pages/MacTypeBarDocs.tsx"));
 const MacPlayModeDocs = lazy(() => import("./pages/MacPlayModeDocs.tsx"));
+const MavenTeaser = lazy(() => import("./pages/MavenTeaser.tsx"));
+const MavenFilmDocs = lazy(() => import("./pages/MavenFilmDocs.tsx"));
+const MavenChromeDocs = lazy(() => import("./pages/MavenChromeDocs.tsx"));
 const CalendarMacDocs = lazy(() => import("./pages/CalendarMacDocs.tsx"));
 const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
@@ -279,7 +281,6 @@ function AppRoutes() {
         <Route path="/knowledge/brainox-distribution" element={<BrainoXDocs />} />
         <Route path="/knowledge/site-previews" element={<SitePreviewsDocs />} />
         <Route path="/knowledge/braino-first" element={<BrainoFirstDocs />} />
-        <Route path="/knowledge/maven-for-chrome" element={<MavenChromeDocs />} />
         <Route path="/knowledge/one-braino-page" element={<OneBrainoPageDocs />} />
         <Route path="/knowledge/which-contact" element={<WhichContactDocs />} />
         <Route path="/knowledge/meet-braino" element={<MeetBrainoDocs />} />
@@ -290,6 +291,8 @@ function AppRoutes() {
         <Route path="/knowledge/mac-task-board" element={<MacTaskBoardDocs />} />
         <Route path="/knowledge/mac-type-bar" element={<MacTypeBarDocs />} />
         <Route path="/knowledge/mac-play-mode" element={<MacPlayModeDocs />} />
+        <Route path="/knowledge/maven-launch-film" element={<MavenFilmDocs />} />
+        <Route path="/knowledge/maven-for-chrome" element={<MavenChromeDocs />} />
         <Route path="/knowledge/calendar-on-mac" element={<CalendarMacDocs />} />
         <Route path="/knowledge/knows-your-localhost" element={<LocalhostDocs />} />
         <Route path="/knowledge/said-to-him" element={<SaidToHimDocs />} />
@@ -364,6 +367,8 @@ function AppRoutes() {
         <Route path="/jarvis" element={<JarvisOS />} />
         <Route path="/notch-teaser" element={<NotchTeaser />} />
         <Route path="/maven" element={<Maven />} />
+        <Route path="/maven-teaser" element={<MavenTeaser />} />
+        <Route path="/maven-film" element={<MavenTeaser />} />
         <Route path="/launch" element={<DontBlink />} />
         <Route path="/dontblink" element={<IntroTeaser />} />
         <Route path="/aware" element={<EmotionTeaser />} />

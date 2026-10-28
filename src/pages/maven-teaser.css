@@ -1,0 +1,2 @@
+/* /maven-teaser: the real Maven pill, drawn on one canvas over the stage in the gaps between lines. */
+.mvt-pill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; z-index: 4; }

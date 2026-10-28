@@ -1,0 +1,362 @@
+[
+ {
+  "id": "9003",
+  "category": "lists_inline",
+  "input": "i had eggs and oats for breakfast",
+  "output": "I had eggs and oats for breakfast.",
+  "got": "I had eggs and oats for breakfast.",
+  "ms": 1192,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9004",
+  "category": "lists_bullet",
+  "input": "okay so grocery list chocolate spinach and paneer",
+  "output": "Grocery list:\n- Chocolate\n- Spinach\n- Paneer",
+  "got": "Grocery list: chocolate, spinach, and paneer.",
+  "ms": 1316,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "9002",
+  "category": "lists_inline",
+  "input": "can you pick up milk and rice on your way home",
+  "output": "Can you pick up milk and rice on your way home?",
+  "got": "Can you pick up milk and rice on your way home?",
+  "ms": 1357,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9005",
+  "category": "lists_bullet",
+  "input": "grocery list rice oats green tea butter mango",
+  "output": "Grocery list:\n- Rice\n- Oats\n- Green tea\n- Butter\n- Mango",
+  "got": "Grocery list:\n- Rice\n- Oats\n- Green tea\n- Butter\n- Mango",
+  "ms": 1360,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9001",
+  "category": "lists_inline",
+  "input": "i had eggs and green tea for breakfast",
+  "output": "I had eggs and green tea for breakfast.",
+  "got": "I had eggs and green tea for breakfast.",
+  "ms": 1388,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9000",
+  "category": "lists_bullet",
+  "input": "todays to do list book the cab send the invoice review the pull request and call Mom",
+  "output": "Today's to-do list:\n- Book the cab\n- Send the invoice\n- Review the pull request\n- Call Mom",
+  "got": "Today's to-do list:\n- Book the cab\n- Send the invoice\n- Review the pull request\n- Call Mom",
+  "ms": 1540,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9006",
+  "category": "lists_inline",
+  "input": "i had oats and bread for breakfast",
+  "output": "I had oats and bread for breakfast.",
+  "got": "I had oats and bread for breakfast.",
+  "ms": 917,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9007",
+  "category": "lists_bullet",
+  "input": "todays to do list fix the login bug pay the electricity bill update the deck",
+  "output": "Today's to-do list:\n- Fix the login bug\n- Pay the electricity bill\n- Update the deck",
+  "got": "Today's to-do list:\n- Fix the login bug\n- Pay the electricity bill\n- Update the deck",
+  "ms": 965,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9010",
+  "category": "lists_inline",
+  "input": "tell neha to get bananas curd and peanut butter",
+  "output": "Tell Neha to get bananas, curd, and peanut butter.",
+  "got": "Tell Neha to get bananas, curd, and peanut butter.",
+  "ms": 955,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9008",
+  "category": "lists_bullet",
+  "input": "my shopping list is curd chocolate butter atta oats eggs",
+  "output": "My shopping list:\n- Curd\n- Chocolate\n- Butter\n- Atta\n- Oats\n- Eggs",
+  "got": "My shopping list:\n- Curd\n- Chocolate\n- Butter\n- Atta\n- Oats\n- Eggs",
+  "ms": 986,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9009",
+  "category": "lists_numbered",
+  "input": "here's the plan for tomorrow first update the deck then fix the login bug then review the pull request and finally book the cab",
+  "output": "Here's the plan for tomorrow:\n1. Update the deck\n2. Fix the login bug\n3. Review the pull request\n4. Book the cab",
+  "got": "Here's the plan for tomorrow:\n1. Update the deck\n2. Fix the login bug\n3. Review the pull request\n4. Book the cab",
+  "ms": 1104,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9011",
+  "category": "lists_numbered",
+  "input": "to set it up first pay the electricity bill then post on LinkedIn then review the pull request and finally reply to Neha",
+  "output": "To set it up:\n1. Pay the electricity bill\n2. Post on LinkedIn\n3. Review the pull request\n4. Reply to Neha",
+  "got": "To set it up:\n1. Pay the electricity bill\n2. Post on LinkedIn\n3. Review the pull request\n4. Reply to Neha",
+  "ms": 1107,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9012",
+  "category": "lists_bullet",
+  "input": "okay so i need to buy these things green tea tomatoes spinach and eggs",
+  "output": "I need to buy these things:\n- Green tea\n- Tomatoes\n- Spinach\n- Eggs",
+  "got": "I need to buy these things:\n- Green tea\n- Tomatoes\n- Spinach\n- Eggs",
+  "ms": 972,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9014",
+  "category": "lists_numbered",
+  "input": "the process is first pay the electricity bill then update the deck and finally clean the inbox",
+  "output": "The process:\n1. Pay the electricity bill\n2. Update the deck\n3. Clean the inbox",
+  "got": "The process:\n1. Pay the electricity bill\n2. Update the deck\n3. Clean the inbox",
+  "ms": 1027,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9013",
+  "category": "lists_inline",
+  "input": "we're out of dal and butter",
+  "output": "We're out of dal and butter.",
+  "got": "We're out of dal and butter.",
+  "ms": 1093,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9017",
+  "category": "lists_bullet",
+  "input": "my shopping list is tomatoes strawberries and bananas",
+  "output": "My shopping list:\n- Tomatoes\n- Strawberries\n- Bananas",
+  "got": "My shopping list is tomatoes, strawberries, and bananas.",
+  "ms": 988,
+  "exact": false,
+  "close": false
+ },
+ {
+  "id": "9015",
+  "category": "lists_bullet",
+  "input": "i have to go to the grocery store to get the following things bananas curd oats spinach and onions",
+  "output": "I have to go to the grocery store to get the following things:\n- Bananas\n- Curd\n- Oats\n- Spinach\n- Onions",
+  "got": "I have to go to the grocery store to get the following things:\n- Bananas\n- Curd\n- Oats\n- Spinach\n- Onions",
+  "ms": 1441,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9016",
+  "category": "lists_numbered",
+  "input": "the steps are first reply to Neha second clean the inbox third send the invoice third fix the login bug third call Mom",
+  "output": "The steps are:\n1. Reply to Neha\n2. Clean the inbox\n3. Send the invoice\n4. Fix the login bug\n5. Call Mom",
+  "got": "The steps are:\n1. Reply to Neha\n2. Clean the inbox\n3. Send the invoice\n4. Fix the login bug\n5. Call Mom",
+  "ms": 1321,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9018",
+  "category": "lists_bullet",
+  "input": "here's what we need for the party coffee milk paneer oats butter and eggs",
+  "output": "Here's what we need for the party:\n- Coffee\n- Milk\n- Paneer\n- Oats\n- Butter\n- Eggs",
+  "got": "Here's what we need for the party:\n- Coffee\n- Milk\n- Paneer\n- Oats\n- Butter\n- Eggs",
+  "ms": 983,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9020",
+  "category": "lists_inline",
+  "input": "tell rohan to get tomatoes peanut butter and onions",
+  "output": "Tell Rohan to get tomatoes, peanut butter, and onions.",
+  "got": "Tell Rohan to get tomatoes, peanut butter, and onions.",
+  "ms": 931,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9019",
+  "category": "lists_bullet",
+  "input": "i need to buy these things green tea milk tomatoes atta",
+  "output": "I need to buy these things:\n- Green tea\n- Milk\n- Tomatoes\n- Atta",
+  "got": "I need to buy these things:\n- Green tea\n- Milk\n- Tomatoes\n- Atta",
+  "ms": 971,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9021",
+  "category": "lists_numbered",
+  "input": "the steps are first book the cab second fix the login bug third send the invoice third pay the electricity bill third review the pull request",
+  "output": "The steps are:\n1. Book the cab\n2. Fix the login bug\n3. Send the invoice\n4. Pay the electricity bill\n5. Review the pull request",
+  "got": "The steps are:\n1. Book the cab\n2. Fix the login bug\n3. Send the invoice\n4. Pay the electricity bill\n5. Review the pull request",
+  "ms": 1081,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9022",
+  "category": "lists_inline",
+  "input": "tell riya to get onions green tea and bananas",
+  "output": "Tell Riya to get onions, green tea, and bananas.",
+  "got": "Tell Riya to get onions, green tea, and bananas.",
+  "ms": 1046,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9023",
+  "category": "lists_inline",
+  "input": "we're out of butter and green tea",
+  "output": "We're out of butter and green tea.",
+  "got": "We're out of butter and green tea.",
+  "ms": 1140,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9024",
+  "category": "lists_bullet",
+  "input": "here's what we need for the party spinach bread onions",
+  "output": "Here's what we need for the party:\n- Spinach\n- Bread\n- Onions",
+  "got": "Here's what we need for the party:\n- Spinach\n- Bread\n- Onions",
+  "ms": 946,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9025",
+  "category": "lists_bullet",
+  "input": "okay so grocery list strawberries eggs milk rice",
+  "output": "Grocery list:\n- Strawberries\n- Eggs\n- Milk\n- Rice",
+  "got": "Grocery list:\n- Strawberries\n- Eggs\n- Milk\n- Rice",
+  "ms": 906,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9026",
+  "category": "lists_inline",
+  "input": "we're out of green tea milk and mango",
+  "output": "We're out of green tea, milk, and mango.",
+  "got": "We're out of green tea, milk, and mango.",
+  "ms": 902,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9028",
+  "category": "lists_inline",
+  "input": "can you pick up tomatoes eggs and atta on your way home",
+  "output": "Can you pick up tomatoes, eggs, and atta on your way home?",
+  "got": "Can you pick up tomatoes, eggs, and atta on your way home?",
+  "ms": 881,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9027",
+  "category": "lists_numbered",
+  "input": "my priorities today are one fix the login bug two pay the electricity bill three call Mom four review the pull request",
+  "output": "My priorities today:\n1. Fix the login bug\n2. Pay the electricity bill\n3. Call Mom\n4. Review the pull request",
+  "got": "My priorities today:\n1. Fix the login bug\n2. Pay the electricity bill\n3. Call Mom\n4. Review the pull request",
+  "ms": 1192,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9030",
+  "category": "lists_bullet",
+  "input": "stuff i need from the market tomatoes onions curd dal and butter",
+  "output": "Stuff I need from the market:\n- Tomatoes\n- Onions\n- Curd\n- Dal\n- Butter",
+  "got": "Stuff I need from the market:\n- Tomatoes\n- Onions\n- Curd\n- Dal\n- Butter",
+  "ms": 904,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9029",
+  "category": "lists_bullet",
+  "input": "grocery list paneer bread curd mango spinach and eggs",
+  "output": "Grocery list:\n- Paneer\n- Bread\n- Curd\n- Mango\n- Spinach\n- Eggs",
+  "got": "Grocery list:\n- Paneer\n- Bread\n- Curd\n- Mango\n- Spinach\n- Eggs",
+  "ms": 1109,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9032",
+  "category": "lists_numbered",
+  "input": "my priorities today are one book the cab two fix the login bug three post on LinkedIn",
+  "output": "My priorities today:\n1. Book the cab\n2. Fix the login bug\n3. Post on LinkedIn",
+  "got": "My priorities today:\n1. Book the cab\n2. Fix the login bug\n3. Post on LinkedIn",
+  "ms": 950,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9031",
+  "category": "lists_inline",
+  "input": "can you pick up mango peanut butter and milk on your way home",
+  "output": "Can you pick up mango, peanut butter, and milk on your way home?",
+  "got": "Can you pick up mango, peanut butter, and milk on your way home?",
+  "ms": 1002,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9033",
+  "category": "lists_bullet",
+  "input": "my shopping list is atta dal strawberries and tomatoes",
+  "output": "My shopping list:\n- Atta\n- Dal\n- Strawberries\n- Tomatoes",
+  "got": "My shopping list:\n- Atta\n- Dal\n- Strawberries\n- Tomatoes",
+  "ms": 959,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9035",
+  "category": "lists_inline",
+  "input": "we're out of green tea and chocolate",
+  "output": "We're out of green tea and chocolate.",
+  "got": "We're out of green tea and chocolate.",
+  "ms": 1009,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "9034",
+  "category": "lists_inline",
+  "input": "we're out of bread oats and tomatoes",
+  "output": "We're out of bread, oats, and tomatoes.",
+  "got": "We're out of bread, oats, and tomatoes.",
+  "ms": 1159,
+  "exact": true,
+  "close": true
+ }
+]

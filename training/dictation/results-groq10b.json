@@ -1,0 +1,102 @@
+[
+ {
+  "id": "1380",
+  "category": "list_numbered",
+  "input": "my to do list is one pay the electricity bill two call the bank three go to the gym",
+  "output": "My to-do list:\n1. Pay the electricity bill\n2. Call the bank\n3. Go to the gym",
+  "got": "My to-do list:\n1. Pay the electricity bill\n2. Call the bank\n3. Go to the gym",
+  "ms": 1728,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "121",
+  "category": "spoken_punct",
+  "input": "hey priya comma new paragraph please make the headline shorter and punchier new paragraph best comma new line itish",
+  "output": "Hey Priya,\n\nPlease make the headline shorter and punchier.\n\nBest,\nItish",
+  "got": "Hey Priya,\n\nPlease make the headline shorter and punchier.\n\nBest,\nItish",
+  "ms": 1752,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "290",
+  "category": "multi_sentence",
+  "input": "hmm i'm working from home today please add this to the agenda for friday's friday's meeting",
+  "output": "I'm working from home today. Please add this to the agenda for Friday's meeting.",
+  "got": "I'm working from home today. Please add this to the agenda for Friday's meeting.",
+  "ms": 1926,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "20",
+  "category": "phone",
+  "input": "so my number uh is seven two two four six zero nine seven one one",
+  "output": "My number is 72246 09711.",
+  "got": "My number is 72246 09711.",
+  "ms": 2267,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "907",
+  "category": "day_correction",
+  "input": "the deadline is tuesday i mean monday",
+  "output": "The deadline is Monday.",
+  "got": "The deadline is Monday.",
+  "ms": 2301,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "355",
+  "category": "spoken_punct",
+  "input": "i need a break my brain is fried exclamation mark",
+  "output": "I need a break, my brain is fried!",
+  "got": "I need a break, my brain is fried!",
+  "ms": 2457,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "954",
+  "category": "sentence",
+  "input": "i've been meaning to ask you something",
+  "output": "I've been meaning to ask you something.",
+  "got": "I've been meaning to ask you something.",
+  "ms": 879,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "1233",
+  "category": "email",
+  "input": "my email is like vikram at gmail dot co dot in",
+  "output": "My email is vikram@gmail.co.in.",
+  "got": "My email is vikram@gmail.co.in.",
+  "ms": 964,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "155",
+  "category": "date_time",
+  "input": "hmm we ship on march twenty seventh",
+  "output": "We ship on March 27.",
+  "got": "We ship on March 27.",
+  "ms": 1919,
+  "exact": true,
+  "close": true
+ },
+ {
+  "id": "863",
+  "category": "time_correction",
+  "input": "book the conference room for two thirty am no let's say eight thirty if that works",
+  "output": "Book the conference room for 8:30 AM if that works.",
+  "got": "Book the conference room for 8:30 AM if that works.",
+  "ms": 2026,
+  "exact": true,
+  "close": true
+ }
+]

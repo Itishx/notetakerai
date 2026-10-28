@@ -32,6 +32,18 @@ export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
     number: "095",
   },
   {
+    slug: "maven-launch-film",
+    title: "Maven Launch Film",
+    category: "Product",
+    date: "2026-10-28",
+    dateLabel: "October 28, 2026",
+    description:
+      "One line at a time in the middle of a black frame, and between the lines only the real Maven pill: waking up, listening, going green, and growing into the Do bar to send a message.",
+    status: "MVP",
+    platform: "Website",
+    number: "094",
+  },
+  {
     slug: "mac-play-mode",
     title: "Play Mode: Handle This For Me",
     category: "Mode",

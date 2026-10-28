@@ -1,0 +1,12 @@
+[
+ {
+  "id": "1",
+  "category": "lists_bullet",
+  "input": "Okay, so I want to go to the grocery store and I want to order a bag of chips, a bag of Cheetos, some strawberries, some chocolate syrup, and some protein shake.",
+  "output": "x",
+  "got": "I want to go to the grocery store and I want to order:\n- A bag of chips\n- A bag of Cheetos\n- Some strawberries\n- Some chocolate syrup\n- Some protein shake",
+  "ms": 3300,
+  "exact": false,
+  "close": false
+ }
+]
