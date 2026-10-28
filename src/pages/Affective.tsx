@@ -105,7 +105,9 @@ const MAVEN_FAQS = [
   { q: "Which languages does it understand?", a: "English, Hindi and Hinglish. It works out which one you're speaking, and Hindi stays in Devanagari while Hinglish stays in Roman letters." },
   { q: "Will it send or submit anything without asking?", a: "No. Messages, replies and forms always wait for your yes." },
   { q: "How is it different from Wispr Flow?", a: "Wispr Flow types what you say. Maven does that too, then does the small job that comes next: opening apps, sending a message, filling a form. It's also cheaper." },
-  { q: "What is AffectiveOS?", a: "The layer we built that Maven runs on. It lets the Mac you already own hear you, use your apps and remember you." },
+  { q: "What is Braino?", a: "A companion who lives in your Mac's notch. He sees your screen, hears you, talks back, does the work in your apps and remembers you. He's in the lab now." },
+  { q: "When can I use Braino?", a: "He's in private beta while he grows. Join the waitlist on his page and we'll let you in as places open." },
+  { q: "What is AffectiveOS?", a: "The layer we built that Maven and Braino run on. It lets the Mac you already own hear you, use your apps and remember you." },
   { q: "Does it work on Windows?", a: "Not yet. Mac only for now." },
   { q: "Where does my voice go?", a: "It's turned into text in the cloud and never kept. Your history stays on your Mac." },
   { q: "What else is Affective building?", a: "Some bigger things, in Labs. Go and have a look." },
@@ -547,6 +549,7 @@ export default function Affective() {
           </Link>
           <div className="aff-nav-links">
             <Link to="/maven">Maven</Link>
+            <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/labs">Labs</Link>
             <Link to="/about">About</Link>
@@ -574,11 +577,11 @@ export default function Affective() {
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                Meet Maven. It writes what you say, wherever you type, and does the small job that comes next. In English, Hindi and Hinglish.
+                Maven is out now: it writes what you say, wherever you type. Braino is in the lab: a companion who does the work in your apps.
               </p>
               <div className="aff-hero-cta">
-                <Link to="/maven" className="aff-cta">Get Maven for Mac</Link>
-                <Link to="/maven" className="aff-cta aff-cta-ghost">Meet Maven</Link>
+                <Link to="/maven" className="aff-cta">Meet Maven</Link>
+                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
           </div>
@@ -620,7 +623,25 @@ export default function Affective() {
         </div>
       </header>
 
-      <section className="hb6" id="products">
+      {/* Two products, side by side (2026-10-28, Itish: don't hide Braino). Polaroids:
+          the picture on top, the words below. Maven out now, Braino in the lab. */}
+      <section className="hb6 aff-polas" id="products">
+        <div className="aff-wrap">
+          <p className="ah-kicker">What we make</p>
+          <div className="aff-pola-row">
+            <Link to="/maven" className="aff-pola aff-pola-maven aff-reveal">
+              <div className="aff-pola-pic"><span className="aff-pola-face"><MavenFace mood="listening" /></span></div>
+              <div className="aff-pola-txt"><span className="aff-pola-tag is-live">Out now</span><h3>Maven</h3><p>Talk, and your words are written properly, wherever you type. Then it does the small job that comes next.</p><span className="aff-pola-go">Meet Maven →</span></div>
+            </Link>
+            <Link to="/braino" className="aff-pola aff-pola-braino aff-reveal">
+              <div className="aff-pola-pic"><BrainoMascot size={150} className="aff-pola-him" /></div>
+              <div className="aff-pola-txt"><span className="aff-pola-tag">In the lab</span><h3>Braino</h3><p>A companion who lives in your Mac's notch. He sees your screen, hears you and does the work in your apps.</p><span className="aff-pola-go">Meet Braino →</span></div>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="hb6">
         <div className="aff-wrap">
           <p className="ah-kicker">Meet Maven</p>
           <h2 className="aff-h1 ah-os-line hb6-big" data-lit>
@@ -651,8 +672,40 @@ export default function Affective() {
             </ul>
           </div>
 
-          {/* Braino is kept for Labs: one quiet line, no picture (2026-10-28). */}
-          <p className="hb6-also aff-reveal">Something bigger is growing in the lab. <Link to="/labs">Take a look →</Link></p>
+          {/* Braino, back on the homepage (2026-10-28): the box he had before. */}
+          <p className="ah-kicker" style={{ marginTop: 56 }}>Meet Braino · in the lab</p>
+          <div className="hb6-box aff-reveal">
+          <div className="hb6-head">
+            <div>
+              <p className="ah-kicker">Private beta</p>
+              <div className="hb5-name">
+                <h2>Braino</h2>
+                <BrainoMascot size={92} className="hb4-him" />
+              </div>
+              <p className="hb6-line">Tell him what you want and he does it, in the apps you already use, and remembers you. Nothing is sent, bought or posted without your yes.</p>
+            </div>
+            <div className="hb6-side">
+              <div className="hb5-go">
+                <button type="button" className="aff-cta" aria-pressed={blink} onClick={() => setBlink((on) => !on)}>{blink ? "Back to what he does" : "Don\u2019t Blink"}</button>
+                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
+              </div>
+            </div>
+          </div>
+          {/* Don't Blink: the film plays where the six chores were, and the
+              chores come back the moment it ends (2026-10-03). */}
+          {blink ? (
+            <div className="hb6-film">
+              <video ref={filmRef} src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+              <p className="aff-trivia aff-trivia-film" role="note"><span>Trivia</span>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p>
+            </div>
+          ) : (
+            <ul className="hb4-does hb6-jobs">
+              {DOES.map((d) => <li key={d.h} className={d.key ? "is-key" : undefined}>{d.key && <small>{d.key}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>)}
+            </ul>
+          )}
+          </div>
+
+          <p className="hb6-also aff-reveal">Braino runs your day. There is also a version of him that runs your startup. <Link to="/foundry">Meet Braino Foundry →</Link></p>
           <div className="hb6-demo">
           <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
           <p className="hb6-story aff-reveal">You think faster than you type. Say it once, the way you'd say it to a friend, and Maven writes it the way you'd want it written.</p>
@@ -670,7 +723,7 @@ export default function Affective() {
         <div className="aff-wrap">
           <p className="ah-kicker">Why it works</p>
           <h2 className="aff-h1 ah-os-line" data-lit>
-            <Lit text="Maven runs on AffectiveOS, the layer we built for the Mac you already own." />
+            <Lit text="Maven and Braino both run on AffectiveOS, the layer we built for the Mac you already own." />
           </h2>
           <div className="ah-os-say aff-reveal">
             <p>AffectiveOS gives your Mac eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. It runs on top of macOS, so there is nothing to replace or reinstall.</p>
