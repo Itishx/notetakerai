@@ -553,34 +553,19 @@ function MvIntro() {
     next();
     return () => clearTimeout(t);
   }, []);
-  const mode = step.startsWith("d-") ? "write" : step.startsWith("x-") ? "do" : "";
-  const typed = "The deck is done. Numbers by 6 PM, and the budget is ₹25,000.";
-  // Letter by letter, the way it lands at your cursor.
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (step !== "d-type") { if (step !== "d-done") setN(0); else setN(typed.length); return; }
-    let k = 0; const t = window.setInterval(() => { k += 2; setN(Math.min(typed.length, k)); if (k >= typed.length) clearInterval(t); }, 32);
-    return () => clearInterval(t);
-  }, [step]);
+  // Only the pill (2026-10-28, Itish): no keys, no words, no captions. "Meet Maven" sits above it.
   return (
-    <section className={`mvi mvi-${step}`} aria-label="Maven waking up, then writing and doing">
-      <div className="mvi-keys" aria-hidden="true">
-        <span className={"mvi-key" + (mode === "write" ? " on" : "")}><kbd>⌃</kbd><kbd>⌥</kbd><small>Write</small></span>
-        <span className={"mvi-key is-do" + (mode === "do" ? " on" : "")}><kbd>fn</kbd><kbd>⌃</kbd><small>Do</small></span>
-      </div>
+    <section className={`mvi mvi-${step}`} aria-label="Meet Maven: the pill waking up, then writing and doing">
+      <p className="mvi-meet">Meet Maven</p>
       <div className="mvi-stage">
         <div className="mvi-pill">
           <span className="mvi-eyes"><i /><i /></span>
-          <span className="mvi-text">{step === "x-think" ? "Open YouTube" : step === "x-reply" ? "YouTube. Open." : ""}</span>
           <span className="mvi-ring" />
         </div>
-        <p className="mvi-out">{step === "d-type" || step === "d-done" ? <span className="mvi-typed">{typed.slice(0, n)}<i className="mvi-caret" /></span> : step === "d-listen" ? <span className="mvi-hint">“um so the deck is uh done, numbers by five no wait six…”</span> : step === "x-listen" ? <span className="mvi-hint">“open YouTube”</span> : null}</p>
       </div>
-      <p className="mvi-cap">{mode === "write" ? "Press ⌃⌥ and talk. It writes it, cleaned up." : mode === "do" ? "Press fn⌃ and ask. It does the small job." : step === "awake" ? "Hi. I'm Maven." : " "}</p>
     </section>
   );
 }
-
 function SecHead({ pill, children, side }: { pill: string; children: ReactNode; side?: ReactNode }) {
   return (
     <div className="mv-head aff-reveal">
@@ -785,7 +770,7 @@ export default function Maven() {
   return (
     <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
       {/* 0. The opening, full screen, before anything else (2026-10-28). */}
-      {view === "product" && <MvIntro />}
+      {/* intro removed 2026-10-29 */}
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
         links={[]} go={["Download for Mac", "/maven#download"]} />
 
@@ -822,17 +807,17 @@ export default function Maven() {
       </div>
 
       <main>
-        {/* 2. The ribbon, then before and after */}
+        {/* 2. What Maven is, in one breath */}
+        <section className="mv-cell mv-what aff-reveal">
+          <p className="mv-what-k"><span className="mv-pill">What is Maven?</span><MavenFace mood="idle" follow /></p>
+          <p className="mv-what-line">Maven is a small AI buddy that writes what you say, properly, wherever you type. Ask, and it does the small job that comes next. It doesn't talk back. It just does it.</p>
+        </section>
+
+        {/* 3. The ribbon, then before and after */}
         <section className="mv-cell mv-demo" id="see">
           <SecHead pill="Product preview"><h2 className="mv-h2">Say it messy. Get it <em className="mv-it">clean</em>.</h2></SecHead>
           <Ribbon />
           <BeforeAfter />
-        </section>
-
-        {/* 3. What Maven is, in one breath */}
-        <section className="mv-cell mv-what aff-reveal">
-          <p className="mv-what-k"><span className="mv-pill">What is Maven?</span><MavenFace mood="idle" follow /></p>
-          <p className="mv-what-line">Maven is a small AI buddy that writes what you say, properly, wherever you type. Ask, and it does the small job that comes next. It doesn't talk back. It just does it.</p>
         </section>
 
         {/* 4. Speed: the one dark band */}

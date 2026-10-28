@@ -1051,3 +1051,22 @@
 .aff-stack-pic{margin:-20px -20px 0;height:360px;background:none;border-bottom:1px solid var(--a-ink)}
 @media (max-width:720px){.aff-stack-pic{height:260px}}
 .aff-stack{margin-inline:auto}
+
+/* Products v6 (Apple-style tiles): two big tiles, small gap, words centred on
+   top, two pill buttons, the character large underneath. Light Maven, dark Braino. */
+.aff-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:48px}
+.aff-tile{display:flex;flex-direction:column;align-items:center;text-align:center;padding:56px 24px 0;min-height:640px;overflow:hidden;min-width:0}
+.aff-tile-light{background:#f5f5f7;color:#1d1d1f}
+.aff-tile-dark{background:#000;color:#f5f5f7}
+.aff-tile h3{margin:0;font-size:clamp(40px,4.4vw,56px);font-weight:600;letter-spacing:-.02em;line-height:1.05}
+.aff-tile-sub{margin:8px 0 0;font-size:clamp(20px,2vw,26px);line-height:1.25}
+.aff-tile-note{margin:10px 0 0;font-size:16px;opacity:.6}
+.aff-tile-cta{display:flex;gap:14px;margin-top:22px;flex-wrap:wrap;justify-content:center}
+.aff-tile-btn{padding:10px 22px;border-radius:999px;background:#0071e3;color:#fff;font-size:16px;text-decoration:none;border:1px solid #0071e3}
+.aff-tile-btn.is-ghost{background:none;color:#0071e3}
+.aff-tile-dark .aff-tile-btn.is-ghost{color:#2997ff;border-color:#2997ff}
+.aff-tile-btn:hover{opacity:.88}
+.aff-tile-art{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:280px}
+.aff-tile-maven{transform:scale(3)}
+.aff-tile-walk{align-items:flex-end;padding:0 24px 48px}
+@media (max-width:760px){.aff-tiles{grid-template-columns:1fr}.aff-tile{min-height:520px;padding-top:44px}.aff-tile-maven{transform:scale(2.2)}}

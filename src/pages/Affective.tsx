@@ -609,27 +609,27 @@ export default function Affective() {
         <div className="aff-wrap">
           <h2 className="aff-h1 aff-hello-h">Hi, we're <b>Affective.</b></h2>
           <p className="aff-hello-p">We build AI you talk to, for the computer you already own. You say it, your Mac does it. Here's what we're building.</p>
-          <div className="aff-stack">
-            <Link to="/maven" className="aff-stack-row aff-reveal">
-              <div className="aff-stack-txt">
-                <span className="aff-stack-num">01</span>
-                <span className="aff-stack-tag is-live">Out now</span>
-                <h3>Maven</h3>
-                <p>Talk, and your words are written properly, wherever you type. Fillers gone, numbers right, lists as lists, in English, Hindi or Hinglish. Ask, and it does the small job next: open an app, draft the message, fill the form.</p>
-                <span className="aff-stack-go">View now</span>
+          <div className="aff-tiles">
+            <div className="aff-tile aff-tile-light aff-reveal">
+              <h3>Maven</h3>
+              <p className="aff-tile-sub">Say it once. It's already written.</p>
+              <p className="aff-tile-note">Out now for Mac</p>
+              <div className="aff-tile-cta">
+                <Link to="/maven" className="aff-tile-btn">Learn more</Link>
+                <Link to="/maven#download" className="aff-tile-btn is-ghost">Download</Link>
               </div>
-              <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenLoop /></span></div>
-            </Link>
-            <Link to="/braino" className="aff-stack-row aff-reveal">
-              <div className="aff-stack-txt">
-                <span className="aff-stack-num">02</span>
-                <span className="aff-stack-tag">In the lab</span>
-                <h3>Braino</h3>
-                <p>A companion who lives in your Mac's notch and does the work in your apps. You talk to him like a person, he sees your screen, remembers you, and gets it done. Still in the lab while we teach him.</p>
-                <span className="aff-stack-go">View now</span>
+              <div className="aff-tile-art"><span className="aff-tile-maven"><MavenLoop /></span></div>
+            </div>
+            <div className="aff-tile aff-tile-dark aff-reveal">
+              <h3>Braino</h3>
+              <p className="aff-tile-sub">You talk. He does the work.</p>
+              <p className="aff-tile-note">In the lab</p>
+              <div className="aff-tile-cta">
+                <Link to="/braino" className="aff-tile-btn">Learn more</Link>
+                <Link to="/braino#early-access" className="aff-tile-btn is-ghost">Join the waitlist</Link>
               </div>
-              <div className="aff-stack-pic aff-stack-braino"><MiniBraino size={110} /></div>
-            </Link>
+              <div className="aff-tile-art aff-tile-walk"><MiniBraino size={140} /></div>
+            </div>
           </div>
         </div>
       </section>
