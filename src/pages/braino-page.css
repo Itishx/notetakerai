@@ -759,3 +759,15 @@
 .bf-game-window.is-full{position:fixed;inset:0;z-index:1000;margin:0;border:0;background:#000;display:flex;flex-direction:column;justify-content:flex-end}
 .bf-game-window.is-full .bf-playstrip{height:100vh;margin:0}
 ::view-transition-group(bf-game){animation-duration:.45s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+
+/* ══ Braino on the Maven layout (2026-10-29) ══ */
+.bpm .bp-gutters{display:none}
+.bpm-film{position:relative;margin:clamp(32px,4vw,48px) 0 0;overflow:hidden;border-radius:16px;aspect-ratio:16/9;background:#000}
+.bpm-film video{display:block;width:100%;height:100%;object-fit:cover}
+.bpm-wall{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px}
+.bpm-wall li{padding:9px 16px;border-radius:999px;border:1px solid var(--a-line-strong,var(--a-line));background:var(--a-surface);font-size:15px;color:var(--a-ink)}
+.bpm-him{display:flex;align-items:center;justify-content:center;min-height:260px}
+.bpm-foot .mv-foot-word{display:flex;align-items:flex-end;gap:24px}
+.bpm-foot .mv-foot-word .mini-braino-lane{width:220px!important;flex:none}
+.bpm-game{border-top:1px solid var(--a-line)}
+.bpm .bp-story > section{border-bottom:1px solid var(--a-line)}

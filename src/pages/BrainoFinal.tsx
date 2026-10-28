@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useAffTheme } from "@/components/AffTheme";
 import { AffNav, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
@@ -21,6 +21,8 @@ import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
 import "./braino-page.css";
+import "./maven.css";
+import MiniBraino from "@/components/MiniBraino";
 
 /* ============================================================================
    /braino-final — the one page about Braino.
@@ -551,6 +553,23 @@ export function DayScroll({ day, date = "Tue 13 Oct" }: { day: DayMoment[]; date
   );
 }
 
+/* The Maven page's section head and strip, for his page (2026-10-29). */
+function BpHead({ pill, children, side }: { pill: string; children: ReactNode; side?: ReactNode }) {
+  return (
+    <div className="mv-head aff-reveal">
+      <div className="mv-head-l"><span className="mv-pill">{pill}</span>{children}</div>
+      {side && <div className="mv-head-r">{side}</div>}
+    </div>
+  );
+}
+const BP_STRIP = [
+  { t: "Already there", p: "In your Mac's notch, on whatever you're looking at. Nothing to open." },
+  { t: "Talks back", p: "Out loud, in his own voice. Speak or type, whatever is easier." },
+  { t: "Asks first", p: "Nothing is sent, bought or deleted without your yes." },
+];
+const CLICK_LINE = "Open WhatsApp. Find Priya. Scroll up. Read. Click the box. Type. Fix a typo. Read it again. Send. ";
+const SAY_LINE = "\u201cReply to Priya, Friday works.\u201d  ";
+
 export default function BrainoFinal() {
   const { theme, toggle } = useAffTheme();
   /* Which model is open. The url can name one (/braino?model=foundry) and the
@@ -611,42 +630,28 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
-      {/* The Maven page's grid, drawn over the page edges (2026-10-29). It never wraps
-          the content, so sticky and scroll animations keep working. */}
-      <div className="bp-gutters" aria-hidden="true"><i /><i /></div>
-      <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
+    <div className="aff mv bf bp bpm" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+      <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#does"], ["A normal day", "#day"], ["Questions", "#faq"]]} go={["Join the waitlist", "#early-access"]} />
 
-      {/* ── Hero: the home page's, with him in it ── */}
-      <header className="aff-hero">
-        <div className="aff-wrap">
-          <div className="aff-hero-row aff-reveal">
-            <h1 className="aff-h1">
-              <span className="aff-h1-line">{model.title}</span>
-              <b>{model.titleTail}</b>
-            </h1>
-            <div className="aff-hero-side">
-              <p className="aff-hero-one">{model.lede}</p>
-              <div className="aff-hero-cta">
-                <a href={model.cta.to} className="aff-cta">{model.cta.label}</a>
-                {model.film
-                  ? <a href="#film" className="aff-cta aff-cta-ghost">Watch the film</a>
-                  : <a href="#does" className="aff-cta aff-cta-ghost">See what he does</a>}
-              </div>
-            </div>
+      {/* Built the Maven page's way (2026-10-29): one framed column, every
+          section a cell with a pill, a headline and one line beside it. His own
+          film, scenes, day and game sit inside the cells, unchanged. */}
+      <div className="mv-frame">
+      <header className="mv-cell mv-hero">
+        <BpHead pill="Your Mac companion" side={<>
+          <p className="mv-hero-one">{model.lede}</p>
+          <div className="mv-hero-cta">
+            <a href="#early-access" className="aff-cta">Join the waitlist</a>
+            <a href="#see" className="aff-cta aff-cta-ghost">See him work</a>
           </div>
-          {/* The two models, as the home page's quiet pills. */}
-          {SHOWN_MODELS.length > 1 && <div className="bp-tabs aff-reveal" role="tablist" aria-label="Which model" id="what">
-            <i className="bp-tabs-thumb" aria-hidden="true" style={{ transform: `translateX(${at * 100}%)` }} />
-            {SHOWN_MODELS.map((m, i) => (
-              <button key={m.key} type="button" role="tab" aria-selected={i === at} className={i === at ? "on" : ""} onClick={() => setAt(i)}>
-                {m.tab}
-              </button>
-            ))}
-          </div>}
-        </div>
-        {model.film ? (
-          <figure className="aff-hero-shot bp-film" data-grow id="film">
+        </>}>
+          <h1 className="aff-h1 mv-h1">
+            <span className="aff-h1-line">Meet Braino.</span>
+            <b>Your Mac, <em className="mv-it">finally</em> listening.</b>
+          </h1>
+        </BpHead>
+        {model.film && (
+          <figure className="mv-panel bpm-film" id="film">
             <video src={model.film.src} playsInline controls={playing} preload="metadata" poster="/affective-hero.jpg"
               onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} onEnded={() => setPlaying(false)} />
             {!playing && (
@@ -660,186 +665,203 @@ export default function BrainoFinal() {
               </button>
             )}
           </figure>
-        ) : (
-          <figure className="aff-hero-shot" data-grow>
-            <img src="/os-hands.jpg" alt="" width={1774} height={887} loading="eager" decoding="async" />
-          </figure>
         )}
-        <div className="aff-strip">
-          {/* While the film plays, the strip becomes a line of trivia about it. */}
-          {playing ? (
-            <div className="aff-wrap aff-strip-in aff-trivia" role="note"><span>Trivia</span><p>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p></div>
-          ) : (
-          <div className="aff-wrap aff-strip-in">
-            <p className="aff-strip-label">Works in what you already use</p>
-            <ul className="aff-strip-names aff-strip-logos">
-              {(["WhatsApp", "Spotify", "Chrome", "Mail", "Finder", "Calendar"] as const).map((n) => (
-                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
-              ))}
-            </ul>
-          </div>
-          )}
-        </div>
       </header>
+      <ul className="mv-strip">
+        {BP_STRIP.map((x) => <li key={x.t}><h3>{x.t}</h3><p>{x.p}</p></li>)}
+      </ul>
+      <div className="mv-logos">
+        <p className="aff-strip-label">Works in what you already use</p>
+        <ul className="aff-strip-names aff-strip-logos">
+          {(["WhatsApp", "Spotify", "Chrome", "Mail", "Finder", "Calendar"] as const).map((n) => (
+            <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+          ))}
+        </ul>
+      </div>
 
       <main className="bp-story">
-        {/* ── Your companion, first thing after the hero, in the home page's
-            Meet Braino box (2026-10-13) ── */}
-        {model.fast && (
-          <section className="hb6 bco2">
-            <div className="aff-wrap">
-              <div className="hb6-box aff-reveal">
-                <div className="hb6-head">
-                  <div>
-                    <p className="ah-kicker">Not a tool</p>
-                    <div className="hb5-name">
-                      <h2>Your companion.</h2>
-                      <BrainoMascot size={92} className="hb4-him" />
-                    </div>
-                    <p className="hb6-line">A friend who lives on your Mac. Talk to him, ask him anything, hand him the boring stuff. Your second brain, your best friend, your Jarvis.</p>
-                  </div>
-                </div>
-                <ul className="hb4-does hb6-jobs">
-                  {COMPANION_TRAITS.map((t) => <li key={t.h} className="is-key"><small>{t.k}</small><h3>{t.h}</h3><p>{t.p}</p></li>)}
-                </ul>
-              </div>
+        {/* What he is, in one breath */}
+        <section className="mv-cell mv-what aff-reveal">
+          <p className="mv-what-k"><span className="mv-pill">What is Braino?</span><BrainoMascot size={64} /></p>
+          <p className="mv-what-line">Braino is a friend who lives on your Mac. Talk to him, ask him anything about what's on your screen, and he does the work in your apps. Nothing is sent or bought without your yes.</p>
+        </section>
+
+        {/* Product preview: his scenes */}
+        <section className="mv-cell mv-demo" id="see">
+          <BpHead pill="Product preview" side={<p className="mv-head-desc">{model.pain[0]}</p>}>
+            <h2 className="mv-h2">Stop doing the dance. <em className="mv-it">Ask</em> him.</h2>
+          </BpHead>
+          <BrainoScenes />
+        </section>
+
+        {/* Speed: the one dark band */}
+        <section className="mv-cell mv-speed">
+          <BpHead pill="Speed" side={<p className="mv-speed-sub">Replying to one message takes about twelve clicks: find the app, find the chat, read, type, check, send. With Braino it is one sentence.</p>}>
+            <h2 className="aff-h1 mv-speed-h">
+              <span className="aff-h1-line">One sentence</span>
+              <b>beats <em className="mv-it">twelve</em> clicks.</b>
+            </h2>
+          </BpHead>
+          <div className="mv-race">
+            <div className="mv-lane is-type">
+              <p className="mv-lane-k"><b>Doing it yourself</b><span>~12 steps</span></p>
+              <div className="mv-run"><span className="mv-run-t">{CLICK_LINE}{CLICK_LINE}</span></div>
             </div>
-          </section>
-        )}
-        {/* ── What he does, one capability per section (Braino), or the Meet box (Foundry) ── */}
-        {model.fast ? <BrainoScenes /> : <section className="hb6">
-          <div className="aff-wrap">
-            <p className="ah-kicker">{model.painTitle}</p>
-            <h2 className="aff-h1 ah-os-line hb6-big" data-lit><Lit text={`${model.claim} ${model.claimTail}`} /></h2>
-            <div className="ah-os-say hb6-say aff-reveal">
-              {model.pain.map((p) => <p key={p}>{p}</p>)}
-            </div>
-            <div className="hb6-box aff-reveal">
-              <div className="hb6-head">
-                <div>
-                  <p className="ah-kicker">{model.who}</p>
-                  <div className="hb5-name">
-                    <h2>{model.name}</h2>
-                    <BrainoMascot size={92} className="hb4-him" />
-                  </div>
-                  <p className="hb6-line">{model.fast ? "Braino already sees it. Your screen is his context. Whatever you're looking at, he's looking at too. So you skip straight to the question." : "You build the thing. He does the half that gets it seen."}</p>
-                </div>
-              </div>
-              <ul className="hb4-does hb6-jobs" id="does">
-                {(model.fast
-                  ? model.fast.map((f) => ({ k: f.t, h: f.h, p: f.p }))
-                  : model.does.map((d) => ({ k: "", h: d.h, p: d.p }))
-                ).map((d) => (
-                  <li key={d.h} className={d.k ? "is-key" : undefined}>{d.k && <small>{d.k}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>
-                ))}
-              </ul>
+            <div className="mv-lane is-maven">
+              <p className="mv-lane-k"><b>Braino</b><span>1 sentence</span></p>
+              <div className="mv-run"><span className="mv-run-t">{SAY_LINE}{SAY_LINE}</span></div>
             </div>
           </div>
-        </section>}
+        </section>
 
-        {/* ── Five things your Mac never had / the engines ── */}
-        {model.handles && (
-          <section className="ah-os bp-handles">
-            <div className="aff-wrap">
-              <p className="ah-kicker">What he does for you</p>
-              <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.handles.heading} /></h2>
-              {model.handles.note && <div className="ah-os-say aff-reveal"><p>{model.handles.note}</p></div>}
-              <ul className="hb4-does hb6-jobs bp-jobs aff-reveal">
-                {model.handles.jobs.map((j) => (
-                  <li key={j.name} className={j.state !== "Running" ? "is-key" : undefined}>
-                    <small>{j.state !== "Running" ? j.state : j.n}</small>
-                    <h3>{j.name}</h3>
-                    <p>{j.job}</p>
-                    <p className="bp-job-so">{j.solves}</p>
+        {/* How it works: his Mac app tour */}
+        <section className="mv-cell" id="does">
+          <BpHead pill="How it works">
+            <h2 className="aff-h1 mv-h2">
+              <span className="aff-h1-line">You say it.</span>
+              <b>Braino does it.</b>
+            </h2>
+          </BpHead>
+          <MacApp />
+        </section>
+        <ul className="mv-strip">
+          {model.does.slice(0, 3).map((d) => <li key={d.h}><h3>{d.h}</h3><p>{d.p}</p></li>)}
+        </ul>
+
+        {/* His jobs: everything he can do */}
+        {model.wall && (
+          <section className="mv-cell" id="jobs">
+            <BpHead pill="His jobs" side={<p className="mv-head-desc">Say it the way you would say it to a friend. These are a start.</p>}>
+              <h2 className="mv-h2">Exactly what Braino does</h2>
+            </BpHead>
+            <ul className="bpm-wall aff-reveal">{model.wall.map((w) => <li key={w}>{w}</li>)}</ul>
+          </section>
+        )}
+
+        {/* The details: numbered grid around him */}
+        <section className="mv-cell mv-details">
+          <BpHead pill="Benefits"><h2 className="mv-h2">The details</h2></BpHead>
+          <div className="mv-grid aff-reveal">
+            {[0, 1].map((col) => (
+              <ul key={col} className={"mv-grid-col" + (col ? " is-r" : "")}>
+                {COMPANION_TRAITS.slice(col * 2, col * 2 + 2).map((f, i) => (
+                  <li key={f.h}>
+                    <span className="mv-num">[0{col * 2 + i + 1}]</span>
+                    <h3>{f.h}</h3>
+                    <p>{f.p}</p>
                   </li>
                 ))}
               </ul>
+            ))}
+            <div className="mv-grid-mid">
+              <div className="mv-panel bpm-him"><BrainoMascot size={180} /></div>
+              <div className="mv-remember">
+                <h3>{COMPANION_TRAITS[4].h}</h3>
+                <p>{COMPANION_TRAITS[4].p}</p>
+              </div>
             </div>
-          </section>
-        )}
-
-
-
-
-        {/* ── A day with him ── */}
-        <section className="ah-os bp-day" id="day">
-          <div className="aff-wrap">
-            <p className="ah-kicker">What changes</p>
-            <h2 className="aff-h1 ah-os-line" data-lit>{model.dayTitle.split("|").map((t, i) => <span key={t} className="bp-day-line">{i > 0 && <br />}<Lit text={t} /></span>)}</h2>
           </div>
-          {model.day.every((d) => toMinutes(d.at) != null)
-            ? <><p className="bf-ds-hint aff-reveal">Scroll <i aria-hidden="true">↓</i> fast or slow. Watch the day go by.</p><DayScroll day={model.day} /></>
-            : <div className="aff-wrap"><DayClock day={model.day} /></div>}
         </section>
 
-        {/* ── First what he does, then who he is ── */}
-        {model.fast && <><MacApp /><Personality /><FunParts /></>}
+        {/* A normal day */}
+        <section className="mv-cell bp-day" id="day">
+          <BpHead pill="A normal day" side={<p className="mv-head-desc">Scroll fast or slow. Watch the day go by.</p>}>
+            <h2 className="mv-h2">An ordinary Tuesday, <em className="mv-it">with him</em>.</h2>
+          </BpHead>
+          {model.day.every((d) => toMinutes(d.at) != null) ? <DayScroll day={model.day} /> : <DayClock day={model.day} />}
+        </section>
+
+        {/* Beyond assistants */}
+        <section className="mv-cell" id="beyond">
+          <BpHead pill="Beyond assistants"><h2 className="mv-h2">Other assistants answer.<br />Braino <em className="mv-it">does it</em>.</h2></BpHead>
+          <div className="mv-cards aff-reveal">
+            <article className="mv-card">
+              <div className="mv-card-top"><span className="mv-snip">Here's how you could do that.</span></div>
+              <h3>Every assistant</h3>
+              <p>Answers in a chat window. You copy, paste, explain your screen and still do the work yourself.</p>
+            </article>
+            <article className="mv-card">
+              <div className="mv-card-top"><span className="mv-snip mv-snip-face"><BrainoMascot size={40} /><span>Sent to John.</span></span></div>
+              <h3>Then he <em className="mv-it">does it</em>. <span className="mv-card-tag">Only Braino</span></h3>
+              <p>He sees your screen, knows your people, and does it in your apps. He remembers you tomorrow.</p>
+            </article>
+            <article className="mv-card">
+              <div className="mv-card-top"><span className="mv-snip mv-snip-face"><BrainoMascot size={40} /><span>Send it?</span></span></div>
+              <h3>Nothing goes out <em className="mv-it">without you</em>.</h3>
+              <p>Anything that sends, buys, posts or deletes waits for your yes. Screenshots are never stored.</p>
+            </article>
+          </div>
+        </section>
+
+        {/* Who he is, then the fun parts */}
+        <section className="mv-cell" id="personality">
+          <BpHead pill="Personality"><h2 className="mv-h2">Not a tool. <em className="mv-it">A companion</em>.</h2></BpHead>
+          <Personality />
+        </section>
+        <section className="mv-cell" id="fun">
+          <BpHead pill="For fun"><h2 className="mv-h2">He has <em className="mv-it">moves</em>.</h2></BpHead>
+          <FunParts />
+        </section>
+
+        {/* Early access, where Maven has pricing */}
+        <section className="mv-cell" id="early-access">
+          <BpHead pill="Early access" side={<p className="mv-head-desc">{model.honest}</p>}>
+            <h2 className="mv-h2">Get in <em className="mv-it">early</em>.</h2>
+          </BpHead>
+          <EarlyAccess />
+        </section>
       </main>
 
-
-      {/* ── Questions: the home page's ── */}
-      <section className="hb2-faq" id="faq">
-        <div className="aff-wrap hb2-faq-split">
-          <div className="hb2-faq-side">
-            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
-            <p>Including the ones about what we did not build.</p>
-            <p className="bp-foundry-note">Building a startup? There is a version of Braino that runs your distribution. <Link to="/foundry">Meet Braino Foundry →</Link></p>
-          </div>
-          <div className="hb2-faq-list">
-            {FAQ.map((f) => (
-              <details key={f.q}>
-                <summary>{f.q}<i aria-hidden="true">+</i></summary>
-                {f.a.split("\n\n").map((t) => <p key={t}>{t}</p>)}
-              </details>
-            ))}
-          </div>
+      {/* Questions */}
+      <section className="mv-cell mv-faq" id="faq">
+        <BpHead pill="Questions" side={<p className="mv-head-desc">Including the ones about what we did not build.</p>}><h2 className="mv-h2">Questions</h2></BpHead>
+        <div className="mv-faq-list">
+          {FAQ.map((f) => (
+            <details key={f.q}>
+              <summary>{f.q}<i aria-hidden="true">+</i></summary>
+              {f.a.split("\n\n").map((t) => <p key={t}>{t}</p>)}
+            </details>
+          ))}
         </div>
       </section>
 
-      {/* ── The last word ── */}
-      <section className="hb-end" id="early-access">
-        <div className="hb-end-glow" aria-hidden="true" />
-        <BrainoPeek variant="braino" />
-        <div className="aff-wrap hb-end-in hb-end-split aff-reveal">
-          <div className="hb-end-left">
-          <BrainoMascot size={110} className="hb-end-him" />
-          <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
-            Make your Mac more{" "}
-            <span className="hb-end-logo-wrap"><img className="hb-end-logo" src="/affective-logo.png" alt="" width={1000} height={207} aria-hidden="true" /></span>
-            <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
+      {/* Closing panel */}
+      <section className="mv-cell mv-close-sec">
+        <div className="mv-panel mv-close aff-reveal">
+          <h2 className="aff-h1 mv-close-h">
+            <span className="aff-h1-line">You already know what needs doing.</span>
+            <b>Now just <em className="mv-it">say</em> it.</b>
           </h2>
-          <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
+          <div className="mv-close-cta">
+            <a href="#early-access" className="aff-cta">Join the waitlist</a>
+            <BrainoMascot size={56} />
           </div>
-          <EarlyAccess />
         </div>
       </section>
 
-      {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
-      <footer className="braino-footer mario bf-game-mount">
-        {/* One width, one left edge for every row (2026-10-15). */}
-        <div className="bft">
-          <div className="bft-top">
-            <div className="bft-brand">
-              <p className="bft-name">Braino</p>
-              <p className="bft-line">Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
-              <a href="#early-access" className="bft-cta">Join the waitlist</a>
+      {/* Footer: the giant wordmark with him beside it, links, then his game */}
+      <footer className="mv-cell mv-foot bpm-foot">
+        <div>
+          <div className="mv-foot-word">
+            <span>Braino</span>
+            <MiniBraino size={90} />
+          </div>
+          <div className="mv-foot-row">
+            <div className="mv-foot-brand">
+              <p className="mv-foot-means">Your everyday Mac companion</p>
             </div>
-            <nav className="bft-cols" aria-label="Footer">
-              <div><h4>Braino</h4><Link to="/braino">Meet Braino</Link><a href="#day">A normal day</a><a href="#faq">Questions</a><Link to="/changelog">What's new</Link></div>
-              <div><h4>Company</h4><Link to="/">Affective</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/trust">Trust &amp; privacy</Link><Link to="/contact">Contact</Link></div>
-              <div><h4>Connect</h4><a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a><a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a></div>
+            <nav className="mv-foot-links" aria-label="Footer">
+              <a href="#does">What he does</a>
+              <a href="#day">A normal day</a>
+              <a href="#faq">Questions</a>
+              <Link to="/changelog">What's new</Link>
+              <Link to="/trust">Privacy</Link>
             </nav>
           </div>
-          <div className="bft-privacy">
-            <span className="bft-lock" aria-hidden="true"><svg viewBox="0 0 16 18"><rect x="2" y="8" width="12" height="9" rx="2.5" fill="currentColor" /><path d="M4.5 8V5.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg></span>
-            <p><b>Your privacy.</b> Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week. Screenshots are never stored.</p>
-            <Link to="/trust" className="bft-more">How Braino handles your data →</Link>
-          </div>
-          <div className="bft-base">
-            <span>© 2026 Affective · Made in Bengaluru · Braino is in private beta</span>
-            <span className="bft-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
-          </div>
+          <p className="mv-foot-base">© 2026 Braino, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
         </div>
+      </footer>
+      <div className="braino-footer mario bf-game-mount bpm-game">
         <div className={"bf-game-window" + (gameFull ? " is-full" : "")}>
           <button type="button" className="bf-game-max" onClick={toggleGameFull} aria-label={gameFull ? "Exit full screen" : "Play full screen"}>
             {gameFull
@@ -848,7 +870,8 @@ export default function BrainoFinal() {
           </button>
           <BrainoFooterGame />
         </div>
-      </footer>
+      </div>
+      </div>
     </div>
   );
 }
