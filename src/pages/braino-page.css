@@ -771,3 +771,6 @@
 .bpm-foot .mv-foot-word .mini-braino-lane{width:220px!important;flex:none}
 .bpm-game{border-top:1px solid var(--a-line)}
 .bpm .bp-story > section{border-bottom:1px solid var(--a-line)}
+
+/* Same emphasis as Maven: italic serif, same colour. */
+.bpm em.mv-it,.bpm .aff-h1 em.mv-it{font-family:var(--a-display);font-style:italic!important;color:inherit;letter-spacing:-.01em}
