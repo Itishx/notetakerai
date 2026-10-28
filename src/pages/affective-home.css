@@ -1127,3 +1127,6 @@
 /* Bigger colour torch: shows a much wider patch of the picture. */
 .aff-md-shot:hover{--r:360px}
 .aff-md-col{transition:none;-webkit-mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 50%,transparent 100%);mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 50%,transparent 100%)}
+
+/* The dark shade on the left also lifts around the cursor, so colour shows across the whole picture. */
+.aff-md-shot::after{-webkit-mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),transparent 0%,transparent 45%,#000 100%);mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),transparent 0%,transparent 45%,#000 100%)}
