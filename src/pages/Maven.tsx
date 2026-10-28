@@ -684,9 +684,6 @@ export default function Maven() {
             <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
             <a href="#see" className="aff-cta aff-cta-ghost">See it work</a>
           </div>
-          {/* The two shortcuts, said plainly at the top (2026-10-28). */}
-          <p className="mv-keys-line"><kbd>⌃⌥</kbd> writes what you say. <kbd>fn ⌃</kbd> does one small job: open an app, send a message, reply to an email, fill a form.</p>
-          <p className="mv-note">English, Hindi and Hinglish. Mac only for now, Windows is next.</p>
         </>}>
           <h1 className="aff-h1 mv-h1">
             <span className="aff-h1-line">Say it once.</span>
