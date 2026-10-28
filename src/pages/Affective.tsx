@@ -584,14 +584,24 @@ export default function Affective() {
         <div className="aff-wrap">
           <h2 className="aff-h1 aff-hello-h">Hi, we're <b>Affective.</b></h2>
           <p className="aff-hello-p">We build AI you talk to, for the computer you already own. You say it, your Mac does it. Here's what we're building.</p>
-          <div className="aff-pola-row">
-            <Link to="/maven" className="aff-pola aff-pola-maven aff-reveal">
-              <div className="aff-pola-pic"><span className="aff-pola-face"><MavenFace mood="listening" /></span></div>
-              <div className="aff-pola-txt"><span className="aff-pola-tag is-live">Out now</span><h3>Maven</h3><p>Talk, and your words are written properly, wherever you type.</p><span className="aff-pola-go">Meet Maven →</span></div>
+          <div className="aff-stack">
+            <Link to="/maven" className="aff-stack-row aff-reveal">
+              <div className="aff-stack-txt">
+                <span className="aff-stack-tag is-live">Out now</span>
+                <h3>Maven</h3>
+                <p>Talk, and your words are written properly, wherever you type.</p>
+                <span className="aff-stack-go">Read now →</span>
+              </div>
+              <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenFace mood="listening" /></span><span className="aff-stack-lines" aria-hidden="true"><i /><i /><i /></span></div>
             </Link>
-            <Link to="/braino" className="aff-pola aff-pola-braino aff-reveal">
-              <div className="aff-pola-pic"><BrainoMascot size={150} className="aff-pola-him" /></div>
-              <div className="aff-pola-txt"><span className="aff-pola-tag">In the lab</span><h3>Braino</h3><p>A companion in your Mac's notch who does the work in your apps.</p><span className="aff-pola-go">Meet Braino →</span></div>
+            <Link to="/braino" className="aff-stack-row aff-reveal">
+              <div className="aff-stack-txt">
+                <span className="aff-stack-tag">In the lab</span>
+                <h3>Braino</h3>
+                <p>A companion in your Mac's notch who does the work in your apps.</p>
+                <span className="aff-stack-go">View now →</span>
+              </div>
+              <div className="aff-stack-pic aff-stack-braino"><span className="aff-stack-walk"><BrainoMascot size={96} /></span></div>
             </Link>
           </div>
         </div>
