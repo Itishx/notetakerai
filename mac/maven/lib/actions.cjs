@@ -161,4 +161,42 @@ end tell`, 8000).catch(() => "failed");
   return r === "ok";
 }
 
-module.exports = { findApp, openApp, siteFor, frontApp, activate, pressReturn, addToNote, emailFor, mailto, listApps, readMail, readChrome, mailReplyOpen, mailStartReply };
+
+/* ---------- fill a whole form in Chrome (2026-10-29) ----------
+   Reads the visible fields of the active tab (label, name, autocomplete) and
+   tags each with data-maven-i so the fill can find it again. The JS goes in
+   base64 so no quote in it can break the AppleScript string. */
+const FIELDS_JS = `(()=>{const skip=['hidden','submit','button','checkbox','radio','file','password','image','reset','range','color'];
+const txt=(id)=>{const n=document.getElementById(id);return n?n.innerText:''};
+const els=[...document.querySelectorAll('input,textarea')].filter(e=>{const t=(e.type||'').toLowerCase();if(skip.includes(t)||e.disabled||e.readOnly)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0});
+return JSON.stringify(els.slice(0,60).map((e,i)=>{e.setAttribute('data-maven-i',i);let lab='';
+if(e.id){const l=document.querySelector('label[for="'+CSS.escape(e.id)+'"]');if(l)lab=l.innerText}
+if(!lab){const l=e.closest('label');if(l)lab=l.innerText}
+if(!lab&&e.getAttribute('aria-labelledby'))lab=e.getAttribute('aria-labelledby').split(' ').map(txt).join(' ');
+if(!lab)lab=e.getAttribute('aria-label')||'';
+if(!lab){const q=e.closest('[role=listitem],[data-params],fieldset,.form-group');if(q){const h=q.querySelector('[role=heading],legend,label');if(h)lab=h.innerText}}
+return{i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',ac:e.autocomplete||'',ph:e.placeholder||'',label:lab.trim().slice(0,90),value:e.value||''}}))})()`;
+const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
+async function chromeJs(js) {
+  const run = `eval(decodeURIComponent(escape(atob('${b64(js)}'))))`;
+  try {
+    return await osa(`tell application "Google Chrome" to tell active tab of front window to return (execute javascript "${run}")`, 8000);
+  } catch (error) {
+    const msg = String(error?.message || error);
+    if (/javascript|Apple Events|-1723|AppleScript/i.test(msg)) { const e = new Error("javascript off"); e.code = "javascript"; throw e; }
+    throw error;
+  }
+}
+async function chromeFormFields() {
+  const out = await chromeJs(FIELDS_JS);
+  try { return JSON.parse(out || "[]"); } catch (_) { return []; }
+}
+/* Sets each value the way typing would, so React and Google Forms notice. Never submits. */
+async function chromeFillForm(pairs) {
+  const js = `(()=>{const p=${JSON.stringify(pairs)};let n=0;for(const [i,v] of Object.entries(p)){const e=document.querySelector('[data-maven-i="'+i+'"]');if(!e)continue;
+const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');e.focus();if(d&&d.set)d.set.call(e,v);else e.value=v;
+e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));e.blur();n++}return String(n)})()`;
+  return Number(await chromeJs(js)) || 0;
+}
+
+module.exports = { chromeFormFields, chromeFillForm, findApp, openApp, siteFor, frontApp, activate, pressReturn, addToNote, emailFor, mailto, listApps, readMail, readChrome, mailReplyOpen, mailStartReply };

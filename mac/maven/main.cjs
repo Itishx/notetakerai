@@ -1066,9 +1066,83 @@ async function draftReply(intent, rec) {
   return "asking";
 }
 
+/* ---------- "fill this form": every field it knows, in Chrome (2026-10-29) ----------
+   No AI call: each field is matched to a saved detail by its label, name and
+   autocomplete. Shows what goes where, fills on yes, never presses Submit. */
+const FORM_ASK = /\b(fill|feel|bhar|bharo|bhar do)\b.{0,25}\b(form|फॉर्म)\b|\bform\b.{0,12}\b(bhar|fill)|फॉर्म.{0,12}भर/i;
+function fieldKind(f) {
+  const h = `${f.ac} ${f.name} ${f.id} ${f.label} ${f.ph}`.toLowerCase();
+  if (f.type === "email" || /email|e-mail|ईमेल/.test(h)) return "email";
+  if (f.type === "tel" || /\btel\b|phone|mobile|contact (no|number)|whatsapp|फ़ोन|मोबाइल/.test(h)) return "phone";
+  if (/given-name|first.?name|fname/.test(h)) return "first";
+  if (/family-name|last.?name|surname|lname/.test(h)) return "last";
+  if (/(user|company|business|file|org|team|project|nick).?name/.test(h)) return "";
+  if (/\bname\b|full.?name|नाम/.test(h)) return "name";
+  if (/street-address|address-line1|address|street|पता/.test(h)) return "address";
+  return "";
+}
+async function fillFormFlow(rec) {
+  const front = await actions.frontApp();
+  if (!/chrome/i.test(front || "")) { reply("Open it in Chrome.", "nope", 2400); return `form fill needs Chrome (front: ${front})`; }
+  let fields;
+  try { fields = await actions.chromeFormFields(); }
+  catch (error) {
+    if (error.code === "javascript") { islandShow("reply", { note: "Turn on Chrome setting.", face: "nope", hint: "View → Developer → Allow JavaScript from Apple Events" }); islandHide(6000); return "chrome javascript off"; }
+    throw error;
+  }
+  const d = mavenStore.getDetails();
+  const parts = String(d.name || "").trim().split(/\s+/);
+  const values = { name: d.name, email: d.email, phone: d.phone, address: d.address, first: parts[0] || "", last: parts.length > 1 ? parts.slice(1).join(" ") : "" };
+  const pairs = {}; const lines = [];
+  for (const f of fields) {
+    if (String(f.value || "").trim()) continue;
+    const k = fieldKind(f);
+    const v = k && String(values[k] || "").trim();
+    if (!v) continue;
+    pairs[f.i] = v;
+    lines.push(`${(f.label || f.ph || k).replace(/\s+/g, " ").replace(/\*$/, "").trim().slice(0, 28)}: ${v}`);
+  }
+  rec.formFields = fields.length;
+  if (!fields.length) { reply("No form here.", "nope", 2000); return "no form fields"; }
+  if (!lines.length) {
+    const none = !d.name && !d.email && !d.phone && !d.address;
+    reply(none ? "Save your details first." : "Nothing I know.", "nope", 2600);
+    return none ? "no details saved" : `no matching fields (${fields.length} fields)`;
+  }
+  await ask({ kind: "fill", title: `Fill ${lines.length} field${lines.length > 1 ? "s" : ""}`, right: "Your call.", preview: lines.join("  ·  "), primary: "Fill" }, rec, {
+    onYes: async (_text, job) => {
+      islandShow("idle");
+      await giveFocusBack(job.front);
+      const n = await actions.chromeFillForm(pairs);
+      reply(n ? "Filled. Your call." : "Couldn't fill.", n ? "done" : "nope", 2000);
+      return `filled ${n} of ${fields.length} fields`;
+    },
+  });
+  return "asking";
+}
+
+/* ---------- said in Do, meant for Write (2026-10-29) ----------
+   When Do can't act and it sounds like ordinary speech, offer to write it. */
+async function offerWrite(raw, rec) {
+  const words = String(raw || "").trim().split(/\s+/).filter(Boolean).length;
+  if (words < 6) return null;
+  const cleaned = (await refine(raw, 3000).catch(() => null)) || raw.trim();
+  await ask({ kind: "reply", title: "Meant to write this?", right: "Write it?", preview: cleaned, primary: "Write" }, rec, {
+    onYes: async (text, job) => {
+      islandShow("idle");
+      const ok = await pasteInto(job.front, text);
+      reply(ok ? "Written." : "On your clipboard.", ok ? "done" : "nope");
+      return ok ? `wrote it instead, in ${job.front}` : "no text box, copied";
+    },
+  });
+  return "asking: write instead";
+}
+
 async function doAction(intent, rec) {
   mavenStore.init(app.getPath("userData"));
   const act = intent.action;
+  const heardWords = String(rec.heard || "").split(/\s+/).length;
+  if ((act === "fill" && !intent.detail) || ((act === "none" || act === "fill") && heardWords <= 12 && FORM_ASK.test(rec.heard || ""))) return fillFormFlow(rec);
   if (act === "open_app" || act === "switch_app") {
     const found = actions.findApp(intent.app);
     if (!found) {
@@ -1139,6 +1213,8 @@ async function doAction(intent, rec) {
     return intent.word ? `remembered, "${intent.word}" in the dictionary` : "remembered";
   }
   const again = /again/i.test(String(intent.reply3 || ""));
+  const offered = again ? null : await offerWrite(rec.heard, rec);
+  if (offered) return "asking";
   reply(again ? "Again?" : "Not my job.", again ? "again" : "nope");
   return again ? "didn't hear" : "not my job";
 }
@@ -1148,6 +1224,13 @@ async function runDo({ raw, heard, audio, t0, textMs }) {
   islandShow("think", { text: raw.length > 46 ? raw.slice(0, 44).trimEnd() + "…" : raw });
   const rec = { t0, at: new Date().toISOString(), heard: raw, heardBy: heard.provider || "", spokenSec: +((audio?.ms || 0) / 1000).toFixed(1), textMs, intentMs: 0, actMs: 0, sendMs: 0, intent: null, model: "", result: "" };
   const i0 = Date.now();
+  // "fill this form" is clear enough to skip the intent call (saves ~2 s and a model call).
+  if (raw.split(/\s+/).length <= 12 && FORM_ASK.test(raw)) {
+    rec.intent = { action: "fill_form" }; rec.model = "rule";
+    try { rec.result = await fillFormFlow(rec); } catch (error) { rec.result = `failed: ${String(error?.message || error).slice(0, 160)}`; reply("Not my job.", "nope"); }
+    if (rec.result !== "asking") finishDo(rec);
+    return;
+  }
   const r = await intentFor(raw);
   rec.intentMs = Date.now() - i0;
   if (!r) { reply("Again?", "again"); rec.result = "intent failed"; finishDo(rec); return; }
