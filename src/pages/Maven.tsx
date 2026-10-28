@@ -929,7 +929,7 @@ export default function Maven() {
 
         {/* 8b. Mac app or Chrome (2026-10-29) */}
         <section className="mv-cell" id="chrome">
-          <SecHead pill="Mac and Chrome" side={<p className="mv-head-desc">On Windows? We couldn't make a Windows app just yet, so we made Maven for Chrome. It's made for you. Same Maven, same voice, same clean writing.</p>}>
+          <SecHead pill="Mac and Chrome" side={<p className="mv-head-desc">Same Maven, same voice, same clean writing. Use the Mac app, or add it to Chrome on Mac or Windows.</p>}>
             <h2 className="mv-h2">On your Mac. <em className="mv-it">And</em> in Chrome.</h2>
           </SecHead>
           <div className="mv-mvc aff-reveal" role="table" aria-label="Maven for Mac and Maven for Chrome">
