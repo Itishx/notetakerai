@@ -1038,3 +1038,10 @@
 .aff-stack-txt h3{font-size:clamp(40px,5vw,64px);transform:none!important}
 .aff-stack-go{align-self:flex-start;margin-top:12px;padding:10px 22px;border-radius:999px;background:var(--a-ink);color:var(--a-bg);font-size:15px;text-decoration:none!important}
 @media (max-width:720px){.aff-stack{grid-template-columns:1fr;gap:56px}.aff-stack-pic{height:200px}}
+
+/* Products v4: ruled grid. Cells share one visible hairline, no gaps. */
+.aff-stack{gap:0;border:1px solid var(--a-ink)}
+.aff-stack-row{padding:20px;gap:16px}
+.aff-stack-row + .aff-stack-row{border-left:1px solid var(--a-ink)}
+.aff-stack-pic{border-radius:0;height:240px}
+@media (max-width:720px){.aff-stack{gap:0}.aff-stack-row + .aff-stack-row{border-left:0;border-top:1px solid var(--a-ink)}}
