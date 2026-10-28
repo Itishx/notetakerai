@@ -105,7 +105,6 @@ const COMPANY_FAQS = [
   { q: "What is Affective?", a: "A small company building AI you talk to, for the Mac you already own. You say it, your computer writes it or does it." },
   { q: "What are you building?", a: "Two things. Maven, which writes what you say wherever you type, is out now. Braino, a companion who does the work in your apps, is still in the lab." },
   { q: "What is AffectiveOS?", a: "The layer both run on. It lets your Mac hear you, see your screen, do the work and remember you, on top of macOS. Nothing to replace." },
-  { q: "Who is behind it?", a: "Itish Pande, building from India. Write to us any time." },
 ];
 
 const MAVEN_FAQS = [
@@ -596,8 +595,7 @@ export default function Affective() {
           explainer. Maven and Braino have their own pages for the rest. */}
       <section className="hb6 aff-hello" id="products">
         <div className="aff-wrap">
-          <h2 className="aff-h1 aff-hello-h">Hi, we're <b>Affective.</b></h2>
-          <p className="aff-hello-p">We build AI you talk to, for the computer you already own. You say it, your Mac does it. Here's what we're building.</p>
+          <p className="aff-stack-kicker">What we're building</p>
           <div className="aff-stack">
             <Link to="/maven" className="aff-stack-row aff-reveal">
               <div className="aff-stack-txt">
