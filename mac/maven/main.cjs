@@ -504,7 +504,29 @@ function toggleDictation(source, mode = "write") {
 }
 
 let phaseTimer = 0, phaseJobs = [];
+/* Whisper loops on noise and silence ("शायद, शायद, शायद, शायद"). A word or short
+   phrase said 3+ times in a row becomes one (2026-10-28). */
+function collapseRepeats(text) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const out = [];
+  let i = 0;
+  while (i < words.length) {
+    let done = false;
+    for (let n = 3; n >= 1 && !done; n--) {            // phrases of 1 to 3 words
+      const chunk = words.slice(i, i + n).map(norm).join(" ");
+      if (!chunk) continue;
+      let reps = 1;
+      while (words.slice(i + reps * n, i + (reps + 1) * n).map(norm).join(" ") === chunk) reps++;
+      if (reps >= 3) { out.push(...words.slice(i + (reps - 1) * n, i + reps * n)); i += reps * n; done = true; }
+    }
+    if (!done) { out.push(words[i]); i++; }
+  }
+  return out.join(" ");
+}
+let longTakeTimer1 = 0, longTakeTimer2 = 0, longTake = false;
 async function startDictation(source, mode = "write") {
+  longTake = false;
   if (doAsk && mode !== "confirm") void endAsk("interrupted by a new take");
   phase = "starting";
   takeMode = mode;
@@ -529,6 +551,12 @@ async function startDictation(source, mode = "write") {
     for (const seg of await hera().take()) phaseJobs.push(transcribePhase(seg));
   }, 400);
   log("dictation.started", { session: session_, source });
+  // Accidental takes (2026-10-28: ⌃⌥ pressed by mistake, 4.5 min of a TV recorded).
+  // At 2 min the pill asks "Still talking?"; at 5 min it stops and only copies.
+  clearTimeout(longTakeTimer1); clearTimeout(longTakeTimer2);
+  const mine = session_;
+  longTakeTimer1 = setTimeout(() => { if (session_ === mine && phase === "listening") { islandShow("reply", { note: "Still talking?", hint: "Press ⌃⌥ to finish, ✕ to drop it" }); setTimeout(() => { if (session_ === mine && phase === "listening") islandShow("listening", { mode: takeMode }); }, 3500); } }, 120000);
+  longTakeTimer2 = setTimeout(() => { if (session_ === mine && phase === "listening") { longTake = true; stopDictation("five minutes, stopped by itself"); } }, 300000);
   if (stopQueued) { const q = stopQueued; stopQueued = null; stopDictation(q.reason, q.opts); }
 }
 
@@ -677,6 +705,8 @@ function printDictation(d) {
     const dir = path.join(app.getPath("userData"), "training");
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(path.join(dir, "dictations.jsonl"), JSON.stringify({
+      // Not the user: very long, barely matching takes (a TV in the next room) stay out of training.
+      train: !(d.audio.ms > 180000 && diff.kept < 0.4) && !longTake,
       at: new Date().toISOString(), language: d.language || "en", spokenSec: +(d.audio.ms / 1000).toFixed(1), phases: d.audio.phases || 0, heardBy: d.heard.provider || "",
       raw: d.raw, cleanup: d.quick ? "skipped" : r.verdict || "none", cleanupModel: r.model || "", candidate: r.candidate || "", refusedBecause: r.verdict === "refused" ? r.reason : "",
       final: d.finalText, removed: diff.removed, added: diff.added, keptPct: Math.round(diff.kept * 100),
@@ -736,15 +766,18 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
        output only when Hindi alone is picked in Settings. */
     const convert = asked === "auto" && /[\u0900-\u097F]/.test(heard.transcript);
     const language = convert ? "hinglish" : asked === "auto" ? mavenStore.detectLanguage(heard.transcript) : asked;
-    const raw = language === "en" ? spokenNumbersToDigits(heard.transcript.trim()) : heard.transcript.trim();
+    const heardText = collapseRepeats(heard.transcript.trim());
+    const raw = language === "en" ? spokenNumbersToDigits(heardText) : heardText;
     const quick = quickTidy(raw, language);
     const c0 = Date.now();
-    const cleaned = quick || await refine(raw, Math.min(language === "en" ? 7000 : 9000, 2500 + raw.length * 8), language, convert);
+    let cleaned = quick || await refine(raw, Math.min(language === "en" ? 7000 : 9000, 2500 + raw.length * 8), language, convert);
+    // Hinglish expected but the conversion failed: try once more before giving up on Roman letters.
+    if (!cleaned && convert) { log("refine.retry", { reason: "conversion failed" }); cleaned = await refine(raw, 12000, language, convert); }
     const cleanMs = Date.now() - c0;
     mavenStore.init(app.getPath("userData"));
     const finalText = mavenStore.expandSnippet(mavenStore.applyDictionary((convert ? (cleaned || raw) : gate(raw, cleaned)) || raw));
     const p0 = Date.now();
-    const pasted = await insertText(finalText);
+    const pasted = longTake ? (clipboard.writeText(finalText), { ok: false, app: "", longTake: true }) : await insertText(finalText);
     const pasteMs = Date.now() - p0;
     try { fs.writeFileSync(lastDictationPath(), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${finalText}\n`); } catch (_) {}
     printDictation({ language, audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
@@ -759,7 +792,7 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
     if (session_ === mySession) {
       if (pasted.ok) { islandShow("done"); islandHide(850); } // green edge light, then rest // a quick happy squint
-      else { islandShow("note", { note: "Copied. No box." }); islandHide(2200); }
+      else { islandShow("note", { note: pasted.longTake ? "Long take. Copied." : "Copied. No box." }); islandHide(2600); }
     }
   } catch (error) {
     log("dictation.failed", { error: String(error?.message || error) });
