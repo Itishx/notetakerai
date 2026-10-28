@@ -1123,3 +1123,7 @@
 /* Hero words: space held from the start so the line never reflows; each word fades up in place. */
 .aff-md .aff-kin > span{display:inline-block;opacity:0;animation:affStamp .5s cubic-bezier(.2,.8,.3,1) both}
 .aff-md .aff-kin{gap:0 .25em}
+
+/* Bigger colour torch: shows a much wider patch of the picture. */
+.aff-md-shot:hover{--r:360px}
+.aff-md-col{transition:none;-webkit-mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 50%,transparent 100%);mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 50%,transparent 100%)}
