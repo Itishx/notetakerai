@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Maven",
+  "short_name": "Maven",
+  "version": "1.0.0",
+  "description": "Talk instead of typing, in any text box. Control+Option to write, Control+Command to do.",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_title": "Maven", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "offscreen", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "options_page": "welcome.html",
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle", "all_frames": false }],
+  "web_accessible_resources": [{ "resources": ["island.html", "island.css", "island.js", "island-shim.js"], "matches": ["<all_urls>"] }]
+}

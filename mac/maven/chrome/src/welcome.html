@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maven</title>
+<link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+<main>
+  <header>
+    <span class="pill" aria-hidden="true"><i></i><i></i></span>
+    <h1>Maven for Chrome</h1>
+    <p class="lede">Talk instead of typing, in any text box on the web.</p>
+  </header>
+
+  <section id="mic" class="step">
+    <h2>1. Let Maven hear you</h2>
+    <p>Chrome asks once. Maven only listens while you hold a take, and audio is never kept.</p>
+    <button id="micbtn" type="button">Allow the microphone</button>
+    <span id="micstate" class="state"></span>
+  </section>
+
+  <section class="step">
+    <h2>2. The two shortcuts</h2>
+    <div class="keys">
+      <div><kbd>⌃</kbd><kbd>⌥</kbd><b>Write</b><span>Control + Option. Press, talk, press again. It writes at your cursor, cleaned up.</span></div>
+      <div><kbd>⌃</kbd><kbd>⌘</kbd><b>Do</b><span>Control + Command. Ask for one small job: “open YouTube”, “go to my Gmail tab”, “fill this form”.</span></div>
+    </div>
+    <p class="small">Enter says yes to a card, Esc cancels. Works on web pages, not on Chrome's own pages (new tab, settings).</p>
+  </section>
+
+  <section class="step">
+    <h2>3. Your details, for forms</h2>
+    <p>Saved only in this browser. Used when you say “fill this form”.</p>
+    <form id="details">
+      <label>Name<input name="name" autocomplete="off"></label>
+      <label>Email<input name="email" type="email" autocomplete="off"></label>
+      <label>Phone<input name="phone" autocomplete="off"></label>
+      <label>Address<input name="address" autocomplete="off"></label>
+      <button type="submit">Save</button><span id="saved" class="state"></span>
+    </form>
+  </section>
+
+  <section class="step">
+    <h2>4. How it looks and listens</h2>
+    <div class="row">
+      <label>Look
+        <select id="theme"><option value="ink">Ink</option><option value="paper">Paper</option><option value="glass">Glass</option></select>
+      </label>
+      <label>Language
+        <select id="language"><option value="auto">Auto (English, Hindi, Hinglish)</option><option value="en">English</option><option value="hinglish">Hinglish</option><option value="hi">Hindi</option></select>
+      </label>
+    </div>
+    <p class="small" id="count"></p>
+  </section>
+</main>
+<script src="welcome.js"></script>
+</body>
+</html>

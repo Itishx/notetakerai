@@ -1,0 +1,29 @@
+:root { --bg: #f4f2ec; --ink: #16150f; --soft: #5f5b50; --line: #dcd8cb; --card: #fbfaf6; }
+@media (prefers-color-scheme: dark) { :root { --bg: #100f0c; --ink: #f4f2ec; --soft: #a8a396; --line: #2a2822; --card: #17160f; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: 56px 20px 80px; display: grid; gap: 18px; }
+header { display: grid; gap: 10px; margin-bottom: 12px; }
+.pill { width: 64px; height: 34px; border-radius: 999px; background: #16150f; display: inline-flex; gap: 8px; align-items: center; justify-content: center; box-shadow: 0 0 0 1px rgba(255,255,255,.1); }
+.pill i { width: 6px; height: 14px; border-radius: 4px; background: #f6f3ea; animation: blink 4s infinite; }
+@keyframes blink { 0%, 94%, 100% { transform: none; } 96% { transform: scaleY(.12); } }
+h1 { margin: 0; font: 400 44px/1.05 "New York", Georgia, serif; letter-spacing: -.02em; }
+.lede { margin: 0; color: var(--soft); font-size: 18px; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+h2 { margin: 0 0 6px; font-size: 17px; }
+p { margin: 0 0 12px; color: var(--soft); }
+.small { font-size: 13.5px; margin: 12px 0 0; }
+button { font: inherit; padding: 9px 18px; border-radius: 999px; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); cursor: pointer; }
+.state { margin-left: 12px; font-size: 14px; color: var(--soft); }
+.state.ok { color: #1a7f3c; }
+.keys { display: grid; gap: 12px; }
+.keys > div { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 10px; align-items: baseline; }
+.keys span { grid-column: 1 / -1; color: var(--soft); font-size: 14.5px; }
+kbd { display: inline-block; min-width: 30px; padding: 4px 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 7px; text-align: center; font: 600 14px -apple-system, sans-serif; background: var(--bg); }
+.keys b { margin-left: 4px; }
+form { display: grid; gap: 10px; }
+label { display: grid; gap: 4px; font-size: 13.5px; color: var(--soft); }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }
+form button { justify-self: start; margin-top: 6px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
