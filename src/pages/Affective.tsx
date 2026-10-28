@@ -618,7 +618,11 @@ export default function Affective() {
                 <Link to="/maven" className="aff-tile-btn">Learn more</Link>
                 <Link to="/maven#download" className="aff-tile-btn is-ghost">Download</Link>
               </div>
-              <div className="aff-tile-art"><span className="aff-tile-maven"><MavenLoop /></span></div>
+              <div className="aff-tile-art aff-trio">
+                <span className="aff-trio-pill is-l"><MavenFace mood="sleepy" /></span>
+                <span className="aff-trio-pill is-r"><MavenFace mood="happy" /></span>
+                <span className="aff-trio-pill is-c"><MavenLoop /></span>
+              </div>
             </div>
             <div className="aff-tile aff-tile-dark aff-reveal">
               <h3>Braino</h3>
@@ -628,7 +632,7 @@ export default function Affective() {
                 <Link to="/braino" className="aff-tile-btn">Learn more</Link>
                 <Link to="/braino#early-access" className="aff-tile-btn is-ghost">Join the waitlist</Link>
               </div>
-              <div className="aff-tile-art aff-tile-walk"><MiniBraino size={140} /></div>
+              <div className="aff-tile-art aff-tile-walk"><MiniBraino size={230} /></div>
             </div>
           </div>
         </div>

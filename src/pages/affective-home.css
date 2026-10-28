@@ -1070,3 +1070,17 @@
 .aff-tile-maven{transform:scale(3)}
 .aff-tile-walk{align-items:flex-end;padding:0 24px 48px}
 @media (max-width:760px){.aff-tiles{grid-template-columns:1fr}.aff-tile{min-height:520px;padding-top:44px}.aff-tile-maven{transform:scale(2.2)}}
+
+/* Maven trio: the live pill in front, two of his other states fanned behind,
+   tilted and softened, like a product line-up. */
+.aff-trio{position:relative}
+.aff-trio-pill{position:absolute;left:50%;top:50%;transform-origin:center}
+.aff-trio-pill.is-c{z-index:3;transform:translate(-50%,-50%) scale(3)}
+.aff-trio-pill.is-l{z-index:1;transform:translate(-50%,-50%) translateX(-150px) translateY(-10px) rotate(-14deg) scale(2.3);opacity:.55;filter:blur(1px)}
+.aff-trio-pill.is-r{z-index:2;transform:translate(-50%,-50%) translateX(150px) translateY(-10px) rotate(14deg) scale(2.3);opacity:.55;filter:blur(1px)}
+.aff-tile-walk{padding-bottom:24px}
+@media (max-width:760px){
+  .aff-trio-pill.is-c{transform:translate(-50%,-50%) scale(2.2)}
+  .aff-trio-pill.is-l{transform:translate(-50%,-50%) translateX(-100px) rotate(-14deg) scale(1.7)}
+  .aff-trio-pill.is-r{transform:translate(-50%,-50%) translateX(100px) rotate(14deg) scale(1.7)}
+}
