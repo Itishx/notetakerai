@@ -10,7 +10,7 @@ cp ../renderer/island.css dist/
 sed "s/fn⌃ Do/⌃⌘ Do/g" ../renderer/island.js > dist/island.js
 # The island page, with the Chrome shim loaded before island.js (the only change).
 sed 's#<script src="island.js"></script>#<script src="island-shim.js"></script><script src="island.js"></script>#' ../renderer/island.html > dist/island.html
-{ echo "var module = { exports: {} };"; cat ../lib/dictation.cjs; echo "self.MavenGate = module.exports;"; } > dist/dictation.js
+{ echo "(() => { const module = { exports: {} };"; cat ../lib/dictation.cjs; echo "self.MavenGate = module.exports; })();"; } > dist/dictation.js
 rm -f ~/Desktop/Maven-for-Chrome.zip
 (cd dist && zip -qr ~/Desktop/Maven-for-Chrome.zip .)
 rm -rf ~/Desktop/Maven-for-Chrome && cp -R dist ~/Desktop/Maven-for-Chrome
