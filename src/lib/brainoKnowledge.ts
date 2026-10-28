@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-play-mode",
+    title: "Play Mode: Handle This For Me",
+    category: "Mode",
+    date: "2026-10-28",
+    dateLabel: "October 28, 2026",
+    description:
+      "Say \"handle this for me\" and Braino does the thing on your screen himself: fills every field, goes through every page, plays the next round, and asks before anything final. No tests, no passwords, no payments.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "093",
+  },
+  {
     slug: "mac-type-bar",
     title: "Type to Braino",
     category: "Feature",

@@ -4152,6 +4152,8 @@ async function runIdleScreenShortcut(shortcut) {
 let typeBarWindow = null;
 function toggleTypeBar(source = "") {
   if (typeBarWindow && !typeBarWindow.isDestroyed() && typeBarWindow.isVisible()) { typeBarWindow.hide(); return; }
+  // What "handle this" typed here will mean: the window in front right now.
+  if (activeMacContext && !isBrainoSelfContext(activeMacContext)) playTypedTarget = { ctx: { ...activeMacContext }, at: Date.now() };
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const width = Math.min(680, display.workArea.width - 80);
   const height = 72;
@@ -20115,6 +20117,427 @@ async function describePlayingMedia() {
   return { ok: true, say: startsCapital(`${joinLabels(sources.map((row) => row.label))}.`) };
 }
 
+/* ── Play mode (handle_screen) ─────────────────────────────────────────────
+   "Handle this for me", "fill this form for me", "play this game", "next
+   round": Braino operates what is on screen himself, step by step, until the
+   job is finished. ONE HIL tool, never a decider of its own. The pure half
+   (prompt, parsing, safety words, exam detector, cost) is play-mode.cjs.
+
+   Each step reads the screen the cheapest way that works: a Chrome page as
+   numbered elements (JavaScript from Apple Events), any other app as its
+   accessibility tree, and a screenshot of the target window only when there is
+   nothing to read (canvas games) or every Nth step as a check. The model picks
+   ONE move (or up to five field fills on one page); the Mac does it, waits,
+   and looks again. Stop, Escape, done, 60 steps, 20 minutes, or three
+   identical screens in a row end it. Anything final (submit, send, book) asks
+   first; payments, passwords, CAPTCHAs and graded tests are refused. */
+const playMode = require(path.join(__dirname, "play-mode.cjs"));
+let playState = null;
+// The window a typed command means: the app in front before Braino's own box took focus.
+let playTypedTarget = null;
+
+const PLAY_TEXT_JS = `(function(){try{var t=(document.body&&document.body.innerText)||'';t=t.replace(/[ \\t]+/g,' ').replace(/\\n{2,}/g,'\\n');return t.slice(0,3000);}catch(e){return '';}})()`;
+
+function playLog(event, payload = {}) {
+  logMac(`play.${event}`, { runId: playState?.runId || "", ...payload });
+  if (playState?.jsonl) {
+    try { fs.appendFileSync(playState.jsonl, `${JSON.stringify({ at: new Date().toISOString(), event, ...payload })}\n`); } catch (_) {}
+  }
+}
+
+function playLine(text) {
+  if (!playState) return;
+  playState.lastLine = String(text || "").slice(0, 90);
+  setNotchCoworkLabel(playState.label, playState.lastLine);
+}
+
+function playRunning() { return Boolean(playState && !playState.stopped); }
+
+function stopPlayMode(reason = "stopped_by_user") {
+  if (!playRunning()) return false;
+  playState.stopped = reason;
+  if (playState.abort) { try { playState.abort.abort(); } catch (_) {} }
+  if (playState.asking) { try { playState.asking.resolve(false); } catch (_) {} }
+  return true;
+}
+
+function playBindKeys(mode) {
+  // mode: "run" (Esc stops), "ask" (Enter yes, Esc no), "off".
+  // BrainoOS owns Escape while its panel is open; leave it alone then.
+  if (brainoOsEscapeBound) return;
+  try { globalShortcut.unregister("Escape"); } catch (_) {}
+  try { globalShortcut.unregister("Return"); } catch (_) {}
+  if (mode === "run") {
+    globalShortcut.register("Escape", () => { macTrace("⏹ PLAY", "Escape, stopping"); stopPlayMode("escape"); });
+  } else if (mode === "ask") {
+    globalShortcut.register("Escape", () => playAnswer(false, "escape"));
+    globalShortcut.register("Return", () => playAnswer(true, "enter"));
+  }
+}
+
+/* A yes or no from the notch card, a key, or a sentence. */
+function playAnswer(yes, how) {
+  const asking = playState?.asking;
+  if (!asking) return false;
+  playState.asking = null;
+  macBroadcastApproval({ cleared: true });
+  playLog("answer", { kind: asking.kind, yes: Boolean(yes), how });
+  asking.resolve(Boolean(yes));
+  return true;
+}
+
+/* Called first thing in runDelegate: while a play run waits on a question,
+   "yes" / "send" / "haan" / "do it anyway" answer it instead of starting a job. */
+function playClaimsUtterance(raw) {
+  if (!playState?.asking) return null;
+  const said = cleanPrompt(String(raw || "")).trim();
+  const short = said.split(/\s+/).length <= 6;
+  if (playState.asking.kind === "exam" && playMode.OVERRIDE_RE.test(said)) { playAnswer(true, "said_override"); return { ok: true, say: "", source: "play_mode:answer" }; }
+  if (short && playMode.YES_RE.test(said)) { playAnswer(true, "said_yes"); return { ok: true, say: "", source: "play_mode:answer" }; }
+  if (short && (playMode.NO_RE.test(said) || /^cancel$/i.test(said))) { playAnswer(false, "said_no"); return { ok: true, say: "", source: "play_mode:answer" }; }
+  return null;
+}
+
+function playAsk(kind, title, detail, yes, no, timeoutMs = 120000) {
+  return new Promise((resolve) => {
+    if (!playState || playState.stopped) return resolve(false);
+    const timer = setTimeout(() => playAnswer(false, "timeout"), timeoutMs);
+    playState.asking = { kind, resolve: (v) => { clearTimeout(timer); playBindKeys(playRunning() ? "run" : "off"); resolve(v); } };
+    playBindKeys("ask");
+    setNotchCoworkLabel("Needs approval", `${title} ${detail}`.trim().slice(0, 120));
+    macBroadcastApproval({ kind: "confirm", title, detail, yes, no, expiresAt: Date.now() + timeoutMs });
+    if (!playState.typed) sendToRenderer("braino-mac:speak-line", { text: title });
+    playLog("ask", { kind, title, detail: textForLog(detail, 200) });
+  });
+}
+
+async function playActivate(target) {
+  if (isChromeApp(target.appName)) return focusChrome(target.appName);
+  await execFileP("/usr/bin/osascript", ["-e", `tell application ${JSON.stringify(target.appName)} to activate`], { timeout: 5000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 250));
+  return { ok: true };
+}
+
+async function playWindowRect(target) {
+  const ctx = await readActiveMacContext().catch(() => null);
+  if (ctx && ctx.appName === target.appName && ctx.windowBounds) { target.windowBounds = ctx.windowBounds; return ctx.windowBounds; }
+  return target.windowBounds || null;
+}
+
+/* The target window only, ~1280px wide JPEG, plus the words in it (on-device OCR). */
+async function playScreenshot(target, step) {
+  const rect = await playWindowRect(target);
+  const tmp = path.join(app.getPath("temp"), `braino-play-${Date.now()}.png`);
+  const out = path.join(playState.dir, `step-${String(step).padStart(2, "0")}.jpg`);
+  try {
+    const args = ["-x"];
+    if (rect) args.push("-R", `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`);
+    await execFileP("/usr/sbin/screencapture", [...args, tmp], { timeout: 8000 });
+    await execFileP("/usr/bin/sips", ["-s", "format", "jpeg", "-s", "formatOptions", "70", "-Z", "1280", tmp, "--out", out], { timeout: 8000 });
+    const { stdout } = await execFileP("/usr/bin/sips", ["-g", "pixelWidth", "-g", "pixelHeight", out], { timeout: 5000 });
+    const width = Number((/pixelWidth:\s*(\d+)/.exec(stdout) || [])[1]) || 0;
+    const height = Number((/pixelHeight:\s*(\d+)/.exec(stdout) || [])[1]) || 0;
+    const buffer = await fs.promises.readFile(out);
+    let ocr = [];
+    try {
+      const r = await execFileP(SCREEN_TEXT_BIN, [out, "--fast"], { timeout: 8000 });
+      ocr = (JSON.parse(String(r.stdout || "{}")).lines || []).slice(0, 80);
+    } catch (_) {}
+    const primary = screen.getPrimaryDisplay().bounds;
+    return { ok: true, base64: buffer.toString("base64"), width, height, ocr, rect: rect || primary, file: out };
+  } catch (error) {
+    playLog("capture_failed", { error: String(error?.message || error).slice(0, 200) });
+    return { ok: false };
+  } finally {
+    fs.promises.unlink(tmp).catch(() => {});
+  }
+}
+
+/* The screen as structure: Chrome page elements, or the accessibility tree. */
+async function playReadStructure(target) {
+  if (isChromeApp(target.appName)) {
+    const page = await readChromePage(target.appName);
+    if (!page.ok) return { ok: false, mode: "chrome", reason: page.reason };
+    const textRes = await runJs(PLAY_TEXT_JS, chromeScriptName(target.appName), 5000);
+    const pageText = textRes.ok ? textRes.out : "";
+    const elements = page.elements.map((e) => ({ id: e.index, role: e.role, name: e.name, value: e.value }));
+    return {
+      ok: elements.length > 1,
+      mode: "chrome",
+      title: page.title, url: page.url, elements,
+      text: `PAGE: ${page.title} :: ${page.url}\nELEMENTS:\n${page.text.split("\n").slice(2).join("\n").slice(0, 6000)}\nPAGE TEXT:\n${pageText.slice(0, 3000)}`,
+      plain: `${page.title}\n${page.text}\n${pageText}`,
+    };
+  }
+  const res = await runAxHelper(["observe", "120"], 10000);
+  if (res.status !== "observe") return { ok: false, mode: "ax", reason: res.detail };
+  let data = null;
+  try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, mode: "ax", reason: "bad_json" }; }
+  const elements = (data.elements || []).map((e) => ({ id: e.index, role: e.role, name: e.name }));
+  const lines = elements.map((e) => `[${e.id}] ${e.role} "${e.name}"`).join("\n");
+  return {
+    ok: elements.length >= 3,
+    mode: "ax",
+    title: data.window || "", url: "", elements,
+    text: `APP: ${data.app} WINDOW: ${data.window}\nELEMENTS:\n${lines.slice(0, 6000)}`,
+    plain: `${data.window}\n${lines}`,
+  };
+}
+
+async function playAskModel(message, imageBase64) {
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) { await ensureBrainoAuth("play"); authToken = await getBrainoAuthToken(); }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) return { ok: false, error: "not signed in" };
+  const controller = new AbortController();
+  playState.abort = controller;
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      // The delegate door: our fixed prompt first (same bytes every step, so the
+      // provider's prefix cache holds it), strict JSON back. An image rides the
+      // describe path, which returns the raw reply.
+      body: JSON.stringify({
+        notes: playMode.SYSTEM_PROMPT, delegatePurpose: "delegate", chatHistory: [], message,
+        ...(imageBase64 ? { visionMode: "describe", imageBase64 } : {}),
+      }),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: String(data?.error || response.status) };
+    return { ok: true, reply: String(data?.reply || "") };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  } finally {
+    clearTimeout(timeout);
+    if (playState) playState.abort = null;
+  }
+}
+
+async function playKey(name) {
+  const key = String(name || "").toLowerCase().replace(/^enter$/, "return").replace(/^esc$/, "escape").replace(/^arrow/, "");
+  if (key === "escape") playBindKeys("off"); // our own Esc shortcut would eat it
+  await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys(key)], { timeout: 4000 }).catch(() => {});
+  if (key === "escape" && playRunning()) playBindKeys("run");
+}
+
+/* One action. Returns { ok, line, note, stop?, say? }. */
+async function playDo(a, read, shot) {
+  const target = playState.target;
+  const el = Number.isFinite(Number(a.id)) && read?.elements ? read.elements.find((e) => e.id === Number(a.id)) : null;
+  const label = el ? el.name : String(a.label || "");
+  const isChrome = read?.mode === "chrome";
+
+  if (a.action === "set" || (a.action === "type" && el)) {
+    const value = String(a.value ?? a.text ?? "");
+    if (!el) return { ok: false, note: `No element ${a.id} on the page.` };
+    if (playMode.isSecretField(el.role, el.name)) return { ok: false, note: `Refused: ${el.name} is a password or payment field.` };
+    if (isChrome) {
+      const r = await actOnChrome(el.id, "type", value, target.appName);
+      return { ok: r.ok, line: playMode.stepLine({ action: "set", value }, label), note: r.ok ? r.did : r.error };
+    }
+    const r = await runAxHelper(["typeindex", String(el.id), "120", Buffer.from(value, "utf8").toString("base64"), el.name || "x"], 8000);
+    return { ok: !/stale|error|failed/.test(r.status), line: playMode.stepLine({ action: "set", value }, label), note: `${r.status} ${r.detail}`.trim() };
+  }
+
+  if (a.action === "click" || a.action === "double_click") {
+    if (playMode.isForbiddenClick(label)) return { ok: false, note: `Refused to click "${label}": payments and account deletion are yours.`, stop: true, say: `That needs you: "${label}". I don't pay, buy or delete accounts.` };
+    if ((playMode.isFinalLabel(label) || a.final) && !playState.approved.has(label.toLowerCase())) {
+      const yes = await playAsk("final", "Before I do this", `Click "${label || "this"}"? This can't be undone.`, label ? `Yes, ${label.slice(0, 20)}` : "Yes", "Cancel");
+      if (!yes) return { ok: false, note: `User said no to "${label}".`, stop: true, say: "Okay, I stopped before that." };
+      playState.approved.add(label.toLowerCase());
+      await playActivate(target);
+    }
+    if (el && isChrome) {
+      const r = await actOnChrome(el.id, "click", "", target.appName);
+      return { ok: r.ok, line: playMode.stepLine({ action: "click" }, label), note: r.ok ? `clicked ${r.did}` : r.error };
+    }
+    if (el) {
+      const r = await runAxHelper(["pressindex", String(el.id), "120", el.name || "x"], 8000);
+      return { ok: r.status === "pressed", line: playMode.stepLine({ action: "click" }, label), note: `${r.status} ${r.detail}`.trim() };
+    }
+    if (!shot?.ok || !Number.isFinite(Number(a.x)) || !Number.isFinite(Number(a.y))) return { ok: false, note: "Click had no element id and no screenshot point." };
+    const p = playMode.mapPoint(a.x, a.y, shot.rect, shot);
+    if (!p.inside) return { ok: false, note: `Point ${a.x},${a.y} is outside the window.` };
+    await runAxHelper(["clickat", String(p.x), String(p.y)], 6000);
+    if (a.action === "double_click") await runAxHelper(["clickat", String(p.x), String(p.y)], 6000);
+    return { ok: true, line: a.action === "double_click" ? "Double clicked" : playMode.stepLine({ action: "click" }, label), note: `clicked ${p.x},${p.y}` };
+  }
+
+  if (a.action === "type") {
+    const text = String(a.text ?? a.value ?? "");
+    if (!text) return { ok: false, note: "Nothing to type." };
+    const r = await pasteDictationFallback(text, target.appName).catch((e) => ({ ok: false, error: e?.message }));
+    return { ok: Boolean(r?.ok), line: playMode.stepLine(a), note: r?.ok ? "pasted" : String(r?.error || "paste failed") };
+  }
+  if (a.action === "key") { await playKey(a.key); return { ok: true, line: playMode.stepLine(a) }; }
+  if (a.action === "scroll") {
+    const dy = Number(a.dy) || 600;
+    if (isChrome || isChromeApp(target.appName)) await runJs(`window.scrollBy(0,${Math.round(dy)})`, chromeScriptName(target.appName), 4000);
+    else await playKey(dy < 0 ? "pageup" : "pagedown");
+    return { ok: true, line: playMode.stepLine(a) };
+  }
+  if (a.action === "wait") { await new Promise((r) => setTimeout(r, Math.min(10000, Math.max(200, Number(a.ms) || 1500)))); return { ok: true, line: playMode.stepLine(a) }; }
+  if (a.action === "look") { playState.wantVision = true; return { ok: true, line: playMode.stepLine(a) }; }
+  return { ok: false, note: `Unknown action ${a.action}` };
+}
+
+/* An exam gets a refusal, and the person can overrule it for this page only. */
+async function playExamGate(read, shotText) {
+  const reason = playMode.detectExam(`${read?.plain || ""}\n${shotText || ""}`);
+  if (!reason) return true;
+  const key = String(read?.url || read?.title || "screen").slice(0, 200);
+  if (playState.overridden.has(key)) return true;
+  playLog("exam_detected", { reason, url: read?.url || "", title: read?.title || "" });
+  const yes = await playAsk("exam", "That looks like a test. Not doing that one.", `Spotted ${reason}. If it is not a graded test, say "do it anyway".`, "It's not a test, do it", "Stop");
+  if (!yes) return false;
+  const override = { overrideAt: new Date().toISOString(), url: read?.url || "", title: read?.title || "", reason };
+  playState.overridden.add(key);
+  playLog("exam_override", override);
+  await playActivate(playState.target);
+  return true;
+}
+
+async function runPlayLoop() {
+  const s = playState;
+  const history = [];
+  let sameCount = 0;
+  let lastSig = "";
+  let summary = "";
+  let say = "";
+  while (!s.stopped) {
+    if (s.step >= playMode.MAX_STEPS) { say = `I stopped at ${playMode.MAX_STEPS} steps.`; break; }
+    if (Date.now() - s.startedAt > playMode.MAX_MS) { say = "I stopped at 20 minutes."; break; }
+    s.step += 1;
+    if (s.step === 1) playLine("Reading the screen");
+    const read = await playReadStructure(s.target);
+    if (read.mode === "chrome" && !read.ok && read.reason === "javascript_not_allowed" && !s.jsWarned) {
+      s.jsWarned = true;
+      playLog("chrome_js_blocked", {});
+      playLine("Chrome blocks page reading, using screenshots");
+    }
+    const useVision = s.wantVision || !read.ok || (s.step % playMode.VISION_EVERY === 0);
+    s.wantVision = false;
+    const shot = useVision ? await playScreenshot(s.target, s.step) : null;
+    const shotText = shot?.ok ? shot.ocr.join("\n") : "";
+    if (s.stopped) break;
+    if (!(await playExamGate(read, shotText))) { say = "That looks like a test. Not doing that one."; s.stopped = "exam"; break; }
+    if (playMode.detectCaptcha(`${read.plain || ""}\n${shotText}`)) { say = "There's a CAPTCHA. That one's yours."; s.stopped = "captcha"; break; }
+
+    const sig = crypto.createHash("sha1").update(read.ok ? read.text : (shot?.base64 || "")).digest("hex");
+    sameCount = sig === lastSig ? sameCount + 1 : 0;
+    lastSig = sig;
+    if (sameCount >= 2) { say = "Nothing on screen is changing, so I stopped."; s.stopped = "no_progress"; break; }
+
+    const message = [
+      `GOAL: ${s.goal}`,
+      `STEP ${s.step} of max ${playMode.MAX_STEPS}. MODE: ${read.ok ? (shot?.ok ? "structure+screenshot" : "structure") : "screenshot"}`,
+      history.length ? `DONE SO FAR:\n${history.slice(-12).join("\n")}` : "DONE SO FAR: nothing yet",
+      read.ok ? read.text : "",
+      shot?.ok ? `SCREENSHOT: ${shot.width}x${shot.height} pixels of the window.${shot.ocr.length ? `\nOCR LINES:\n${shot.ocr.join("\n").slice(0, 2500)}` : ""}` : "",
+    ].filter(Boolean).join("\n\n");
+    const t0 = Date.now();
+    const res = await playAskModel(message, shot?.ok ? shot.base64 : null);
+    if (s.stopped) break;
+    const inTok = playMode.estimateTokens(playMode.SYSTEM_PROMPT.length + message.length, Boolean(shot?.ok));
+    const outTok = Math.ceil(String(res.reply || "").length / 4);
+    s.tokensIn += inTok; s.tokensOut += outTok;
+    s.modeCount[shot?.ok ? (read.ok ? "both" : "vision") : read.mode] = (s.modeCount[shot?.ok ? (read.ok ? "both" : "vision") : read.mode] || 0) + 1;
+    if (!res.ok) {
+      s.failures += 1;
+      playLog("model_failed", { step: s.step, error: res.error });
+      if (s.failures >= 3) { say = "I couldn't reach my brain, so I stopped."; break; }
+      continue;
+    }
+    const plan = playMode.parsePlayReply(res.reply);
+    playLog("step", { step: s.step, mode: read.ok ? read.mode : "vision", vision: Boolean(shot?.ok), ms: Date.now() - t0, inTok, outTok, usd: Number(playMode.estimateCostUsd(inTok, outTok).toFixed(5)), reply: textForLog(res.reply, 600), shot: shot?.file ? path.basename(shot.file) : "" });
+    if (!plan) { history.push(`step ${s.step}: (reply was not valid JSON)`); s.failures += 1; if (s.failures >= 3) { say = "I got confused, so I stopped."; break; } continue; }
+    if (plan.thought) playLine(plan.thought);
+    macTrace("🎮 PLAY", `step ${s.step} [${read.ok ? read.mode : "vision"}${shot?.ok ? "+shot" : ""}] ${plan.thought} -> ${plan.actions.map((a) => a.action + (a.id != null ? `#${a.id}` : "")).join(", ")}`);
+
+    let stop = false;
+    for (const a of plan.actions) {
+      if (s.stopped) { stop = true; break; }
+      if (a.action === "done") { summary = String(a.summary || plan.thought || "Done."); stop = true; s.stopped = "done"; break; }
+      if (a.action === "ask") { say = String(a.question || "I need you for this one."); stop = true; s.stopped = "asked"; break; }
+      if (a.action === "refuse") {
+        const why = String(a.reason || "").toLowerCase();
+        if (why === "exam") {
+          if (await playExamGate({ ...read, plain: `${read.plain || ""} exam` }, "")) { history.push(`step ${s.step}: user confirmed this is not a test`); continue; }
+          say = "That looks like a test. Not doing that one.";
+        } else say = why === "captcha" ? "There's a CAPTCHA. That one's yours." : why === "login" ? "It wants a login. That one's yours." : why === "payment" ? "That's a payment. That one's yours." : "I won't do that one.";
+        stop = true; s.stopped = `refused_${why || "other"}`; break;
+      }
+      if (plan.final && a === plan.actions[plan.actions.length - 1] && a.action === "click") a.final = true;
+      const r = await playDo(a, read, shot);
+      playLog("action", { step: s.step, action: a, ok: r.ok, note: textForLog(r.note || "", 200) });
+      if (r.line) playLine(r.line);
+      history.push(`step ${s.step}: ${JSON.stringify(a).slice(0, 160)} -> ${r.ok ? "ok" : "FAILED"}${r.note ? ` (${String(r.note).slice(0, 120)})` : ""}`);
+      if (r.stop) { say = r.say || ""; stop = true; s.stopped = "declined"; break; }
+      if (plan.actions.length > 1) await new Promise((res2) => setTimeout(res2, 150));
+    }
+    if (stop) break;
+    await new Promise((r) => setTimeout(r, 900));
+  }
+  return { summary, say };
+}
+
+async function startPlayMode(args = {}) {
+  if (playRunning()) return { ok: true, say: "I'm already on it. Say stop to end it." };
+  const goal = String(args.goal || args.request || args.raw || macJobCommand?.text || "Handle what is on screen").trim().slice(0, 500);
+  // The screen it acts on: never Braino's own window. A typed command means the
+  // app that was in front before the type box opened.
+  const typed = Boolean(macTypedJob);
+  // activeMacContext never holds Braino's own windows, so while his type box
+  // has focus it is still the app behind it; the type-bar snapshot is the backup.
+  const ctx = (activeMacContext && !isBrainoSelfContext(activeMacContext) ? activeMacContext : null) || (typed && playTypedTarget && Date.now() - playTypedTarget.at < 10 * 60 * 1000 ? playTypedTarget.ctx : null);
+  if (!ctx?.appName || isBrainoSelfContext(ctx)) return { ok: false, say: "Which window? Click it, then ask me again." };
+  const screenStatus = systemPreferences.getMediaAccessStatus?.("screen") || "unknown";
+  const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomBytes(3).toString("hex")}`;
+  const dir = path.join(LOG_DIR, "play-runs", runId);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+  const game = /\b(game|play|round|simulation|level)\b/i.test(goal);
+  playState = {
+    runId, goal, typed, dir, jsonl: path.join(dir, "actions.jsonl"),
+    label: game ? "Playing" : "Handling",
+    target: { appName: ctx.appName, windowTitle: ctx.windowTitle || "", windowBounds: ctx.windowBounds || null },
+    startedAt: Date.now(), step: 0, failures: 0, tokensIn: 0, tokensOut: 0, modeCount: {},
+    approved: new Set(), overridden: new Set(), stopped: false, asking: null, abort: null, wantVision: false,
+  };
+  playLog("start", { goal: textForLog(goal, 300), app: ctx.appName, window: textForLog(ctx.windowTitle || "", 120), typed, screenStatus });
+  macTrace("🎮 PLAY", `start "${goal.slice(0, 120)}" on ${ctx.appName}${typed ? " (typed)" : ""}`);
+  playBindKeys("run");
+  setNotchCoworkLabel(playState.label, "Looking at the screen");
+  const run = playState;
+  (async () => {
+    let result = { summary: "", say: "" };
+    try {
+      await playActivate(run.target);
+      result = await runPlayLoop();
+    } catch (error) {
+      playLog("crashed", { error: String(error?.stack || error).slice(0, 400) });
+      result.say = "Something broke, so I stopped.";
+    }
+    playBindKeys("off");
+    if (run.asking) run.asking = null;
+    const usd = playMode.estimateCostUsd(run.tokensIn, run.tokensOut);
+    const reason = run.stopped || "ended";
+    playLog("end", { reason, steps: run.step, ms: Date.now() - run.startedAt, tokensIn: run.tokensIn, tokensOut: run.tokensOut, modes: run.modeCount, estUsd: Number(usd.toFixed(4)) });
+    macTrace("🎮 PLAY", `end (${reason}) after ${run.step} steps, ~${run.tokensIn + run.tokensOut} tokens, est $${usd.toFixed(4)} | ${run.dir}`);
+    const final = (result.summary || result.say || (reason === "stopped_by_user" || reason === "escape" ? "Stopped." : "Done.")).trim();
+    if (playState === run) playState = null;
+    setNotchCoworkLabel("", "");
+    setTimeout(() => {
+      if (playState) return;
+      setNotchCoworkLabel("Done", final.slice(0, 140));
+      setTimeout(() => { if (!playState) setNotchCoworkLabel("", ""); }, 9000);
+    }, 2000);
+    if (!run.typed) sendToRenderer("braino-mac:speak-line", { text: final.slice(0, 300) });
+  })();
+  return { ok: true, say: game ? "Playing. Say stop or press Escape to end it." : "On it. Say stop or press Escape to end it.", source: "play_mode" };
+}
+
 const MAC_HIL_TOOLS = {
   hide_braino: (a) => { sendToRenderer("braino-mac:mascot-hide", { mode: /stealth/i.test(String(a?.mode || "")) ? "stealth" : /hour/i.test(String(a?.mode || "")) ? "hour" : "hidden", source: "hil" }); return { ok: true, say: "Hidden. Say come back when you want me." }; },
   braino_summon: () => { sendToRenderer("braino-mac:mascot-hide", { mode: null, source: "hil" }); return { ok: true, say: "I'm back." }; },
@@ -20186,6 +20609,9 @@ const MAC_HIL_TOOLS = {
   mesa_nexus: (a) => runMesaNexus(a),
   mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
   screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
+  /* Play mode: operate what is on screen until the job is finished (forms,
+     web apps, simulation games). play_screen is the old name, kept as an alias. */
+  handle_screen: (a) => startPlayMode(a || {}),
   /* ── P0 connect, 2026-09-24 (docs/HIL-TOOL-AUDIT.md) ──
      The everyday jobs HIL understood and could not hand to anything, so the
      old patterns re-read them. Every one of these already worked on the old
@@ -20325,6 +20751,8 @@ function noteToolUi(tool, out) {
   else if (Array.isArray(out.sources) && out.sources.length) ui = { type: "sources", sources: out.sources.slice(0, 5) };
   if (ui) macLastToolUi = { ui, tool, at: Date.now() };
 }
+// The first name it had. Not in the catalog (the router only learns handle_screen), but a plan or replay that says play_screen still lands.
+MAC_HIL_TOOLS.play_screen = (a) => startPlayMode(a || {});
 for (const [name, fn] of Object.entries(MAC_HIL_TOOLS)) {
   if (typeof fn !== "function") continue;
   MAC_HIL_TOOLS[name] = async (...args) => { const out = await fn(...args); try { noteToolUi(name, out); } catch (_) {} return out; };
@@ -23386,6 +23814,8 @@ async function runHandoff(h, source) {
 
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
+  // A play run waiting on "submit this?" or "not a test?" takes the answer first.
+  { const claimed = playClaimsUtterance(prompt); if (claimed) return claimed; }
   macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
   /* Typed in the app chat is said to him by definition. Laya scored "hi" as
      room talk and it was dropped without a word (2026-10-18). */
@@ -25307,7 +25737,7 @@ ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
 });
 
 ipcMain.handle("braino-mac:job-running", async () => ({
-  running: Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration,
+  running: (Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration) || playRunning(),
 }));
 
 /* One router, asked by both sides.
@@ -26520,7 +26950,8 @@ ipcMain.handle("braino-mac:tell-running-job", async (event, payload) => ({
    turn of the loop checks it, so this lands within one step rather than at the
    end. */
 ipcMain.handle("braino-mac:stop-running-job", async () => {
-  const had = Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+  const stoppedPlay = stopPlayMode("stopped_by_user");
+  const had = (Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration) || stoppedPlay;
   if (had) logMac("hil.loop.stopped_by_user", { runId: macActiveHilRun.runId });
   macHilGeneration += 1;
   macActiveHilRun = null;

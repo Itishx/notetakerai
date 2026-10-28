@@ -159,6 +159,7 @@ const HilOneLookDocs = lazy(() => import("./pages/HilOneLookDocs.tsx"));
 const ImportChromeLoginsDocs = lazy(() => import("./pages/ImportChromeLoginsDocs.tsx"));
 const MacTaskBoardDocs = lazy(() => import("./pages/MacTaskBoardDocs.tsx"));
 const MacTypeBarDocs = lazy(() => import("./pages/MacTypeBarDocs.tsx"));
+const MacPlayModeDocs = lazy(() => import("./pages/MacPlayModeDocs.tsx"));
 const CalendarMacDocs = lazy(() => import("./pages/CalendarMacDocs.tsx"));
 const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
@@ -286,6 +287,7 @@ function AppRoutes() {
         <Route path="/knowledge/import-chrome-logins" element={<ImportChromeLoginsDocs />} />
         <Route path="/knowledge/mac-task-board" element={<MacTaskBoardDocs />} />
         <Route path="/knowledge/mac-type-bar" element={<MacTypeBarDocs />} />
+        <Route path="/knowledge/mac-play-mode" element={<MacPlayModeDocs />} />
         <Route path="/knowledge/calendar-on-mac" element={<CalendarMacDocs />} />
         <Route path="/knowledge/knows-your-localhost" element={<LocalhostDocs />} />
         <Route path="/knowledge/said-to-him" element={<SaidToHimDocs />} />

@@ -138,6 +138,8 @@ function macFastLane(raw) {
  * explicit reference to what is on screen, or to something just done, counts. */
 const MAC_SCREEN_REFERENT = /\bon (?:my|the|this) screen\b|\byou (?:just |can )?(?:see|saw)\b|\b(?:this|that) (?:file|page|email|tab|window|invoice|document|folder|thing|one)\b|\byou just (?:downloaded|opened|made|created|found)\b|\blook at (?:my|the) screen\b/;
 
+const MAC_SCREEN_JOB = /\b(?:handle this|take care of this|do this for me|fill (?:this|the) form|finish this|complete this|play (?:this|the) game|solve this|(?:play )?the next round|next round)\b/;
+
 function macNeedsScreenContext(raw) {
   return MAC_SCREEN_REFERENT.test(String(raw || "").toLowerCase());
 }
@@ -165,6 +167,10 @@ function macWantsTheBrain(raw) {
   if (macLooksMultiStep(raw)) return true;
   // Working out what "this" points at means looking, which only he can do.
   if (macNeedsScreenContext(raw)) return true;
+  /* Play mode (2026-10-28): "play this game" and "play the next round" carry
+     the word play, so the fast lane read them as music. They are screen jobs,
+     and HIL decides them (handle_screen). */
+  if (MAC_SCREEN_JOB.test(String(raw || "").toLowerCase())) return true;
   /* Finding something out IS the work, even though "compare" and "look up" are
      not in the list of things you can do to a Mac. Checked before the task gate
      for exactly that reason: it was rejecting them as not-a-task and handing

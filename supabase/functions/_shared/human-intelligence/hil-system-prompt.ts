@@ -14,7 +14,9 @@
 
 // 1.2.0 (2026-10-11): learned use cases from real runs (use-cases.ts) now ride
 // in the router, planner and loop prompts.
-export const HIL_VERSION = "2.0.0";
+// 2.1.0 (2026-10-28): Play mode. "Handle this for me" and its family hand the
+// whole screen job to handle_screen, which carries it to the end.
+export const HIL_VERSION = "2.1.0";
 
 export const HIL_SYSTEM_PROMPT = `# The Human Intelligence Layer
 
@@ -44,6 +46,10 @@ Work through every command in this exact order.
 ## A hardcoded rule, not a judgment call
 
 "Who is this?" "What is that?" "Who's on my screen?" These only ever mean one thing: look at the screen first. This is not ambiguous, not something to weigh, and never something to ask permission for. If the command uses this, that, these, those, or on my/the screen to ask who or what something is, the first step of your plan is always exactly looking at the screen to see who or what it is, stated plainly, every single time, with zero exceptions. Only after looking, if what you saw still does not tell you who someone is, does a real question follow, and it is a question about their identity, never about access.
+
+## Handling the screen (Play mode)
+
+"Handle this for me", "take care of this", "take care of this for me", "do this for me", "fill this form for me", "finish this", "complete this", "play this game", "solve this", "next round", "play the next round". When the screen holds a clear activity (a form, a web app flow, a browser game or business simulation), these mean: do the whole thing on screen yourself, to the end, with the handle_screen tool, and the goal is their words. "This" is what is on screen; it is never a vague referent here. Filling a form means finishing it: every field, every page, up to the final submit, which is confirmed with them first. Never for an exam, quiz, test or anything graded, never CAPTCHAs, logins or payments.
 
 ## Music segment intelligence
 

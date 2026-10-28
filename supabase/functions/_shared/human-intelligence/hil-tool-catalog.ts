@@ -43,7 +43,8 @@ export type HilTool = {
 // 1.9.1 — whatsapp_send says it is the Mac app and the only way to send WhatsApp.
 // 1.10.0 — whatsapp_messages: answers about their WhatsApps from the Mac app, silently.
 // 1.11.0 — memory_search: AffectiveOS recall, answer and act.
-export const HIL_CATALOG_VERSION = "1.11.0";
+// 1.12.0 — handle_screen (Play mode): operate the screen until the job is finished.
+export const HIL_CATALOG_VERSION = "1.12.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -240,7 +241,8 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "whatsapp_listener_set", params: ["enable"], gloss: "Turn the WhatsApp notification reader on or off", stateful: true, zeroNetwork: true, handler: "startWhatsAppListener", },
   { name: "whatsapp_remember_contact", params: ["alias", "name", "phone"], gloss: "Save a WhatsApp contact's phone number or real name under an alias", zeroNetwork: true, handler: "saveWhatsAppContact", },
   { name: "whatsapp_reply_last", params: ["message"], gloss: "WhatsApp-reply to whoever messaged last, within fifteen minutes of that message", irreversible: true, stateful: true, handler: "sendWhatsAppMessage", },
-  { name: "form_fill", params: [], gloss: "Fill the form on the front Chrome page from what Braino knows about the user (name, email, phone, college, links) in about a second; never passwords or card details, never submits", handler: "fillFormForMe", },
+  { name: "form_fill", params: [], gloss: "Fill the form on the front Chrome page from what Braino knows about the user (name, email, phone, college, links) in about a second; never passwords or card details, never submits. Only for a bare \"fill this in\"; when they want it finished or submitted, use handle_screen", handler: "fillFormForMe", },
+  { name: "handle_screen", params: ["goal"], gloss: "Play mode: Braino operates the app or web page on screen himself, step by step, until the job is finished: fills every field, goes through every page, plays a browser game or business simulation round by round, asks before any submit or send. Use for clear screen activities: \"handle this for me\", \"take care of this (for me)\", \"do this for me\", \"fill this form for me\", \"finish this\", \"complete this\", \"play this game\", \"solve this\", \"next round\", \"play the next round\". goal is what they want done, in their words. Refuses exams, CAPTCHAs, logins and payments. Not for a question about the screen (screen_vision)", stateful: true, handler: "startPlayMode", },
   { name: "sign_in_saved", params: [], gloss: "Log in on the front Chrome page with the login Chrome already has saved: Chrome fills it, Braino never sees the password. Use this on any login page instead of asking for an email", handler: "signInSaved", },
   { name: "memory_search", params: ["query", "from", "to"], gloss: "Search the memory of this Mac for something they did, saw, played or said earlier: a site they were on, a video, a file, a song, who messaged, what they worked on. from and to are ISO times you work out from Now (\"2am last night\" is roughly 01:00 to 03:00 last night; \"4 days ago\" is that whole day). It answers in a line and returns MEMORY MATCHES with addresses. If they asked you to open or do something with it: one clear match, do it (open_url) and say which; several, ask which in one line; if they only asked what it was, answer and offer to open it", memoSafe: true, handler: "searchMemory", },
   { name: "whatsapp_messages", params: ["contact", "sinceHours"], gloss: "Who messaged them on WhatsApp and what they said, read silently from the WhatsApp Mac app: did a person message, what did they say, who texted in the last N hours, catch me up. One-to-one chats only, last 7 days unless they ask for longer. Use this for any question about their WhatsApp messages; never open WhatsApp to read them", memoSafe: true, handler: "lookupWhatsAppMessages", },
