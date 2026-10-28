@@ -615,7 +615,7 @@ export default function Affective() {
                 <span className="aff-stack-num">01</span>
                 <span className="aff-stack-tag is-live">Out now</span>
                 <h3>Maven</h3>
-                <p>Talk, and your words are written properly, wherever you type.</p>
+                <p>Talk, and your words are written properly, wherever you type. Fillers gone, numbers right, lists as lists, in English, Hindi or Hinglish. Ask, and it does the small job next: open an app, draft the message, fill the form.</p>
                 <span className="aff-stack-go">View now</span>
               </div>
               <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenLoop /></span></div>
@@ -625,7 +625,7 @@ export default function Affective() {
                 <span className="aff-stack-num">02</span>
                 <span className="aff-stack-tag">In the lab</span>
                 <h3>Braino</h3>
-                <p>A companion in your Mac's notch who does the work in your apps.</p>
+                <p>A companion who lives in your Mac's notch and does the work in your apps. You talk to him like a person, he sees your screen, remembers you, and gets it done. Still in the lab while we teach him.</p>
                 <span className="aff-stack-go">View now</span>
               </div>
               <div className="aff-stack-pic aff-stack-braino"><MiniBraino size={110} /></div>
