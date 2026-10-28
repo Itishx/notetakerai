@@ -586,6 +586,23 @@ export default function BrainoFinal() {
     root.current?.querySelectorAll<HTMLElement>(".bp-story .aff-reveal, .bp-story .bf-reveal").forEach((el) => el.classList.add("is-in"));
   }, [at, root]);
 
+  /* Footer game, full screen: the game window morphs out to fill the screen. */
+  const [gameFull, setGameFull] = useState(false);
+  const toggleGameFull = () => {
+    const flip = () => setGameFull((v) => !v);
+    const d = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (d.startViewTransition) d.startViewTransition(flip); else flip();
+  };
+  useEffect(() => {
+    if (!gameFull) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") toggleGameFull(); };
+    window.addEventListener("keydown", esc);
+    window.dispatchEvent(new Event("resize"));
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", esc); };
+  }, [gameFull]);
+
   useEffect(() => {
     document.title = "Braino";
     const prev = document.body.style.background;
@@ -595,6 +612,9 @@ export default function BrainoFinal() {
 
   return (
     <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+      {/* The Maven page's grid, drawn over the page edges (2026-10-29). It never wraps
+          the content, so sticky and scroll animations keep working. */}
+      <div className="bp-gutters" aria-hidden="true"><i /><i /></div>
       <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
       {/* ── Hero: the home page's, with him in it ── */}
@@ -820,7 +840,12 @@ export default function BrainoFinal() {
             <span className="bft-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
           </div>
         </div>
-        <div className="bf-game-window">
+        <div className={"bf-game-window" + (gameFull ? " is-full" : "")}>
+          <button type="button" className="bf-game-max" onClick={toggleGameFull} aria-label={gameFull ? "Exit full screen" : "Play full screen"}>
+            {gameFull
+              ? <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1v5H1M10 1v5h5M6 15v-5H1M10 15v-5h5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+              : <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6V1h5M15 6V1h-5M1 10v5h5M15 10v5h-5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>}
+          </button>
           <BrainoFooterGame />
         </div>
       </footer>

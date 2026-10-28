@@ -742,3 +742,20 @@
 @media (max-width: 520px) { .bp .bft-cols { grid-template-columns: 1fr 1fr; } }
 
 .bp-foundry-note { margin-top: 14px; font-size: 15px; } .bp-foundry-note a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ══ Maven-page grid on Braino (2026-10-29): hatched gutters with hairline
+   edges, drawn as a fixed overlay so the page itself is untouched. ══ */
+.bp-gutters i{position:fixed;top:0;bottom:0;width:calc((100vw - 1200px) / 2);z-index:45;pointer-events:none;
+  background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in srgb,var(--a-ink) 6%,transparent) 9px 10px),var(--a-bg)}
+.bp-gutters i:first-child{left:0;border-right:1px solid var(--a-line-strong,var(--a-line))}
+.bp-gutters i:last-child{right:0;border-left:1px solid var(--a-line-strong,var(--a-line))}
+@media (max-width:1260px){.bp-gutters{display:none}}
+
+/* Footer game: full-screen button, and the window filling the screen. */
+.bf-game-max{position:absolute;top:14px;right:14px;z-index:30;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.45);color:#fff;cursor:pointer;backdrop-filter:blur(6px)}
+.bf-game-max svg{width:15px;height:15px}
+.bf-game-max:hover{background:rgba(0,0,0,.7)}
+.bf-game-window{view-transition-name:bf-game}
+.bf-game-window.is-full{position:fixed;inset:0;z-index:1000;margin:0;border:0;background:#000;display:flex;flex-direction:column;justify-content:flex-end}
+.bf-game-window.is-full .bf-playstrip{height:100vh;margin:0}
+::view-transition-group(bf-game){animation-duration:.45s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
