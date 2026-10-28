@@ -978,3 +978,23 @@
           mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 35%,transparent 100%)}
 @media (hover:none){.aff-md-col{display:none}}
 @media (max-width:820px){.aff-md-shot{-webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 50%,transparent 100%)}}
+
+/* Hero v4: the picture is the whole hero's background. Left side darkens so
+   the heading reads; colour still follows the cursor. */
+.aff-hero.aff-md{position:relative;overflow:hidden;border-bottom:0}
+.aff-md-row{position:relative;display:block;max-width:1200px;margin:0 auto;padding:0 24px;min-height:min(86vh,760px)}
+.aff-md-text{position:relative;z-index:2;max-width:620px;min-height:min(86vh,760px);justify-content:center;pointer-events:none}
+.aff-md-text .aff-md-go{pointer-events:auto}
+.aff-md-h,.aff-md-p{color:#fff}
+.aff-md-p{opacity:.88}
+.aff-md-go{background:#fff;color:#111}
+.aff-md-shot{position:absolute;inset:0;z-index:0;height:auto;margin:0;-webkit-mask-image:none;mask-image:none}
+.aff-md-row .aff-md-shot{left:calc(-1 * max(24px,(100vw - 1200px)/2 + 24px));right:calc(-1 * max(24px,(100vw - 1200px)/2 + 24px))}
+.aff-md-shot::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(90deg,rgba(0,0,0,.82) 0%,rgba(0,0,0,.6) 35%,rgba(0,0,0,.15) 65%,rgba(0,0,0,0) 100%)}
+@media (max-width:820px){
+  .aff-md-row{padding:0 16px}
+  .aff-md-row .aff-md-shot{left:-16px;right:-16px;margin:0;-webkit-mask-image:none;mask-image:none}
+  .aff-md-shot img{height:100%}
+  .aff-md-shot::after{background:linear-gradient(180deg,rgba(0,0,0,.75),rgba(0,0,0,.45))}
+}
