@@ -46,7 +46,13 @@
     face.addEventListener("pointerup", end); face.addEventListener("pointercancel", end);
     // Easier to spot on any web page: a thin light ring round the resting pill.
     const st = document.createElement("style");
-    st.textContent = ".face{box-shadow:0 0 0 1.5px rgba(255,255,255,.5),0 0 0 3px rgba(0,0,0,.25),0 8px 22px rgba(0,0,0,.35)}";
+    st.textContent = ".face{box-shadow:0 0 0 1.5px rgba(255,255,255,.5),0 0 0 3px rgba(0,0,0,.25),0 8px 22px rgba(0,0,0,.35)}"
+      // Listening has to be unmissable on a busy web page: a brighter, thicker light and a warm halo.
+      + "#island.listening .edge,#island.done .edge,#island.thinking .edge{filter:brightness(1.5) saturate(1.3) drop-shadow(0 0 3px rgba(255,190,120,.9)) drop-shadow(0 0 8px rgba(255,150,90,.7))}"
+      + "body.do #island.listening .edge{filter:brightness(1.5) drop-shadow(0 0 3px rgba(140,190,255,.95)) drop-shadow(0 0 9px rgba(90,150,255,.75))}"
+      + "#island.listening .face{box-shadow:0 0 0 2px rgba(255,200,140,.95),0 0 18px 4px rgba(255,150,90,.55),0 8px 22px rgba(0,0,0,.35)!important;animation:mvPulse 1.4s ease-in-out infinite}"
+      + "body.do #island.listening .face{box-shadow:0 0 0 2px rgba(150,195,255,.95),0 0 18px 4px rgba(90,150,255,.55),0 8px 22px rgba(0,0,0,.35)!important}"
+      + "@keyframes mvPulse{50%{scale:1.06}}";
     document.head.appendChild(st);
   });
   up("ready", true);
