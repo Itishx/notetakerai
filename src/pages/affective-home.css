@@ -1045,3 +1045,8 @@
 .aff-stack-row + .aff-stack-row{border-left:1px solid var(--a-ink)}
 .aff-stack-pic{border-radius:0;height:240px}
 @media (max-width:720px){.aff-stack{gap:0}.aff-stack-row + .aff-stack-row{border-left:0;border-top:1px solid var(--a-ink)}}
+
+/* Products v5: graphic fills the cell edge to edge, no grey; narrower, taller cells. */
+.aff-stack{max-width:860px}
+.aff-stack-pic{margin:-20px -20px 0;height:360px;background:none;border-bottom:1px solid var(--a-ink)}
+@media (max-width:720px){.aff-stack-pic{height:260px}}
