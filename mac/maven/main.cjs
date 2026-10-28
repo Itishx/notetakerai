@@ -1109,16 +1109,10 @@ async function fillFormFlow(rec) {
     reply(none ? "Save your details first." : "Nothing I know.", "nope", 2600);
     return none ? "no details saved" : `no matching fields (${fields.length} fields)`;
   }
-  await ask({ kind: "fill", title: `Fill ${lines.length} field${lines.length > 1 ? "s" : ""}`, right: "Your call.", preview: lines.join("  ·  "), primary: "Fill" }, rec, {
-    onYes: async (_text, job) => {
-      islandShow("idle");
-      await giveFocusBack(job.front);
-      const n = await actions.chromeFillForm(pairs);
-      reply(n ? "Filled. Your call." : "Couldn't fill.", n ? "done" : "nope", 2000);
-      return `filled ${n} of ${fields.length} fields`;
-    },
-  });
-  return "asking";
+  // Asked on purpose, so it just fills (2026-10-29). Still never presses Submit.
+  const n = await actions.chromeFillForm(pairs);
+  reply(n ? `Filled ${n}. Your call.` : "Couldn't fill.", n ? "done" : "nope", 2200);
+  return `filled ${n} of ${fields.length} fields`;
 }
 
 /* ---------- said in Do, meant for Write (2026-10-29) ----------
