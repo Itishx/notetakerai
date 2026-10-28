@@ -6,7 +6,6 @@ import "./affective.css";
 import "./affective-home.css";
 import "./affectiveos-page.css";
 import "./labs.css";
-import { LABS_POSTS } from "@/lib/labsPosts";
 import { BrainoMascot } from "@/components/BrainoMascot";
 
 /* ============================================================================
@@ -25,39 +24,19 @@ import { BrainoMascot } from "@/components/BrainoMascot";
    come from src/lib/labsPosts.ts and render at /labs/:slug.
    ============================================================================ */
 
-const ENGINES: { id: string; kicker: string; name: string; line: string; status: string[]; story: string[]; to?: string; cta?: string }[] = [
-  {
-    id: "optics", kicker: "Inside Braino Foundry", name: "Optics", line: "Where can buyers not find you?",
-    status: ["Part of Braino Foundry", "Open to try"],
-    story: [
-      "Optics asks the questions your buyers ask, in AI answers and on Google, and shows you where you are missing. Every gap comes with the reason and what to do about it.",
-      "It is the starting point. What Optics finds tells Content what to write and Outreach who to talk to.",
-    ],
-    to: "/foundry", cta: "See Braino Foundry",
-  },
-  {
-    id: "content", kicker: "Inside Braino Foundry", name: "Content", line: "What should you put out?",
-    status: ["Part of Braino Foundry", "Open to try"],
-    story: [
-      "Content writes public posts in your voice for X, LinkedIn, Reddit, Instagram and Threads, each one shaped for where it is going.",
-      "Nothing goes out on its own. You read it, you approve it, it is ready to post.",
-    ],
-    to: "/foundry", cta: "See Braino Foundry",
-  },
-  {
-    id: "outreach", kicker: "Inside Braino Foundry", name: "Outreach", line: "Who is asking for you right now?",
-    status: ["Part of Braino Foundry", "Open to try"],
-    story: [
-      "Outreach finds people on Reddit asking about the exact problem you solve, and writes one message for each of them. One person, one message, never a blast.",
-      "It was the first engine we built in Labs. Now it lives inside Braino Foundry with the other two, and you approve every message.",
-    ],
-    to: "/foundry", cta: "See Braino Foundry",
-  },
+/* What Braino does, from the homepage he used to lead (moved here 2026-10-28). */
+const BRAINO_DOES = [
+  { h: "Stop typing the same replies.", p: "Say \u201ctell Priya Friday works.\u201d He opens WhatsApp, writes it the way you would, and sends it after your yes." },
+  { h: "Stop taking notes in meetings.", p: "He listens to the call or the lecture. Close the laptop and the notes are waiting." },
+  { h: "Stop checking five apps every morning.", p: "Ask \u201cwhat's today?\u201d and get one answer: meetings, deadlines, and who is waiting on you." },
+  { h: "Stop digging for that file.", p: "Say what it was about, and he finds it and opens it." },
+  { h: "Stop filling the same forms.", p: "Your name, your email, the login you always forget. He fills it in and stops before submit." },
+  { h: "Stop explaining yourself.", p: "He remembers your people and what you told him last month, so you never start from zero." },
 ];
 
 const HOW = [
   { h: "Built on what we already made.", p: "Every experiment starts from AffectiveOS: the memory, the voice, the eyes on your screen. We are not starting from zero, so we can try odd things quickly." },
-  { h: "Trained on its own.", p: "A Labs project does not have to fit inside Braino first. It gets its own data, its own tests and its own rules, and earns its way into a product later, or not at all." },
+  { h: "Trained on its own.", p: "A Labs project does not have to fit inside a product first. It gets its own data, its own tests and its own rules, and earns its way into a product later, or not at all." },
   { h: "Said plainly.", p: "Each experiment says what works, what does not, and what surprised us. If it is half built, the page says half built." },
 ];
 
@@ -78,6 +57,7 @@ function Kinetic({ line, from = 0, gap = 150 }: { line: string; from?: number; g
 export default function Labs() {
   const { theme, toggle } = useAffTheme();
   useNotchNav();
+  const [blink, setBlink] = useState(false);
   // The stamp plays once the page has drawn.
   const [inView, setInView] = useState(false);
   useEffect(() => { const t = window.requestAnimationFrame(() => setInView(true)); return () => window.cancelAnimationFrame(t); }, []);
@@ -98,10 +78,8 @@ export default function Labs() {
           <div className="aff-nav-links">
             <Link to="/maven">Maven</Link>
             <a href="#braino">Braino</a>
-            <Link to="/foundry">Braino Foundry</Link>
-            <a href="#writing">Writing</a>
             <Link to="/about">About</Link>
-            <Link to="/foundry/app" className="aff-nav-go">Open Foundry</Link>
+            <Link to="/maven" className="aff-nav-go">Get Maven for Mac</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -124,29 +102,36 @@ export default function Labs() {
           </div>
         </div>
         <figure className="lb-banner">
-          <img src="/speak.jpg" alt="A MacBook on a sunlit terrace above the sea, Braino's notch sending a deck and booking a follow-up." width={1672} height={941} loading="eager" decoding="async" />
+          <img src="/speak.jpg" alt="A MacBook on a sunlit terrace above the sea." width={1672} height={941} loading="eager" decoding="async" />
         </figure>
       </header>
 
-      {/* Braino lives here now (2026-10-28): Maven is the product out front; Braino is
-          the bigger thing people find in the lab. */}
-      <section className="lb-sec" id="braino">
+      {/* Braino is the lab now (2026-10-28): Maven is the product out front;
+          Braino is what people discover here. Nothing else on this page. */}
+      <section className="lb-sec lb-braino" id="braino">
         <div className="aff-wrap">
-          <div className="hb6-box">
-            <div className="hb6-head">
-              <div>
-                <p className="ah-kicker">In the lab</p>
-                <div className="hb5-name"><h2>Braino</h2><BrainoMascot size={88} className="hb4-him" /></div>
-                <p className="hb6-line">A companion who lives in your Mac's notch. He sees your screen, hears you, talks back, does the work in your apps and remembers you. He's not ready for everyone yet, so he lives here while he grows.</p>
-              </div>
-              <div className="hb6-side">
-                <div className="hb5-go">
-                  <Link to="/braino" className="aff-cta">Meet Braino</Link>
-                  <Link to="/foundry" className="aff-cta aff-cta-ghost">Braino Foundry</Link>
-                </div>
+          <p className="ah-kicker">In the lab</p>
+          <div className="lb-bhead">
+            <div>
+              <h2 className="aff-h1">Braino. <b>Not ready for everyone yet.</b></h2>
+              <p className="lb-blede">A companion who lives in your Mac's notch. He sees your screen, hears you, talks back, does the work in your apps and remembers you. He's growing here until he's ready.</p>
+              <div className="aff-hero-cta">
+                <button type="button" className="aff-cta" aria-pressed={blink} onClick={() => setBlink((on) => !on)}>{blink ? "Back to what he does" : "Don\u2019t Blink"}</button>
+                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
+            <BrainoMascot size={150} className="lb-bmascot" />
           </div>
+          {blink ? (
+            <div className="hb6-film lb-film">
+              <video src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+              <p className="aff-trivia aff-trivia-film" role="note"><span>Trivia</span>We made this film three months ago, when Braino was a tiny browser extension. Today he lives on your Mac, and he is far better there.</p>
+            </div>
+          ) : (
+            <ul className="hb4-does hb6-jobs lb-jobs">
+              {BRAINO_DOES.map((d) => <li key={d.h}><h3>{d.h}</h3><p>{d.p}</p></li>)}
+            </ul>
+          )}
         </div>
       </section>
 
@@ -159,39 +144,13 @@ export default function Labs() {
         </div>
       </section>
 
-      {/* One big block: the Foundry announcement. Labs is the blog now. */}
-      <section className="lb-sec" id="writing">
-        <div className="aff-wrap">
-          <p className="ah-kicker">Writing from Labs</p>
-          {LABS_POSTS.slice(0, 1).map((p) => (
-            <Link key={p.slug} to={`/labs/${p.slug}`} className="lb-feature">
-              <div className="lb-feature-art" aria-hidden="true">
-                <svg viewBox="0 0 400 260">
-                  <path d="M200 60 C 300 70, 330 150, 300 200 M250 220 C 200 240, 150 240, 110 210 M90 190 C 70 140, 110 70, 170 62" className="lb-f-line" />
-                  <g className="lb-f-node o"><rect x="140" y="30" width="120" height="48" rx="14" /><text x="200" y="60">Optics</text></g>
-                  <g className="lb-f-node c"><rect x="260" y="180" width="120" height="48" rx="14" /><text x="320" y="210">Content</text></g>
-                  <g className="lb-f-node r"><rect x="20" y="180" width="120" height="48" rx="14" /><text x="80" y="210">Outreach</text></g>
-                  <text x="200" y="150" className="lb-f-mid">You approve</text>
-                </svg>
-              </div>
-              <div className="lb-feature-copy">
-                <span className="lb-post-meta">{p.dateLabel} · Announcement · {p.readTime}</span>
-                <h2>{p.title}</h2>
-                <p>{p.line} Three engines that started here in Labs, now working together.</p>
-                <span className="aff-cta">Read the announcement</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
       <section className="lb-sec lb-end">
         <div className="aff-wrap lb-end-in">
           <h2 className="aff-h1 lb-end-line">Curious first. <b>Useful later.</b></h2>
-          <p>Optics, Content and Outreach grew up here. Now they work together as Braino Foundry, your distribution co-founder.</p>
+          <p>What's ready goes out as a product. Right now, that's Maven.</p>
           <div className="aff-hero-cta">
-            <Link to="/foundry" className="aff-cta">Meet Braino Foundry</Link>
-            <Link to="/foundry/app" className="aff-cta aff-cta-ghost">Open the app</Link>
+            <Link to="/maven" className="aff-cta">Meet Maven</Link>
+            <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
           </div>
         </div>
       </section>
