@@ -1100,6 +1100,8 @@ async function doAction(intent, rec) {
 }
 
 async function runDo({ raw, heard, audio, t0, textMs }) {
+  // Ink thinking bar (2026-10-28): what it heard, shimmering, with the blue edge light, while HIL decides.
+  islandShow("think", { text: raw.length > 46 ? raw.slice(0, 44).trimEnd() + "…" : raw });
   const rec = { t0, at: new Date().toISOString(), heard: raw, heardBy: heard.provider || "", spokenSec: +((audio?.ms || 0) / 1000).toFixed(1), textMs, intentMs: 0, actMs: 0, sendMs: 0, intent: null, model: "", result: "" };
   const i0 = Date.now();
   const r = await intentFor(raw);

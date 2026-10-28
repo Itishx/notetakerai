@@ -202,3 +202,24 @@ body.a-left #hint { left: 26px; } body.a-right #hint { right: 26px; } body.a-cen
 #card.k-help .body { gap: 6px; padding-top: 10px; padding-bottom: 10px; }
 #card.k-help .edit { display: none; }
 body.do .jobs .jg + .jg .jh b::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 4px; border-radius: 50%; background: #6aa0ff; vertical-align: middle; }
+
+/* ── Ink (2026-10-28, Itish's pick): the Apple-like solid black island. ──
+   Thinking: a thin bar with what it heard, the words shimmering, and the blue
+   light racing round the edge while HIL decides. */
+#card.k-think .preview, #card.k-think .acts, #card.k-think .editor, #card.k-think .opts { display: none !important; }
+#card.k-think .body { padding-top: 9px; padding-bottom: 9px; }
+#card.k-think .title { background: linear-gradient(100deg, rgba(246,243,234,.45) 20%, #fff 45%, rgba(246,243,234,.45) 70%); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: inkShim 1.6s linear infinite; }
+#card.k-think { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 0 18px rgba(90,150,255,.35), 0 12px 30px rgba(0,0,0,.35); }
+#card.k-think::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(from var(--inkA, 0deg), transparent 0 80%, rgba(170,205,255,.95) 88%, transparent 96%) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  border: 1.6px solid transparent; animation: inkRun 1.3s linear infinite; filter: drop-shadow(0 0 4px rgba(110,165,255,.9)); }
+@property --inkA { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes inkRun { to { --inkA: 360deg; } }
+@keyframes inkShim { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+#card.k-think .ceyes span { height: 8px; translate: 1px -2px; animation: inkDrift 2.4s ease-in-out infinite; }
+@keyframes inkDrift { 50% { translate: 3px -3px; } }
+/* Ink surfaces: pure black, one hairline, a soft drop. */
+#card { --card: #0b0b0a; }
+@media (prefers-reduced-motion: reduce) { #card.k-think .title, #card.k-think::after, #card.k-think .ceyes span { animation: none !important; } }

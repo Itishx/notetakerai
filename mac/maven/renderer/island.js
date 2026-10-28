@@ -109,7 +109,10 @@ window.maven.onState((p) => {
   const { state, note: text } = p || {};
   if (state !== "sent" && state !== "ask" && card.isOpen()) card.close();
   if (state === "ask") { note.classList.remove("on"); showHint(""); card.open(p.card || {}); return; }
+  if (state === "think") { note.classList.remove("on"); showHint(""); card.open({ kind: "think", title: String(p.text || "Thinking…"), right: "" }); return; }
   if (state === "sent") { card.sent(String(p.text || "Sent.")); return; }
+  // Any non-card state folds a thinking bar away first.
+  if (state !== "ask" && state !== "sent" && state !== "think" && card.isOpen()) card.close();
   if (state === "note" || state === "reply") {
     // The 3-word reply beside the pill, with the face that goes with it.
     const face = { again: "again", nope: "nope", curious: "curious" }[p.face] || "";
