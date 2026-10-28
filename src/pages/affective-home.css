@@ -1050,3 +1050,4 @@
 .aff-stack{max-width:860px}
 .aff-stack-pic{margin:-20px -20px 0;height:360px;background:none;border-bottom:1px solid var(--a-ink)}
 @media (max-width:720px){.aff-stack-pic{height:260px}}
+.aff-stack{margin-inline:auto}
