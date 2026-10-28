@@ -1007,3 +1007,19 @@
 .aff-hello{padding-block:72px 40px}
 .aff-stack-kicker{margin:0;font-size:13px;letter-spacing:.1em;text-transform:uppercase;opacity:.6}
 .aff-stack{margin-top:16px}
+
+/* Product list v2: editorial rows. Big name, number, the mascot on open
+   ground (no grey box), and the whole row warms on hover. */
+.aff-hello{padding-block:96px 64px}
+.aff-stack{margin-top:48px}
+.aff-stack-row{grid-template-columns:1fr minmax(260px,380px);gap:48px;padding:44px 0;transition:background .3s}
+.aff-stack-row:hover{background:color-mix(in srgb,var(--a-ink) 3%,transparent)}
+.aff-stack-num{font-size:13px;letter-spacing:.1em;opacity:.45;font-variant-numeric:tabular-nums}
+.aff-stack-txt h3{font-size:clamp(48px,7vw,96px);letter-spacing:-.03em;transition:transform .35s}
+.aff-stack-row:hover .aff-stack-txt h3{transform:translateX(8px)}
+.aff-stack-pic{height:200px;background:none;border-bottom:1px solid var(--a-line);border-radius:0}
+.aff-stack-face{transform:scale(2)}
+.aff-stack-lines{bottom:18px}
+.aff-stack-braino .aff-stack-walk svg{width:120px;height:auto}
+@keyframes affWalk{0%{transform:translateX(0) scaleX(1)}45%{transform:translateX(240px) scaleX(1)}50%{transform:translateX(240px) scaleX(-1)}95%{transform:translateX(0) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
+@media (max-width:640px){.aff-stack-row{grid-template-columns:1fr;gap:20px;padding:32px 0}.aff-stack-pic{height:150px}.aff-stack-face{transform:scale(1.4)}@keyframes affWalk{0%,100%{transform:translateX(0) scaleX(1)}49%{transform:translateX(160px) scaleX(1)}50%,99%{transform:translateX(160px) scaleX(-1)}}}

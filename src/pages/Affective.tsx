@@ -595,10 +595,12 @@ export default function Affective() {
           explainer. Maven and Braino have their own pages for the rest. */}
       <section className="hb6 aff-hello" id="products">
         <div className="aff-wrap">
-          <p className="aff-stack-kicker">What we're building</p>
+          <h2 className="aff-h1 aff-hello-h">Hi, we're <b>Affective.</b></h2>
+          <p className="aff-hello-p">We build AI you talk to, for the computer you already own. You say it, your Mac does it. Here's what we're building.</p>
           <div className="aff-stack">
             <Link to="/maven" className="aff-stack-row aff-reveal">
               <div className="aff-stack-txt">
+                <span className="aff-stack-num">01</span>
                 <span className="aff-stack-tag is-live">Out now</span>
                 <h3>Maven</h3>
                 <p>Talk, and your words are written properly, wherever you type.</p>
@@ -608,6 +610,7 @@ export default function Affective() {
             </Link>
             <Link to="/braino" className="aff-stack-row aff-reveal">
               <div className="aff-stack-txt">
+                <span className="aff-stack-num">02</span>
                 <span className="aff-stack-tag">In the lab</span>
                 <h3>Braino</h3>
                 <p>A companion in your Mac's notch who does the work in your apps.</p>
