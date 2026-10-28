@@ -281,7 +281,7 @@ const card = (() => {
       island.classList.add("away");
       await frame();
     }
-    el.classList.add("anim", "open");
+    el.classList.add("live", "anim", "open"); // "live" again: fill() resets the class list, which hid every card that followed the thinking bar
     clip(cardW(), ch, 20);
     eyesAt(22, 21.5, 1, kind === "choose" ? -6 : 0);
     open = true;
