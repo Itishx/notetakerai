@@ -8,6 +8,7 @@ import "./affective-home.css";
 import "./affectiveos-page.css";
 import { VoiceToAction, NotchSheet, MacMenuBar, EffortChartCompact } from "./aff-figures";
 import { BrainoMascot } from "@/components/BrainoMascot";
+import MiniBraino from "@/components/MiniBraino";
 import { MacTaskFilm } from "@/components/MacTaskFilm";
 import { BrainoShowcase } from "@/components/BrainoShowcase";
 import { AppLogo } from "@/components/AppLogo";
@@ -616,7 +617,7 @@ export default function Affective() {
                 <p>A companion in your Mac's notch who does the work in your apps.</p>
                 <span className="aff-stack-go">View now →</span>
               </div>
-              <div className="aff-stack-pic aff-stack-braino"><span className="aff-stack-walk"><BrainoMascot size={96} /></span></div>
+              <div className="aff-stack-pic aff-stack-braino"><MiniBraino size={110} /></div>
             </Link>
           </div>
         </div>
