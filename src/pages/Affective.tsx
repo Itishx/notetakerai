@@ -389,6 +389,17 @@ function useLitWords() {
 }
 
 /* Words as lit boxes. `*word*` is set in the Didone. */
+/* Maven's full loop on the homepage: resting, listening, done, back to rest. */
+function MavenLoop() {
+  const steps = [["idle", 1800], ["listening", 3200], ["happy", 1600]] as const;
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setI((n) => (n + 1) % steps.length), steps[i][1]);
+    return () => clearTimeout(t);
+  }, [i]);
+  return <MavenFace mood={steps[i][0]} />;
+}
+
 function Lit({ text }: { text: string }) {
   const words = text.split(" ");
   return (
@@ -607,7 +618,7 @@ export default function Affective() {
                 <p>Talk, and your words are written properly, wherever you type.</p>
                 <span className="aff-stack-go">Read now →</span>
               </div>
-              <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenFace mood="listening" /></span><span className="aff-stack-lines" aria-hidden="true"><i /><i /><i /></span></div>
+              <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenLoop /></span></div>
             </Link>
             <Link to="/braino" className="aff-stack-row aff-reveal">
               <div className="aff-stack-txt">
