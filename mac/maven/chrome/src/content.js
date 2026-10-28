@@ -118,7 +118,8 @@
     const mod = e.key === "Control" || e.key === "Alt" || e.key === "Meta" || e.key === "Fn";
     if (!mod) return;
     const write = e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
-    const doIt = e.ctrlKey && !e.altKey && !e.shiftKey && (e.metaKey || fnDown);
+    const fn = fnDown || (e.getModifierState && e.getModifierState("Fn"));
+    const doIt = e.ctrlKey && !e.altKey && !e.shiftKey && (e.metaKey || fn);
     if (write) { e.preventDefault(); toggle("write"); }
     else if (doIt) { e.preventDefault(); toggle("do"); }
   }, true);
@@ -210,6 +211,69 @@
     return { fields: els.length, filled };
   }
 
+
+  /* ---------- reading the page, for "draft a reply to this" ---------- */
+  function readPage() {
+    const sel = String(getSelection() || "").trim();
+    if (sel) return { source: "selection", sender: "", text: sel.slice(0, 6000) };
+    if (/mail\.google\.com/.test(location.host)) {
+      const bodies = [...document.querySelectorAll(".a3s")].filter((e) => e.offsetParent);
+      const last = bodies[bodies.length - 1];
+      const who = [...document.querySelectorAll(".gD")].filter((e) => e.offsetParent).pop();
+      if (last) return { source: "gmail", sender: who ? (who.getAttribute("name") || who.innerText) : "", text: last.innerText.slice(0, 6000) };
+    }
+    if (/web\.whatsapp\.com/.test(location.host)) {
+      const msgs = [...document.querySelectorAll("#main .copyable-text[data-pre-plain-text]")].slice(-12);
+      const head = document.querySelector("#main header span[title], #main header [title]");
+      if (msgs.length) return { source: "whatsapp", sender: head ? head.getAttribute("title") : "", text: msgs.map((m) => m.getAttribute("data-pre-plain-text") + " " + m.innerText).join("\n").slice(0, 6000) };
+    }
+    return { source: "page", sender: "", text: `Page: ${document.title}\n\n${(document.body?.innerText || "").slice(0, 6000)}` };
+  }
+
+  /* ---------- WhatsApp Web: find the person, write, send ---------- */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const q = (sels) => { for (const s of sels) { const e = document.querySelector(s); if (e) return e; } return null; };
+  const WA_SEARCH = ['#side div[contenteditable="true"]', 'div[contenteditable="true"][data-tab="3"]', '[aria-label="Search input textbox"]', '[aria-label="Search or start new chat"]'];
+  const WA_BOX = ['#main footer div[contenteditable="true"]', 'footer div[contenteditable="true"][data-tab="10"]', '#main [aria-label="Type a message"]'];
+  const WA_SEND = ['#main footer button[aria-label="Send"]', '#main footer span[data-icon="send"]', '#main footer span[data-icon="wds-ic-send-filled"]', 'button[aria-label="Send"]'];
+  function waState() {
+    if (q(WA_SEARCH)) return "ready";
+    if (document.querySelector('canvas[aria-label*="QR"], [data-ref] canvas, div[data-ref]')) return "login";
+    return "loading";
+  }
+  function typeInto(el, text) {
+    el.focus();
+    document.execCommand("selectAll", false);
+    document.execCommand("insertText", false, text);
+  }
+  function clickLike(el) {
+    for (const t of ["mousedown", "mouseup", "click"]) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+  }
+  async function waSearch(name) {
+    const box = q(WA_SEARCH); if (!box) return { state: waState(), names: [] };
+    typeInto(box, name);
+    await sleep(1200);
+    const first = name.toLowerCase().split(/\s+/)[0];
+    const names = [...new Set([...document.querySelectorAll('#pane-side span[title], #side [role="listitem"] span[title], #side [role="gridcell"] span[title]')]
+      .map((e) => e.getAttribute("title") || "").filter((t) => t && t.toLowerCase().includes(first)))].slice(0, 6);
+    return { state: "ready", names };
+  }
+  async function waSend(title, text, send) {
+    const row = [...document.querySelectorAll("#pane-side span[title], #side span[title]")].find((e) => e.getAttribute("title") === title);
+    if (!row) return { ok: false, why: "chat not found" };
+    clickLike(row.closest('[role="listitem"], [role="row"], [tabindex="-1"]') || row);
+    let box = null;
+    for (let i = 0; i < 25 && !box; i++) { await sleep(120); box = q(WA_BOX); }
+    if (!box) return { ok: false, why: "no message box" };
+    typeInto(box, text);
+    if (!send) return { ok: true, sent: false };
+    await sleep(250);
+    const btn = q(WA_SEND);
+    if (btn) clickLike(btn.closest("button") || btn);
+    else box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+    return { ok: true, sent: true };
+  }
+
   /* ---------- from the background ---------- */
   const extPage = location.protocol === "chrome-extension:";
   chrome.runtime.onMessage.addListener((m, _s, reply) => {
@@ -226,6 +290,10 @@
     else if (m.t === "insert") { const ok = insertText(m.text); if (!ok) copyText(m.text); reply({ ok }); return; }
     else if (m.t === "copy") { reply({ ok: copyText(m.text) }); return; }
     else if (m.t === "fill") { reply(fillForm(m.details || {})); return; }
+    else if (m.t === "read") { reply(readPage()); return; }
+    else if (m.t === "wa-state") { reply({ state: waState() }); return; }
+    else if (m.t === "wa-search") { waSearch(m.name).then(reply); return true; }
+    else if (m.t === "wa-send") { waSend(m.title, m.text, m.send !== false).then(reply); return true; }
     else if (m.t === "editable") { const el = lastFocus && lastFocus.isConnected ? lastFocus : deepActive(); reply({ ok: editable(el) }); return; }
   });
 

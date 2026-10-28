@@ -3,7 +3,7 @@
    with dictation-refine → the safety gate (lib/dictation.cjs, unchanged) →
    write it at your cursor. Do mode asks dictation-refine's intent mode and
    runs the jobs a browser can do. */
-importScripts("config.js", "dictation.js");
+importScripts("config.js", "dictation.js", "jobs.js");
 const { url: SUPABASE_URL, key: SUPABASE_KEY } = self.MAVEN_CONFIG;
 const { assessDictationEdit } = self.MavenGate;
 
@@ -190,13 +190,23 @@ async function runDo(tabId, raw) {
     const r = await toTab(tabId, { t: "insert", text: v });
     return reply(tabId, r && r.ok ? "Filled. Your call." : "Copied. No box.", r && r.ok ? "done" : "nope", 2000);
   }
-  if (act === "reply" || act === "send_message") {
+  if (act === "send_message") return sendFlow(tabId, i);
+  if (act === "reply" && i.draft === true && !String(i.message || "").trim()) return draftReply(tabId, i);
+  if (act === "reply") {
     const message = String(i.message || "").trim();
     if (!message) return reply(tabId, "Again?", "again");
-    return ask(tabId, { kind: "reply", title: i.person ? `To ${i.person}` : "Reply here", right: "Written. Write it?", preview: message, primary: "Write" }, async (text) => {
+    return ask(tabId, { kind: "reply", title: "Reply here", right: "Written. Send?", preview: message, primary: "Send" }, async (text) => {
       const r = await toTab(tabId, { t: "insert", text });
       await reply(tabId, r && r.ok ? "Written." : "Copied. No box.", r && r.ok ? "done" : "nope");
     });
+  }
+  if (act === "add_to_list") {
+    if (!i.item) return reply(tabId, "Again?", "again");
+    const list = String(i.list || "List").replace(/\s+list$/i, "").trim() || "List";
+    const { lists = {} } = await chrome.storage.local.get("lists");
+    (lists[list] = lists[list] || []).push(String(i.item));
+    await chrome.storage.local.set({ lists });
+    return reply(tabId, "Added.");
   }
   if (act === "remember") {
     const { memories = [] } = await chrome.storage.local.get("memories");
@@ -208,7 +218,6 @@ async function runDo(tabId, raw) {
   if (act === "help") {
     return ask(tabId, { kind: "help", title: "What I can do", right: "My jobs.", jobs: JOBS, primary: "Settings", foldMs: 12000 }, async () => { await show(tabId, "idle"); chrome.runtime.openOptionsPage(); });
   }
-  if (act === "add_to_list") return reply(tabId, "Mac app only.", "nope", 2200);
   // Said in Do, meant for Write: offer to write it.
   const again = /again/i.test(String(i.reply3 || ""));
   if (!again && raw.split(/\s+/).length >= 6) {
@@ -220,6 +229,69 @@ async function runDo(tabId, raw) {
   }
   return reply(tabId, again ? "Again?" : "Not my job.", again ? "again" : "nope");
 }
+
+/* ---------- send a message: WhatsApp Web, or a Gmail draft (the Mac's sendFlow) ---------- */
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function whatsappTab() {
+  let [t] = await chrome.tabs.query({ url: "https://web.whatsapp.com/*" });
+  if (!t) t = await chrome.tabs.create({ url: "https://web.whatsapp.com", active: false });
+  for (let k = 0; k < 40; k++) {
+    const r = await chrome.tabs.sendMessage(t.id, { t: "wa-state" }).catch(() => null);
+    if (r?.state === "ready") return { tab: t };
+    if (r?.state === "login" && k > 4) return { tab: t, login: true };
+    await wait(500);
+  }
+  return { tab: t, login: true };
+}
+async function sendFlow(tabId, i) {
+  const person = String(i.person || "").trim(), message = String(i.message || "").trim();
+  if (!person || !message) return reply(tabId, "Again?", "again");
+  if (/mail|gmail|email/i.test(String(i.app || ""))) {
+    const { memories = [] } = await chrome.storage.local.get("memories");
+    const hit = memories.map((m) => String(m.fact || "")).find((f) => f.toLowerCase().includes(person.toLowerCase()) && /@/.test(f));
+    const to = hit ? (hit.match(/[\w.+-]+@[\w-]+\.[\w.]+/) || [""])[0] : "";
+    return ask(tabId, { kind: "send", title: `To ${person}${to ? "" : " (no email saved)"}`, right: "Drafted. Send?", preview: message, primary: "Send" }, async (text) => {
+      await show(tabId, "sent", { text: "In Gmail." });
+      const u = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(i.subject || "")}&body=${encodeURIComponent(text)}`;
+      await chrome.tabs.create({ url: u });
+      hide(tabId, 1400);
+    });
+  }
+  await show(tabId, "think", { text: `Finding ${person}…` });
+  const wa = await whatsappTab();
+  if (wa.login) { await toTab(tabId, { t: "copy", text: message }); chrome.tabs.update(wa.tab.id, { active: true }); return reply(tabId, "Log in to WhatsApp.", "nope", 2600); }
+  const found = await chrome.tabs.sendMessage(wa.tab.id, { t: "wa-search", name: person }).catch(() => null);
+  const names = found?.names || [];
+  const sendCard = (who) => ask(tabId, { kind: "send", title: `To ${who}`, right: "Drafted. Send?", preview: message, primary: "Send" }, async (text) => {
+    await chrome.tabs.update(wa.tab.id, { active: true });
+    await chrome.windows.update(wa.tab.windowId, { focused: true });
+    const r = await chrome.tabs.sendMessage(wa.tab.id, { t: "wa-send", title: who, text }).catch(() => null);
+    if (r?.ok && r.sent) { await show(wa.tab.id, "sent", { text: "Sent." }); hide(wa.tab.id, 1500); }
+    else { await toTab(wa.tab.id, { t: "copy", text }); await reply(wa.tab.id, "Not sent. Copied.", "nope", 2200); }
+  });
+  if (!names.length) { await toTab(tabId, { t: "copy", text: message }); return reply(tabId, `Can't find ${person}.`, "nope", 2200); }
+  const exact = names.filter((n) => n.toLowerCase() === person.toLowerCase());
+  if (names.length === 1 || exact.length === 1) return sendCard(exact[0] || names[0]);
+  // Two people with that name is always a question, never a guess.
+  const first = person.split(/\s+/)[0];
+  return askChoose(tabId, { kind: "choose", title: `Which ${first}?`, right: "Pick one", options: names.map((n) => ({ name: n, meta: "" })) }, (k) => sendCard(names[k] || names[0]));
+}
+
+/* ---------- "draft a reply to this": read the page, draft, ask (never sends) ---------- */
+async function draftReply(tabId, i) {
+  const seen = await toTab(tabId, { t: "read" });
+  if (!seen || !String(seen.text || "").trim()) return reply(tabId, "Select it first.", "nope", 2200);
+  await show(tabId, "think", { text: "Reading it…" });
+  const data = await post("dictation-refine", { mode: "compose", transcript: String(i.subject || i.instruction || "reply"), context: seen.text, instruction: String(i.subject || i.instruction || "").trim() }, 9000);
+  const draft = String(data?.formatted || "").trim();
+  if (!draft) return reply(tabId, "Again?", "again");
+  const who = String(seen.sender || "").replace(/<[^>]*>/g, "").replace(/"/g, "").trim() || "this";
+  return ask(tabId, { kind: "reply", title: `Reply to ${who}`, right: "Drafted. Yours?", preview: draft, primary: "Send" }, async (text) => {
+    const r = await toTab(tabId, { t: "insert", text }); // never presses send
+    await reply(tabId, r && r.ok ? "Drafted. Your call." : "Copied. No box.", r && r.ok ? "done" : "nope", 2000);
+  });
+}
+
 async function fillForm(tabId) {
   const d = await details();
   if (!d.name && !d.email && !d.phone && !d.address) { await reply(tabId, "Save your details first.", "nope", 2600); chrome.runtime.openOptionsPage(); return; }
@@ -237,6 +309,10 @@ async function ask(tabId, spec, onYes) {
   await show(tabId, "ask", { card: spec });
   pending.timer = setTimeout(() => void endAsk("folded"), spec.foldMs || 20000);
 }
+async function askChoose(tabId, spec, onChoose) {
+  await ask(tabId, spec, async () => onChoose(0));
+  pending.onChoose = onChoose;
+}
 async function endAsk(why) {
   const job = pending; if (!job) return;
   pending = null; clearTimeout(job.timer);
@@ -247,6 +323,7 @@ async function onCard(a) {
   const job = pending; if (!job || !a) return;
   if (a.do === "activity" || a.do === "editing") { clearTimeout(job.timer); job.timer = setTimeout(() => void endAsk("folded"), 20000); return; }
   if (a.do === "cancel") return endAsk("cancelled");
+  if (a.do === "choose" && job.onChoose) { pending = null; clearTimeout(job.timer); await job.onChoose(Number(a.choice) || 0); return; }
   if (a.do === "primary") {
     pending = null; clearTimeout(job.timer);
     const text = typeof a.text === "string" && a.text.trim() ? a.text.trim() : job.draft;
@@ -255,20 +332,8 @@ async function onCard(a) {
   }
 }
 
-/* ---------- jobs list for "what can you do?" (the Mac list, Chrome's share) ---------- */
-const JOBS = {
-  write: { title: "Write", shortcut: "⌃⌥", how: "Control+Option, press to start, press again to stop", jobs: [
-    { job: "Type anything, cleaned up", example: "the deck is done numbers by five no wait six" },
-    { job: "Lists, ₹, numbers, emails", short: "Lists, ₹, numbers, emails", example: "the budget is twenty five thousand" },
-  ] },
-  do: { title: "Do", shortcut: "⌃⌘", how: "Control+Command, press to start, press again to stop", jobs: [
-    { job: "Open a site", example: "open YouTube" },
-    { job: "Go to a tab", example: "go to my Gmail tab" },
-    { job: "Fill this form", example: "fill this form for me" },
-    { job: "Write a reply", example: "reply, Friday works" },
-    { job: "Remember something", example: "remember Riya is R-I-Y-A" },
-  ] },
-};
+/* ---------- "what can you do?": the Mac's own list (lib/jobs.cjs, copied in by build.sh) ---------- */
+const JOBS = self.MAVEN_JOBS;
 
 /* ---------- a small local log, like the Mac's commands.jsonl ---------- */
 async function log(entry) {
