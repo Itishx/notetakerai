@@ -784,6 +784,8 @@ export default function Maven() {
 
   return (
     <div className={"aff mv" + (view === "letter" ? " ao" : "")} data-theme={theme} ref={root}>
+      {/* 0. The opening, full screen, before anything else (2026-10-28). */}
+      {view === "product" && <MvIntro />}
       <AffNav theme={theme} onToggle={toggle} braino brand={["Maven", "/maven"]}
         links={[]} go={["Download for Mac", "/maven#download"]} />
 
@@ -794,8 +796,6 @@ export default function Maven() {
       {view === "letter" ? <MavenLetter /> : null}
       <div className="mv-frame">
       {view === "product" && <>
-      {/* 0. Maven comes to life (2026-10-28): black, the pill wakes, then both modes. */}
-      <MvIntro />
       {/* 1. Hero: pill + headline left, sub + button right, the film, the strip */}
       <header className="mv-cell mv-hero">
         <SecHead pill="Agentic dictation" side={<>

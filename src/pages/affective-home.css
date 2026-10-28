@@ -881,3 +881,29 @@
 .hb5-name .hb4-him .mv-face { --k: 1.6; }
 .mv-home-endface { display: flex; justify-content: center; margin-bottom: 18px; }
 .mv-home-endface .mv-face { --k: 2; }
+
+/* ── Two products as Polaroids (2026-10-28) ── */
+.aff-pola-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(18px, 3vw, 36px); margin-top: 18px; }
+.aff-pola { display: grid; grid-template-rows: auto auto; background: var(--a-box); border: 1px solid var(--a-line); border-radius: 22px; padding: 14px 14px 22px; text-decoration: none; color: var(--a-ink);
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .04), 0 24px 50px -30px rgba(var(--a-shade), .35); transition: transform .35s cubic-bezier(.32,.72,0,1), box-shadow .35s ease; }
+.aff-pola:hover { transform: translateY(-6px) rotate(-.4deg); box-shadow: 0 30px 60px -28px rgba(var(--a-shade), .45); }
+.aff-pola-braino:hover { transform: translateY(-6px) rotate(.4deg); }
+.aff-pola-pic { aspect-ratio: 4 / 3.4; border-radius: 14px; display: grid; place-items: center; overflow: hidden; position: relative; }
+.aff-pola-maven .aff-pola-pic { background: radial-gradient(60% 60% at 50% 55%, #3a2a22 0%, #0b0b0a 70%); }
+.aff-pola-maven .aff-pola-face .mv-face { --k: 2.6; }
+.aff-pola-braino .aff-pola-pic { background: radial-gradient(70% 70% at 50% 40%, #ffd9cc 0%, #f4c6b8 45%, #e9a998 100%); }
+.aff-pola-txt { display: grid; gap: 6px; padding: 18px 8px 0; }
+.aff-pola-txt h3 { margin: 0; font: 400 clamp(30px, 3.4vw, 42px)/1 var(--a-display); letter-spacing: -.02em; }
+.aff-pola-txt p { margin: 0; color: var(--a-ink-soft); font-size: 16px; line-height: 1.55; max-width: 40ch; }
+.aff-pola-tag { justify-self: start; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; background: var(--a-surface); border: 1px solid var(--a-line); color: var(--a-ink-soft); }
+.aff-pola-tag.is-live { background: #e7f6ec; border-color: #bfe6cc; color: #1f7a45; }
+.aff-pola-go { margin-top: 6px; font-weight: 600; font-size: 15px; }
+/* slide in, one after the other */
+.aff-pola.aff-reveal { transform: translateY(40px); opacity: 0; transition: transform .9s cubic-bezier(.32,.72,0,1), opacity .7s ease; }
+.aff-pola.aff-reveal.is-in { transform: none; opacity: 1; }
+.aff-pola-braino.aff-reveal { transition-delay: .15s; }
+@media (max-width: 760px) {
+  .aff-pola-row { grid-template-columns: 82%; grid-auto-flow: column; grid-auto-columns: 82%; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; }
+  .aff-pola { scroll-snap-align: start; }
+}
+@media (prefers-reduced-motion: reduce) { .aff-pola, .aff-pola.aff-reveal { transition: none; transform: none; opacity: 1; } }

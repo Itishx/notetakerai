@@ -587,3 +587,9 @@
 .mv-tags li.is-on { opacity: 1; transform: none; }
 .mv-ba-out { min-height: 3em; }
 @media (prefers-reduced-motion: reduce) { .mv-tags li { opacity: 1; transform: none; } }
+
+/* the opening is the whole first screen */
+.mvi { min-height: 100vh; min-height: 100svh; }
+.mvi::after { content: "Scroll"; position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font: 500 11px -apple-system, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: rgba(245,242,234,.35); animation: mviBob 2.4s ease-in-out infinite; }
+@keyframes mviBob { 50% { transform: translate(-50%, 5px); } }
+@media (prefers-reduced-motion: reduce) { .mvi::after { animation: none; } }
