@@ -464,6 +464,59 @@ function MvDoes() {
   );
 }
 
+/* ── The opening: Maven comes to life ──────────────────────────────────────
+   Black. The pill fades in with its eyes shut, a light traces its outline once
+   (it is powering on), the eyes open with a blink. Then the two ways to use
+   it, on a loop: ⌃⌥ dictation (warm light, words type out, green ring) and
+   fn⌃ do (blue light, a thin bar with what it heard, then "YouTube. Open."). */
+type IntroStep = "dark" | "appear" | "wake" | "awake" | "d-listen" | "d-type" | "d-done" | "x-listen" | "x-think" | "x-reply";
+const INTRO_TIMELINE: [IntroStep, number][] = [
+  ["dark", 500], ["appear", 900], ["wake", 1500], ["awake", 900],
+  ["d-listen", 2200], ["d-type", 2600], ["d-done", 1300],
+  ["x-listen", 2000], ["x-think", 1700], ["x-reply", 2200],
+];
+function MvIntro() {
+  const [step, setStep] = useState<IntroStep>("dark");
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setStep("awake"); return; }
+    let i = 0, t = 0;
+    const next = () => {
+      const [name, ms] = INTRO_TIMELINE[i];
+      setStep(name);
+      i = i + 1 >= INTRO_TIMELINE.length ? 4 : i + 1; // after the wake, loop the two modes
+      t = window.setTimeout(next, ms);
+    };
+    next();
+    return () => clearTimeout(t);
+  }, []);
+  const mode = step.startsWith("d-") ? "write" : step.startsWith("x-") ? "do" : "";
+  const typed = "The deck is done. Numbers by 6 PM, and the budget is ₹25,000.";
+  // Letter by letter, the way it lands at your cursor.
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (step !== "d-type") { if (step !== "d-done") setN(0); else setN(typed.length); return; }
+    let k = 0; const t = window.setInterval(() => { k += 2; setN(Math.min(typed.length, k)); if (k >= typed.length) clearInterval(t); }, 32);
+    return () => clearInterval(t);
+  }, [step]);
+  return (
+    <section className={`mvi mvi-${step}`} aria-label="Maven waking up, then writing and doing">
+      <div className="mvi-keys" aria-hidden="true">
+        <span className={"mvi-key" + (mode === "write" ? " on" : "")}><kbd>⌃</kbd><kbd>⌥</kbd><small>Write</small></span>
+        <span className={"mvi-key is-do" + (mode === "do" ? " on" : "")}><kbd>fn</kbd><kbd>⌃</kbd><small>Do</small></span>
+      </div>
+      <div className="mvi-stage">
+        <div className="mvi-pill">
+          <span className="mvi-eyes"><i /><i /></span>
+          <span className="mvi-text">{step === "x-think" ? "Open YouTube" : step === "x-reply" ? "YouTube. Open." : ""}</span>
+          <span className="mvi-ring" />
+        </div>
+        <p className="mvi-out">{step === "d-type" || step === "d-done" ? <span className="mvi-typed">{typed.slice(0, n)}<i className="mvi-caret" /></span> : step === "d-listen" ? <span className="mvi-hint">“um so the deck is uh done, numbers by five no wait six…”</span> : step === "x-listen" ? <span className="mvi-hint">“open YouTube”</span> : null}</p>
+      </div>
+      <p className="mvi-cap">{mode === "write" ? "Press ⌃⌥ and talk. It writes it, cleaned up." : mode === "do" ? "Press fn⌃ and ask. It does the small job." : step === "awake" ? "Hi. I'm Maven." : " "}</p>
+    </section>
+  );
+}
+
 function SecHead({ pill, children, side }: { pill: string; children: ReactNode; side?: ReactNode }) {
   return (
     <div className="mv-head aff-reveal">
@@ -647,6 +700,7 @@ const FAQ = [
   { q: "How is it different from Apple Dictation?", a: "Apple types what it hears. Maven writes what you meant: no ums, the right punctuation, lists, ₹, and your corrections. Then it can do the next step." },
   { q: "Does it understand my accent?", a: "It was tuned on how people in India actually speak and write." },
   { q: "What about Hindi?", a: "Hindi and Hinglish are in early preview: pick your language in Settings. Hinglish keeps Hindi words in Roman letters." },
+  { q: "What about other languages?", a: "We're building and training more languages right now. English, Hindi and Hinglish are ready today, and we'll add others once they're as good." },
   { q: "Noisy room or quiet voice?", a: "It works with your Mac's built-in mic. A headset helps in a noisy room." },
   { q: "What happens if I ask Maven something it can't do?", a: "It says “Not my job.” Ask “what can you do?” and it shows you the list." },
   { q: "What are snippets?", a: "Say a short phrase on its own, like “my calendar link”, and Maven pastes your saved text instead." },
@@ -676,12 +730,13 @@ export default function Maven() {
       {view === "letter" ? <MavenLetter /> : null}
       <div className="mv-frame">
       {view === "product" && <>
+      {/* 0. Maven comes to life (2026-10-28): black, the pill wakes, then both modes. */}
+      <MvIntro />
       {/* 1. Hero: pill + headline left, sub + button right, the film, the strip */}
       <header className="mv-cell mv-hero">
         <SecHead pill="Agentic dictation" side={<>
           <p className="mv-hero-one">Maven turns what you say into clean writing wherever you type. Then it does the small thing that comes next.</p>
           <div className="mv-hero-cta">
-            <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
             <a href="#see" className="aff-cta aff-cta-ghost">See it work</a>
           </div>
         </>}>
@@ -754,7 +809,7 @@ export default function Maven() {
 
         {/* 5. What it does: accordion + visual, then the strip */}
         <section className="mv-cell" id="does">
-          <SecHead pill="How it works" side={<a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>}>
+          <SecHead pill="How it works">
             <h2 className="aff-h1 mv-h2">
               <span className="aff-h1-line">You say it.</span>
               <b>Maven does it.</b>
@@ -823,7 +878,7 @@ export default function Maven() {
 
         {/* 9. Pricing */}
         <section className="mv-cell" id="pricing">
-          <SecHead pill="Pricing" side={<a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>}>
+          <SecHead pill="Pricing">
             <h2 className="mv-h2">Start free. Go Pro when you can't stop <em className="mv-it">talking</em>.</h2>
           </SecHead>
           <PriceTabs />
@@ -835,7 +890,6 @@ export default function Maven() {
                 <span key={pl.name} role="columnheader" className={pl.pro ? "is-pro" : undefined}>
                   <b>{pl.name}</b>
                   <em>{pl.price}{pl.per && <small>{pl.per}</small>}</em>
-                  <a href={DOWNLOAD} className={"aff-cta" + (pl.pro ? "" : " aff-cta-ghost")}>{pl.cta}</a>
                 </span>
               ))}
             </div>
@@ -898,7 +952,6 @@ export default function Maven() {
               <a href="#faq" onClick={toProduct}>Questions</a>
               <a href="#letter" onClick={(e) => { e.preventDefault(); show("letter"); }}>The announcement</a>
               <Link to="/trust">Privacy</Link>
-              <a href={DOWNLOAD}>Download for Mac</a>
             </nav>
           </div>
           <p className="mv-foot-base">© 2026 Maven, by <Link to="/">Affective</Link> · Made in Bengaluru · <Link to="/terms">Terms</Link></p>
