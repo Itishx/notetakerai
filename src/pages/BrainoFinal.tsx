@@ -597,8 +597,6 @@ export default function BrainoFinal() {
     <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
       <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
-      {/* The Maven page's frame (2026-10-29): one centred column with hairline sides, each section a cell. */}
-      <div className="bp-frame">
       {/* ── Hero: the home page's, with him in it ── */}
       <header className="aff-hero">
         <div className="aff-wrap">
@@ -797,7 +795,6 @@ export default function BrainoFinal() {
       </section>
 
       {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
-      </div>
       <footer className="braino-footer mario bf-game-mount">
         {/* One width, one left edge for every row (2026-10-15). */}
         <div className="bft">
