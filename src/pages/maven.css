@@ -593,3 +593,10 @@
 .mvi::after { content: "Scroll"; position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font: 500 11px -apple-system, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: rgba(245,242,234,.35); animation: mviBob 2.4s ease-in-out infinite; }
 @keyframes mviBob { 50% { transform: translate(-50%, 5px); } }
 @media (prefers-reduced-motion: reduce) { .mvi::after { animation: none; } }
+
+/* Intro, pill only (2026-10-28): "Meet Maven" above, no keys, words or scroll hint; the pill keeps its size in Do. */
+.mvi-meet { position: relative; margin: 0; font: 600 clamp(34px, 5vw, 56px)/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; letter-spacing: -.025em; color: #f5f5f7; }
+.mvi-x-think .mvi-pill, .mvi-x-reply .mvi-pill { --w: 116px; justify-content: center; padding-left: 0; }
+.mvi-x-think .mvi-eyes, .mvi-x-reply .mvi-eyes { gap: 14px; } .mvi-x-think .mvi-eyes i, .mvi-x-reply .mvi-eyes i { width: 12px; height: 26px; }
+.mvi-stage { min-height: 0; }
+.mvi::after { content: none; }
