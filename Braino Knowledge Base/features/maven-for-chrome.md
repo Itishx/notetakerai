@@ -1,7 +1,7 @@
 # Maven for Chrome
 
 **Type:** Product
-**Platform:** Chrome extension (Mac first; Windows untested)
+**Platform:** Chrome extension (Windows and Mac)
 **Status:** MVP
 **Released:** October 29, 2026
 
@@ -11,12 +11,12 @@ Maven, inside Chrome. Press Control + Option on any web page, talk, press again,
 
 ## Why it exists
 
-Plenty of people live in the browser. The extension lets them try Maven in a minute, without installing a Mac app, and it reaches people the Mac app never can.
+We couldn't make a Windows desktop app for Maven yet, so we made it for Chrome: if you're on Windows, the extension is Maven, built for you. Plenty of people live in the browser. The extension lets them try Maven in a minute, without installing a Mac app, and it reaches people the Mac app never can.
 
 ## How to use it
 
-- Write: Control + Option (⌃⌥), press to start, press again to stop. No text box? It copies and shows the words in the pill.
-- Do: Option + Command (⌥⌘), or fn + Control where Chrome sees fn. "Open YouTube", "go to my Gmail tab", "tell Neha I'm running late" (WhatsApp Web, asks Which Neha? when there are two), "email Rahul the deck is done" (a Gmail draft), "draft a reply to this", "fill this form for me", "add milk to my grocery list", "remember Riya is R-I-Y-A", "what can you do?".
+- Write: Control + Option (⌃⌥) on a Mac, Ctrl + Alt on Windows, press to start, press again to stop. No text box? It copies and shows the words in the pill.
+- Do: Option + Command (⌥⌘) on a Mac, Alt + Windows key on Windows, or fn + Control where Chrome sees fn. "Open YouTube", "go to my Gmail tab", "tell Neha I'm running late" (WhatsApp Web, asks Which Neha? when there are two), "email Rahul the deck is done" (a Gmail draft), "draft a reply to this", "fill this form for me", "add milk to my grocery list", "remember Riya is R-I-Y-A", "what can you do?".
 - Drag the pill to the left, centre or right. It stays there in every tab.
 - Enter says yes to a card, Esc cancels.
 - Onboarding page opens on install: Google sign-in, mic, shortcuts, details for forms, look, language, and a try-it box.

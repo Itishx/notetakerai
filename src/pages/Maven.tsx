@@ -105,11 +105,12 @@ const CHROME = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Chrome&body=I
 /* Mac app and Chrome extension, side by side: what is the same, what is not. */
 const MAC_VS_CHROME = [
   { k: "Where it writes", mac: "Every app on your Mac: WhatsApp, Slack, Notes, Mail, your code editor", chrome: "Any text box on a web page: Gmail, WhatsApp Web, Slack, Docs, LinkedIn" },
-  { k: "Write", mac: "⌃⌥ Control + Option", chrome: "⌃⌥ Control + Option" },
-  { k: "Do", mac: "fn⌃ fn + Control", chrome: "⌥⌘ Option + Command" },
+  { k: "Works on", mac: "Mac", chrome: "Windows and Mac, anywhere Chrome runs" },
+  { k: "Write", mac: "⌃⌥ Control + Option", chrome: "Control + Option on a Mac, Ctrl + Alt on Windows" },
+  { k: "Do", mac: "fn⌃ fn + Control", chrome: "Option + Command on a Mac, Alt + Windows key on Windows" },
   { k: "Jobs", mac: "Open apps and sites, send on WhatsApp, reply, fill forms, lists in Notes, remember", chrome: "Open sites, go to a tab, send on WhatsApp Web, Gmail drafts, reply, fill forms, remember" },
   { k: "Speed on long takes", mac: "Writes while you talk, so long takes land fast", chrome: "Sends at the end, a few seconds slower on long takes" },
-  { k: "Best for", mac: "Everything you do on your Mac", chrome: "If you live in the browser, or want to try Maven in a minute" },
+  { k: "Best for", mac: "Everything you do on your Mac", chrome: "Windows. We built it for you. And anyone who lives in the browser" },
 ];
 const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
 
@@ -156,7 +157,7 @@ function PriceTabs() {
             ))}</tbody>
           </table>
         </div>
-        <p className="mv-compare-note">Prices from each company's own site, October 2026. Wispr Flow also has Windows and phone apps; Maven is on Mac and in Chrome.</p>
+        <p className="mv-compare-note">Prices from each company's own site, October 2026. Wispr Flow also has Windows and phone apps; Maven is on Mac, and on Windows through Chrome.</p>
       </div>
     </>
   );
@@ -768,7 +769,7 @@ const FAQ = [
   { q: "What are snippets?", a: "Say a short phrase on its own, like “my calendar link”, and Maven pastes your saved text instead." },
   { q: "Is it free?", a: "Yes. Free covers everyday use. Pro is $10 a month for unlimited." },
   { q: "Is there a Chrome extension?", a: "Yes. Maven for Chrome writes in any text box on the web, with the same voice and cleanup as the Mac app. It can't type into apps outside Chrome; the Mac app can." },
-  { q: "Windows?", a: "No Windows app yet. Maven for Chrome may work in Chrome on Windows, but we have only tested it on Mac so far." },
+  { q: "Windows?", a: "Yes, through Chrome. We couldn't make a Windows app just yet, so we built Maven for Chrome for you. Add it to Chrome, then press Ctrl + Alt to write and Alt + Windows key to ask." },
 ];
 
 const TYPE_LINE = "Can you tell Rahul the deck is done? Numbers by 6, and the budget is ₹25,000. ";
@@ -928,7 +929,7 @@ export default function Maven() {
 
         {/* 8b. Mac app or Chrome (2026-10-29) */}
         <section className="mv-cell" id="chrome">
-          <SecHead pill="Mac and Chrome" side={<p className="mv-head-desc">Same Maven, same voice, same clean writing. Pick the one that fits how you work, or use both.</p>}>
+          <SecHead pill="Mac and Chrome" side={<p className="mv-head-desc">On Windows? We couldn't make a Windows app just yet, so we made Maven for Chrome. It's made for you. Same Maven, same voice, same clean writing.</p>}>
             <h2 className="mv-h2">On your Mac. <em className="mv-it">And</em> in Chrome.</h2>
           </SecHead>
           <div className="mv-mvc aff-reveal" role="table" aria-label="Maven for Mac and Maven for Chrome">
