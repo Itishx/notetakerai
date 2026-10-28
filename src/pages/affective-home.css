@@ -1119,3 +1119,7 @@
 .aff-md-text .aff-md-h,.aff-md-text .aff-md-p{position:relative;z-index:2}
 .aff-md-row .aff-md-shot{left:0!important;right:0!important}
 .aff-md .aff-md-go{pointer-events:auto}
+
+/* Hero words: space held from the start so the line never reflows; each word fades up in place. */
+.aff-md .aff-kin > span{display:inline-block;opacity:0;animation:affStamp .5s cubic-bezier(.2,.8,.3,1) both}
+.aff-md .aff-kin{gap:0 .25em}
