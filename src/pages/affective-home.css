@@ -1103,3 +1103,4 @@
 /* Typing caret on the hero line. */
 .aff-caret{display:inline-block;width:.06em;height:.85em;margin-left:.06em;background:currentColor;vertical-align:-.05em;animation:affCaret 1s steps(1) infinite}
 @keyframes affCaret{50%{opacity:0}}
+.aff-type{display:grid}.aff-type>span{grid-area:1/1}.aff-type-ghost{visibility:hidden}

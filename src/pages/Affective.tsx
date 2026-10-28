@@ -398,7 +398,7 @@ function TypeOn({ text }: { text: string }) {
     const t = window.setInterval(() => { k += 1; setN(k); if (k >= text.length) clearInterval(t); }, 55);
     return () => clearInterval(t);
   }, [text]);
-  return <span aria-hidden="true">{text.slice(0, n)}<i className="aff-caret" /></span>;
+  return <span className="aff-type" aria-hidden="true"><span className="aff-type-ghost">{text}</span><span className="aff-type-live">{text.slice(0, n)}<i className="aff-caret" /></span></span>;
 }
 
 /* Maven's full loop on the homepage: resting, listening, done, back to rest. */
