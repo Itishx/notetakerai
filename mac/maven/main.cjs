@@ -748,6 +748,14 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
     const pasteMs = Date.now() - p0;
     try { fs.writeFileSync(lastDictationPath(), `${new Date().toISOString()}\nRAW: ${raw}\nFINAL: ${finalText}\n`); } catch (_) {}
     printDictation({ language, audio, heard, raw, quick, cleaned, finalText, pasted, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0 });
+    // One gentle nudge toward Do mode, after the third dictation, once ever.
+    try {
+      const st = mavenStore.getSettings();
+      if (!st.doNudged && mavenStore.getHistory().length >= 3) {
+        mavenStore.setSetting("doNudged", true);
+        setTimeout(() => { if (phase === "idle") { islandShow("reply", { note: "Try fn⌃ too?", hint: "Press fn⌃ and say “open YouTube”" }); islandHide(5200); } }, 1600);
+      }
+    } catch (_) {}
     log("dictation.done", { reason, provider: heard.provider || "", recordedMs: audio.ms, textMs, cleanMs, pasteMs, totalMs: Date.now() - t0, chars: finalText.length, cleaned: Boolean(cleaned), pasted: pasted.ok, app: pasted.app || "" });
     if (session_ === mySession) {
       if (pasted.ok) { islandShow("done"); islandHide(850); } // green edge light, then rest // a quick happy squint

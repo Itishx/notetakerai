@@ -114,7 +114,6 @@ function applyLook(look) {
 window.maven.onState((p) => {
   applyLook(p.look);
   const { state, note: text } = p || {};
-  if (state !== "sent" && state !== "ask" && card.isOpen()) card.close();
   if (state === "ask") { note.classList.remove("on"); showHint(""); card.open(p.card || {}); return; }
   if (state === "think") { note.classList.remove("on"); showHint(""); card.open({ kind: "think", title: String(p.text || "Thinking…"), right: "" }); return; }
   if (state === "sent") { card.sent(String(p.text || "Sent.")); return; }
@@ -162,7 +161,11 @@ window.maven.onLevel(({ v }) => {
 });
 
 // Click-through everywhere except the capsule, its buttons and the open card.
-island.addEventListener("mouseenter", () => { island.classList.add("open"); window.maven.hover(true); });
+island.addEventListener("mouseenter", () => {
+  island.classList.add("open"); window.maven.hover(true);
+  // Resting and hovered: the two shortcuts, so nobody has to guess (2026-10-28).
+  if (island.classList.contains("idle") && !card.isOpen()) showHint("⌃⌥ Write  ·  fn⌃ Do");
+});
 island.addEventListener("mouseleave", () => { if (dragging) return; island.classList.remove("open"); window.maven.hover(false); });
 
 /* Manual drag: press on the capsule (not the buttons), main follows the cursor

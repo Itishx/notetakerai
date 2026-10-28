@@ -1,7 +1,7 @@
 "use strict";
 /* Maven onboarding: one step per screen. Talks to main only through window.onboarding. */
 const api = window.onboarding;
-const STEPS = ["welcome", "permissions", "mic", "language", "shortcut", "place", "practice", "done"];
+const STEPS = ["welcome", "permissions", "mic", "language", "shortcut", "place", "practice", "tryjob", "done"];
 const $ = (id) => document.getElementById(id);
 let current = -1;
 let leaveStep = null;
