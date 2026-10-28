@@ -1,7 +1,7 @@
 :root { --bg: #f4f2ec; --side: #ece9e1; --ink: #16150f; --muted: #625f54; --line: #dcd8cb; --hover: rgba(22,21,15,.06); --danger: #a3341f;
   --serif: "Iowan Old Style", Georgia, serif; --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #171613; --side: #1f1e1a; --ink: #f1eee6; --muted: #a29e91; --line: #34322b; --hover: rgba(241,238,230,.07); --danger: #e0806b; color-scheme: dark; }
+  :root:not([data-theme="light"]) { --bg: #171613; --side: #1f1e1a; --ink: #f1eee6; --muted: #a29e91; --line: #34322b; --hover: rgba(241,238,230,.07); --danger: #e0806b; color-scheme: dark; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -84,7 +84,7 @@ textarea { width: 100%; min-height: 70px; padding: 9px 12px; border: 1px solid v
 /* ── Settings in Maven's own style (2026-10-28): grouped panels, serif heads,
    custom switch, chips and buttons. No system controls. ── */
 :root { --peach: #f0a483; --panel: #fbfaf6; }
-@media (prefers-color-scheme: dark) { :root { --panel: #1f1d19; --peach: #e0906f; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --panel: #1f1d19; --peach: #e0906f; } }
 #settings .head .sub { margin-top: 4px; }
 .st-group { margin-top: 30px; }
 .st-h { margin: 0 0 10px; font: 400 22px/1.2 "Iowan Old Style", "Palatino Linotype", Georgia, serif; letter-spacing: -.01em; color: var(--ink); }
@@ -123,7 +123,7 @@ textarea { width: 100%; min-height: 70px; padding: 9px 12px; border: 1px solid v
 
 /* ── Insights (2026-10-28) ── */
 :root { --teal: #2f5f5a; --teal-2: #6aa39b; --teal-3: #a9d2cb; --teal-4: #d6ebe7; }
-@media (prefers-color-scheme: dark) { :root { --teal: #7cc3b8; --teal-2: #4f9187; --teal-3: #2f625b; --teal-4: #22403b; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --teal: #7cc3b8; --teal-2: #4f9187; --teal-3: #2f625b; --teal-4: #22403b; } }
 .in-top { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 14px; margin-top: 22px; }
 .in-bottom { display: grid; grid-template-columns: 1fr 1.25fr; gap: 14px; margin-top: 14px; }
 .in-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; display: grid; gap: 6px; align-content: start; min-width: 0; }
@@ -160,3 +160,27 @@ textarea { width: 100%; min-height: 70px; padding: 9px 12px; border: 1px solid v
 .try-k kbd { font: 600 12px ui-monospace, Menlo, monospace; text-transform: none; letter-spacing: 0; padding: 2px 6px; border-radius: 6px; background: var(--hover); color: var(--ink); }
 .try-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .try-row span { font-size: 13.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); }
+
+/* ── Theme slider (2026-10-28): Light / System / Dark ── */
+:root[data-theme="dark"] { --bg: #171613; --side: #1f1e1a; --ink: #f1eee6; --muted: #a29e91; --line: #34322b; --hover: rgba(241,238,230,.07); --danger: #e0806b; color-scheme: dark; --panel: #1f1d19; --peach: #e0906f; --teal: #7cc3b8; --teal-2: #4f9187; --teal-3: #2f625b; --teal-4: #22403b; }
+:root[data-theme="light"] { color-scheme: light; }
+.theme-slider { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border-radius: 999px; background: var(--hover); margin: 8px 10px 0; }
+.theme-slider button { all: unset; position: relative; z-index: 1; text-align: center; cursor: pointer; font-size: 12px; padding: 5px 0; color: var(--muted); border-radius: 999px; }
+.theme-slider button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
+.theme-slider i { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3); border-radius: 999px; background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); transition: transform .28s cubic-bezier(.32,.72,0,1); }
+.theme-slider[data-v="system"] i { transform: translateX(100%); } .theme-slider[data-v="dark"] i { transform: translateX(200%); }
+
+/* ── Insights, spread out to fill the window ── */
+#insights.page { max-width: 1240px; }
+#insights .in-top { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 28px; }
+#insights .in-top .in-wide { grid-column: span 2; }
+#insights .in-bottom { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; margin-top: 18px; }
+#insights .in-card { padding: 24px 26px; gap: 8px; border-radius: 18px; }
+#insights .in-num { font-size: 44px; }
+#insights .in-h { font-size: 30px; }
+#insights .in-gauge { width: 190px; }
+#insights .in-bar { height: 36px; }
+#insights .in-kinds { gap: 12px; margin-top: 18px; }
+#insights .in-heat { grid-template-rows: repeat(7, 1fr); grid-auto-columns: minmax(12px, 1fr); gap: 5px; margin-top: 18px; }
+#insights .in-heat i { width: 100%; height: auto; aspect-ratio: 1; border-radius: 4px; }
+@media (max-width: 760px) { #insights .in-top .in-wide { grid-column: auto; } }

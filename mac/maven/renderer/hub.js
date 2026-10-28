@@ -209,3 +209,13 @@ async function renderInsights() {
 }
 document.querySelector('[data-page="insights"]')?.addEventListener("click", renderInsights);
 api.onHistory?.(() => { if (document.querySelector("#insights.on")) renderInsights(); });
+
+/* Theme slider: Light / Auto / Dark, remembered in Settings. */
+function applyTheme(v) {
+  const root = document.documentElement;
+  if (v === "light" || v === "dark") root.setAttribute("data-theme", v); else root.removeAttribute("data-theme");
+  const sl = $("#theme-slider"); sl.dataset.v = v;
+  sl.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v));
+}
+api.getSettings().then((s) => applyTheme(s.appTheme || "system"));
+document.querySelectorAll("#theme-slider button").forEach((b) => b.addEventListener("click", () => { applyTheme(b.dataset.v); api.setSetting("appTheme", b.dataset.v); }));

@@ -20,9 +20,9 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
   handle("hub:snip:save", (l) => store.saveSnippets(l));
   handle("hub:settings:get", () => ({
     shortcut: "⌃⌥", doShortcut: "fn ⌃", microphone: "System default", version: app.getVersion(),
-    launchAtLogin: Boolean(app.getLoginItemSettings().openAtLogin), language: store.getLanguage(), languages: store.getLanguages(), islandTheme: String(store.getSettings().islandTheme || "ink"),
+    launchAtLogin: Boolean(app.getLoginItemSettings().openAtLogin), language: store.getLanguage(), languages: store.getLanguages(), islandTheme: String(store.getSettings().islandTheme || "ink"), appTheme: String(store.getSettings().appTheme || "system"),
   }));
-  handle("hub:settings:set", (k, v) => { if (k === "launchAtLogin") app.setLoginItemSettings({ openAtLogin: Boolean(v) }); if (k === "language") { store.setLanguage(v); log("settings.language", { language: store.getLanguage() }); } if (k === "islandTheme" && ["ink", "paper", "glass"].includes(String(v))) { store.setSetting("islandTheme", String(v)); log("settings.theme", { theme: String(v) }); } if (k === "languages") { store.setLanguages(v); log("settings.languages", { languages: store.getLanguages() }); } return true; });
+  handle("hub:settings:set", (k, v) => { if (k === "launchAtLogin") app.setLoginItemSettings({ openAtLogin: Boolean(v) }); if (k === "language") { store.setLanguage(v); log("settings.language", { language: store.getLanguage() }); } if (k === "appTheme" && ["light", "system", "dark"].includes(String(v))) store.setSetting("appTheme", String(v)); if (k === "islandTheme" && ["ink", "paper", "glass"].includes(String(v))) { store.setSetting("islandTheme", String(v)); log("settings.theme", { theme: String(v) }); } if (k === "languages") { store.setLanguages(v); log("settings.languages", { languages: store.getLanguages() }); } return true; });
   handle("hub:details:get", () => store.getDetails());
   handle("hub:details:save", (d) => store.saveDetails(d));
   handle("hub:openData", () => shell.openPath(store.dataDir()));
@@ -39,7 +39,7 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
   function open(page) {
     if (win && !win.isDestroyed()) { if (page) send("hub:page", page); if (win.isMinimized()) win.restore(); win.show(); win.focus(); return win; }
     win = new BrowserWindow({
-      width: 980, height: 680, minWidth: 760, minHeight: 520, show: false, title: "Maven",
+      width: 1180, height: 780, minWidth: 760, minHeight: 520, show: false, title: "Maven",
       titleBarStyle: "hiddenInset", backgroundColor: "#f4f2ec",
       webPreferences: { preload: path.join(__dirname, "..", "renderer", "hub-preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
