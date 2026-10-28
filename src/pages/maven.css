@@ -484,3 +484,42 @@
 /* the two shortcuts, plainly, in the hero */
 .mv-keys-line { margin: 14px 0 6px; font-size: 15px; line-height: 1.6; color: var(--a-ink); max-width: 46ch; }
 .mv-keys-line kbd { font: 600 13px ui-monospace, Menlo, monospace; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--a-ink) 8%, transparent); }
+
+/* ── "What it does" fixes (2026-10-28) ── */
+/* breathing room between "You press ⌃⌥ and say" and your words */
+.mv-acc-steps { gap: 18px !important; }
+.mv-acc-steps li { gap: 8px !important; }
+.mv-acc-steps li span { display: block; margin-bottom: 2px; }
+/* the island from the app, bottom-right of the scene */
+.mv-scene-mac { position: relative; }
+.mv-isl-spot { position: absolute; right: 16px; bottom: 14px; z-index: 3; display: flex; justify-content: flex-end; }
+.mv-isl-spot .mv-face { --k: .8; }
+.mv-isl { background: #0b0b0a; color: #f5f2ea; box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 12px 30px rgba(0,0,0,.32); display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; font: 13px/1.35 -apple-system, "SF Pro Text", sans-serif; animation: mvIslIn .5s cubic-bezier(.32,.72,0,1) both; transform-origin: 100% 100%; }
+.mv-isl-eyes { display: flex; gap: 5px; justify-self: center; }
+.mv-isl-eyes i { width: 4.5px; height: 10px; border-radius: 3px; background: #f5f2ea; display: block; }
+.mv-isl-pill { height: 34px; border-radius: 17px; padding-right: 14px; grid-template-columns: 30px auto; }
+.mv-isl-pill b { font-weight: 600; white-space: nowrap; }
+.mv-isl-ask { width: min(430px, calc(100vw - 80px)); border-radius: 20px; padding: 10px 12px 10px 2px; align-items: start; }
+.mv-isl-ask .mv-isl-eyes { margin-top: 5px; }
+.mv-isl-c { display: grid; gap: 8px; min-width: 0; }
+.mv-isl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.mv-isl-row b { font-weight: 600; white-space: nowrap; } .mv-isl-row em { font-style: normal; font-size: 12px; opacity: .55; white-space: nowrap; }
+.mv-isl-draft { flex: 1; min-width: 0; background: rgba(255,255,255,.08); border-radius: 8px; padding: 6px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mv-isl-acts { display: flex; gap: 5px; flex: none; }
+.mv-isl-acts b { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,.13); }
+.mv-isl-acts b.y { background: #f5f2ea; color: #0b0b0a; }
+.mv-isl-acts kbd { font: 10px ui-monospace, Menlo, monospace; opacity: .6; margin-left: 4px; }
+@keyframes mvIslIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+/* a real browser for "open YouTube" */
+.mv-browser .mv-tab { margin-left: 10px; padding: 3px 12px; border-radius: 7px 7px 0 0; background: #fff; font-size: 12px; color: #333; }
+.mv-url { margin: 8px 14px; padding: 6px 12px; border-radius: 999px; background: #f1f1f3; font-size: 12.5px; color: #333; min-height: 28px; display: flex; align-items: center; }
+.mv-page { min-height: 150px; }
+.mv-blank { color: #999; font-size: 13px; text-align: center; margin-top: 40px; }
+.mv-yt-top { display: flex; align-items: center; gap: 8px; }
+.mv-yt-logo { width: 26px; height: 18px; border-radius: 5px; background: #ff0033; position: relative; }
+.mv-yt-logo::after { content: ""; position: absolute; left: 10px; top: 5px; border-left: 7px solid #fff; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+.mv-yt-top b { font-size: 15px; color: #111; letter-spacing: -.02em; }
+.mv-yt-search { flex: 1; height: 22px; margin-left: 18px; border-radius: 999px; border: 1px solid #ddd; }
+.mv-yt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.mv-yt-grid span { aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #e9e3dc, #d8d0c7); animation: mvLand .35s ease both; }
+@media (prefers-reduced-motion: reduce) { .mv-isl { animation: none; } }
