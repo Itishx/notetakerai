@@ -912,3 +912,19 @@
 .aff-hello { padding-block: clamp(80px, 11vw, 150px); }
 .aff-hello-h { margin: 0; font-size: clamp(44px, 7vw, 92px); line-height: 1; }
 .aff-hello-p { margin: 22px 0 clamp(36px, 5vw, 56px); max-width: 48ch; font-size: clamp(18px, 1.8vw, 22px); line-height: 1.55; color: var(--a-ink-soft); }
+
+/* Hero, Medium style (2026-10-29): big serif line left, one button, picture right, thin rules. */
+.aff-hero.aff-md{padding:0;border-bottom:1px solid var(--a-line, rgba(0,0,0,.85))}
+.aff-md-row{display:grid;grid-template-columns:1.1fr 1fr;align-items:center;gap:32px;max-width:1200px;margin:0 auto;padding:0 24px;min-height:min(78vh,680px)}
+.aff-md-text{display:flex;flex-direction:column;align-items:flex-start;gap:28px;min-width:0;padding-block:64px}
+.aff-md-h{font-family:var(--a-display);font-weight:400;font-size:clamp(48px,7.4vw,108px);line-height:.95;letter-spacing:-.03em;margin:0;color:var(--a-ink);text-wrap:balance}
+.aff-md-p{font-size:clamp(18px,1.7vw,22px);line-height:1.4;margin:0;color:var(--a-ink);opacity:.85}
+.aff-md-go{display:inline-flex;align-items:center;padding:12px 26px;border-radius:999px;background:var(--a-ink);color:var(--a-bg);font-size:18px;text-decoration:none;transition:opacity .2s}
+.aff-md-go:hover{opacity:.85}
+.aff-md-shot{margin:0;align-self:stretch;display:flex;align-items:center;min-width:0}
+.aff-md-shot img{width:100%;height:auto;max-height:560px;object-fit:cover;border-radius:4px}
+@media (max-width:820px){
+  .aff-md-row{grid-template-columns:1fr;min-height:0;padding:0 16px}
+  .aff-md-text{padding-block:48px 8px}
+  .aff-md-shot{padding-bottom:32px}
+}

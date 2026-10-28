@@ -8,7 +8,6 @@ import "./affective-home.css";
 import "./affectiveos-page.css";
 import { VoiceToAction, NotchSheet, MacMenuBar, EffortChartCompact } from "./aff-figures";
 import { BrainoMascot } from "@/components/BrainoMascot";
-import { LaunchPill } from "@/components/LaunchPill";
 import { MacTaskFilm } from "@/components/MacTaskFilm";
 import { BrainoShowcase } from "@/components/BrainoShowcase";
 import { AppLogo } from "@/components/AppLogo";
@@ -565,52 +564,17 @@ export default function Affective() {
           than a screenshot: the page is arguing that the computer stops being
           a thing you sit in front of, and a picture of a screen would argue
           the opposite in the first frame. */}
-      <header className="aff-hero">
-        <div className="aff-wrap">
-          <LaunchPill lead="Maven is here" text="Read the announcement" href="/maven#letter" />
-          <div className="aff-hero-row aff-reveal">
-            <h1 className="aff-h1">
-              <span className="aff-h1-line">
-                Stop typing on your Mac.
-              </span>
-              <b>Start talking to it.</b>
-            </h1>
-            <div className="aff-hero-side">
-              <p className="aff-hero-one">
-                Maven is out now: it writes what you say, wherever you type. Braino is in the lab: a companion who does the work in your apps.
-              </p>
-              <div className="aff-hero-cta">
-                <Link to="/maven" className="aff-cta">Meet Maven</Link>
-                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
-              </div>
-            </div>
+      <header className="aff-hero aff-md">
+        <div className="aff-md-row">
+          <div className="aff-md-text">
+            <h1 className="aff-md-h">Stop typing on your Mac. Start talking to it.</h1>
+            <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
+            <Link to="/maven" className="aff-md-go">Get Maven</Link>
           </div>
+          <figure className="aff-md-shot">
+            <img src="/affective-hero.jpg" alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it." width={1774} height={887} loading="eager" decoding="async" />
+          </figure>
         </div>
-
-        {/* The picture arrives as an object in the measure and opens to the
-            whole page as you scroll into it: the room stops being something
-            shown to you and becomes somewhere you are. It grows rather than
-            slides, so nothing is ever cut off at an edge. */}
-        <figure className="aff-hero-shot" data-grow>
-          <img
-            src="/affective-hero.jpg"
-            alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it."
-            width={1774}
-            height={887}
-            loading="eager"
-            decoding="async"
-          />
-        </figure>
-
-        {/* (strip moved under the demo) Where a landing page puts its customers. We have none to put there,
-            and the honest version of that row is the one thing everybody in
-            this business is coy about: whose thinking we buy. Saying it here,
-            under the first claim, is the same answer the questions give and it
-            costs nothing to be first to say it. Names rather than logos, set
-            in one ink, because a row of other people's marks reads as their
-            page rather than ours. */}
-
-
       </header>
 
       {/* The homepage is two parts and a footer (2026-10-29, Itish: a new company
