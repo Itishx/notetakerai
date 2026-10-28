@@ -120,6 +120,14 @@ window.maven.onState((p) => {
   if (state === "sent") { card.sent(String(p.text || "Sent.")); return; }
   // Any non-card state folds a thinking bar away first.
   if (state !== "ask" && state !== "sent" && state !== "think" && card.isOpen()) card.close();
+  if (state === "reply" && p.note && p.face !== "done") {
+    // Bar design: the pill stretches and the three words sit inside it.
+    note.classList.remove("on");
+    const face = { again: "again", nope: "nope", curious: "curious" }[p.face] || "";
+    card.open({ kind: "pill", title: String(p.note), right: "", face });
+    showHint(p.hint || "");
+    return;
+  }
   if (state === "note" || state === "reply") {
     // The 3-word reply beside the pill, with the face that goes with it.
     const face = { again: "again", nope: "nope", curious: "curious" }[p.face] || "";
@@ -193,7 +201,8 @@ const card = (() => {
   const $ = (s) => el.querySelector(s);
   const PW = 58, PH = 30;
   // Bar is wide and low; the help list keeps the taller card width.
-  const cardW = () => (document.body.classList.contains("l-bar") && kind !== "help" ? 480 : 300);
+  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : document.body.classList.contains("l-bar") && kind !== "help" ? 480 : 300);
+  let pillText = "";
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
   const rectX = (w) => anchor() === "left" ? 0 : anchor() === "right" ? CW - w : (CW - w) / 2;
@@ -207,6 +216,7 @@ const card = (() => {
 
   function fill(c) {
     kind = String(c.kind || "send");
+    pillText = kind === "pill" ? String(c.title || "") : "";
     el.className = `k-${kind}` + (kind === "choose" ? " curious" : "");
     $(".title").textContent = String(c.title || "");
     $(".right").textContent = String(c.right || "");
@@ -216,9 +226,11 @@ const card = (() => {
     const opts = $(".opts"); opts.replaceChildren(); sel = 0;
     (c.options || []).slice(0, 3).forEach((o, i) => {
       const b = document.createElement("button"); b.type = "button";
-      const n = document.createElement("span"); n.textContent = String(o.name || o);
-      const m = document.createElement("small"); m.textContent = o.meta ? String(o.meta) : String(i + 1);
-      b.append(n, m); if (i === 0) b.classList.add("sel");
+      const k = document.createElement("kbd"); k.textContent = String(i + 1);
+      const t = document.createElement("span");
+      const n = document.createElement("b"); n.textContent = String(o.name || o);
+      const m = document.createElement("small"); m.textContent = o.meta ? String(o.meta) : "";
+      t.append(n, m); b.append(k, t); if (i === 0) b.classList.add("sel");
       b.addEventListener("click", () => choose(i));
       opts.append(b);
     });
