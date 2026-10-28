@@ -600,3 +600,14 @@
 .mvi-x-think .mvi-eyes, .mvi-x-reply .mvi-eyes { gap: 14px; } .mvi-x-think .mvi-eyes i, .mvi-x-reply .mvi-eyes i { width: 12px; height: 26px; }
 .mvi-stage { min-height: 0; }
 .mvi::after { content: none; }
+
+/* Mac app and Chrome extension, side by side (2026-10-29). */
+.mv-mvc { border-top: 1px solid var(--a-line); }
+.mv-mvc-row { display: grid; grid-template-columns: minmax(120px, .7fr) 1fr 1fr; border-bottom: 1px solid var(--a-line); }
+.mv-mvc-row > span { padding: 16px clamp(10px, 2vw, 20px); font-size: 15px; line-height: 1.5; color: var(--a-ink); min-width: 0; }
+.mv-mvc-row > span + span { border-left: 1px solid var(--a-line); }
+.mv-mvc-row > [role="rowheader"] { color: var(--a-ink-soft); font-size: 14px; }
+.mv-mvc-head > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mv-mvc-head b { font-family: var(--a-display); font-weight: 400; font-size: 24px; }
+.mv-mvc-head a { font-size: 14px; color: var(--a-ink); }
+@media (max-width: 640px) { .mv-mvc-row { grid-template-columns: 1fr 1fr; } .mv-mvc-row > [role="rowheader"] { grid-column: 1 / -1; padding-bottom: 0; border: 0; } .mv-mvc-row > [role="rowheader"] + span { border-left: 0; } }

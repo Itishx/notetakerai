@@ -15,6 +15,9 @@ sed 's#<script src="island.js"></script>#<script src="island-shim.js"></script><
 { echo "(() => { const module = { exports: {} };"; cat ../lib/dictation.cjs; echo "self.MavenGate = module.exports; })();"; } > dist/dictation.js
 # One copy only, always at the same place: the old one is deleted, so Chrome's
 # reload arrow picks up the new version without loading it again.
-rm -f ~/Desktop/Maven-for-Chrome.zip
+rm -f ~/Desktop/Maven-for-Chrome.zip ~/Desktop/Maven-for-Chrome-*.zip
 rm -rf ~/Desktop/Maven-for-Chrome && cp -R dist ~/Desktop/Maven-for-Chrome
+# The Chrome Web Store upload: the same files, zipped, named by version.
+V=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' dist/manifest.json | sed 's/\.0$//')
+(cd dist && zip -qr ~/Desktop/Maven-for-Chrome-$V.zip . -x ".*")
 echo "built: ~/Desktop/Maven-for-Chrome (v$(sed -n 's/.*"version": "\(.*\)".*/\1/p' dist/manifest.json))"

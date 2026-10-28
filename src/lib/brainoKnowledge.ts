@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "maven-for-chrome",
+    title: "Maven for Chrome",
+    category: "Product",
+    date: "2026-10-29",
+    dateLabel: "October 29, 2026",
+    description:
+      "Maven inside Chrome. Control + Option on any web page to write, Option + Command to ask for one small job. Same voice, same cleanup, the same pill in the corner.",
+    status: "MVP",
+    platform: "Chrome extension",
+    number: "095",
+  },
+  {
     slug: "mac-play-mode",
     title: "Play Mode: Handle This For Me",
     category: "Mode",

@@ -104,6 +104,7 @@ const NotionSync = lazy(() => import("./pages/NotionSync.tsx"));
 const GlassPreview = lazy(() => import("./pages/GlassPreview.tsx"));
 const Auth = lazy(() => import("./pages/Auth.tsx"));
 const ExtensionAuth = lazy(() => import("./pages/ExtensionAuth.tsx"));
+const MavenChromeDocs = lazy(() => import("./pages/MavenChromeDocs.tsx"));
 const Premium = lazy(() => import("./pages/Premium.tsx"));
 const BrowserAgent = lazy(() => import("./pages/BrowserAgent.tsx"));
 const Delegate = lazy(() => import("./pages/Delegate.tsx"));
@@ -278,6 +279,7 @@ function AppRoutes() {
         <Route path="/knowledge/brainox-distribution" element={<BrainoXDocs />} />
         <Route path="/knowledge/site-previews" element={<SitePreviewsDocs />} />
         <Route path="/knowledge/braino-first" element={<BrainoFirstDocs />} />
+        <Route path="/knowledge/maven-for-chrome" element={<MavenChromeDocs />} />
         <Route path="/knowledge/one-braino-page" element={<OneBrainoPageDocs />} />
         <Route path="/knowledge/which-contact" element={<WhichContactDocs />} />
         <Route path="/knowledge/meet-braino" element={<MeetBrainoDocs />} />

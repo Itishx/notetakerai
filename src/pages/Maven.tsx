@@ -98,6 +98,19 @@ function MvHub() {
   );
 }
 
+/* Maven for Chrome (2026-10-29). Until the Chrome Web Store listing is live,
+   the button asks for it the same way the Mac download does. Swap in the store
+   link when it is published. */
+const CHROME = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Chrome&body=I%27d%20like%20to%20try%20Maven%20in%20Chrome.";
+/* Mac app and Chrome extension, side by side: what is the same, what is not. */
+const MAC_VS_CHROME = [
+  { k: "Where it writes", mac: "Every app on your Mac: WhatsApp, Slack, Notes, Mail, your code editor", chrome: "Any text box on a web page: Gmail, WhatsApp Web, Slack, Docs, LinkedIn" },
+  { k: "Write", mac: "⌃⌥ Control + Option", chrome: "⌃⌥ Control + Option" },
+  { k: "Do", mac: "fn⌃ fn + Control", chrome: "⌥⌘ Option + Command" },
+  { k: "Jobs", mac: "Open apps and sites, send on WhatsApp, reply, fill forms, lists in Notes, remember", chrome: "Open sites, go to a tab, send on WhatsApp Web, Gmail drafts, reply, fill forms, remember" },
+  { k: "Speed on long takes", mac: "Writes while you talk, so long takes land fast", chrome: "Sends at the end, a few seconds slower on long takes" },
+  { k: "Best for", mac: "Everything you do on your Mac", chrome: "If you live in the browser, or want to try Maven in a minute" },
+];
 const DOWNLOAD = "mailto:talk2braino@gmail.com?subject=Maven%20for%20Mac&body=I%27d%20like%20to%20try%20Maven.";
 
 
@@ -143,7 +156,7 @@ function PriceTabs() {
             ))}</tbody>
           </table>
         </div>
-        <p className="mv-compare-note">Prices from each company's own site, October 2026. Wispr Flow also has Windows and phone apps; Maven is Mac only for now.</p>
+        <p className="mv-compare-note">Prices from each company's own site, October 2026. Wispr Flow also has Windows and phone apps; Maven is on Mac and in Chrome.</p>
       </div>
     </>
   );
@@ -754,7 +767,8 @@ const FAQ = [
   { q: "What happens if I ask Maven something it can't do?", a: "It says “Not my job.” Ask “what can you do?” and it shows you the list." },
   { q: "What are snippets?", a: "Say a short phrase on its own, like “my calendar link”, and Maven pastes your saved text instead." },
   { q: "Is it free?", a: "Yes. Free covers everyday use. Pro is $10 a month for unlimited." },
-  { q: "Windows?", a: "Not yet. Tell us and you'll hear first." },
+  { q: "Is there a Chrome extension?", a: "Yes. Maven for Chrome writes in any text box on the web, with the same voice and cleanup as the Mac app. It can't type into apps outside Chrome; the Mac app can." },
+  { q: "Windows?", a: "No Windows app yet. Maven for Chrome may work in Chrome on Windows, but we have only tested it on Mac so far." },
 ];
 
 const TYPE_LINE = "Can you tell Rahul the deck is done? Numbers by 6, and the budget is ₹25,000. ";
@@ -912,6 +926,27 @@ export default function Maven() {
           </div>
         </section>
 
+        {/* 8b. Mac app or Chrome (2026-10-29) */}
+        <section className="mv-cell" id="chrome">
+          <SecHead pill="Mac and Chrome" side={<p className="mv-head-desc">Same Maven, same voice, same clean writing. Pick the one that fits how you work, or use both.</p>}>
+            <h2 className="mv-h2">On your Mac. <em className="mv-it">And</em> in Chrome.</h2>
+          </SecHead>
+          <div className="mv-mvc aff-reveal" role="table" aria-label="Maven for Mac and Maven for Chrome">
+            <div className="mv-mvc-row mv-mvc-head" role="row">
+              <span role="columnheader" />
+              <span role="columnheader"><b>Mac app</b><a href={DOWNLOAD}>Get it</a></span>
+              <span role="columnheader"><b>Chrome extension</b><a href={CHROME}>Add to Chrome</a></span>
+            </div>
+            {MAC_VS_CHROME.map((r) => (
+              <div key={r.k} className="mv-mvc-row" role="row">
+                <span role="rowheader">{r.k}</span>
+                <span role="cell">{r.mac}</span>
+                <span role="cell">{r.chrome}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* 9. Pricing */}
         <section className="mv-cell" id="pricing">
           <SecHead pill="Pricing">
@@ -963,6 +998,7 @@ export default function Maven() {
           </h2>
           <div className="mv-close-cta">
             <a href={DOWNLOAD} className="aff-cta">Get Maven for Mac</a>
+            <a href={CHROME} className="aff-cta aff-cta-ghost">Add to Chrome</a>
             <MavenFace mood="happy" />
           </div>
         </div>
