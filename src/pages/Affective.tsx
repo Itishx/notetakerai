@@ -596,7 +596,7 @@ export default function Affective() {
       <header className="aff-hero aff-md">
         <div className="aff-md-row">
           <div className="aff-md-text">
-            <h1 className="aff-md-h" aria-label="Stop typing on your Mac. Start talking to it."><TypeOn text="Stop typing on your Mac. Start talking to it." /></h1>
+            <h1 className="aff-md-h"><Kinetic line="Stop typing on your Mac. Start talking to it." /></h1>
             <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
             <Link to="/maven" className="aff-md-go">Get Maven</Link>
           </div>
