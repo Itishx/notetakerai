@@ -72,7 +72,10 @@ function paintEdge() {
   const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : thinking ? 0.45 : glint ? 0.75 : 0.6 + 0.4 * level;
   for (let i = 0; i < n; i++) {
     const [x, y] = at(head - i * (per / 90));
-    ectx.fillStyle = `rgba(${R},${G},${B},${(1 - (i / n) * (done ? 0.35 : 1)) * bright * fade})`;
+    const al = (1 - (i / n) * (done ? 0.35 : 1)) * bright * fade;
+    // The resting shimmer is purple, melting into pink and blue along its tail, so it never reads as "listening".
+    if (glint) { const h = 275 + 45 * Math.sin(i / n * Math.PI * 1.5 + edgeT * 6); ectx.shadowColor = `hsla(${h},90%,65%,1)`; ectx.fillStyle = `hsla(${h},95%,72%,${al})`; }
+    else ectx.fillStyle = `rgba(${R},${G},${B},${al})`;
     ectx.beginPath(); ectx.arc(x, y, Math.max(0.5, 1.6 - (i / n) * 1.1), 0, Math.PI * 2); ectx.fill(); // never a negative radius (it threw and killed the loop)
   }
 }
