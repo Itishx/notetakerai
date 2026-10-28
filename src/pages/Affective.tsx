@@ -598,7 +598,6 @@ export default function Affective() {
           <div className="aff-md-text aff-reveal">
             <h1 className="aff-md-h"><Kinetic line="Stop typing on your Mac. Start talking to it." /></h1>
             <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
-            <Link to="/maven" className="aff-md-go">Get Maven</Link>
           </div>
           <figure
             className="aff-md-shot"
@@ -612,6 +611,7 @@ export default function Affective() {
             <img className="aff-md-col" src="/affective-hero.jpg" alt="" aria-hidden="true" width={1774} height={887} decoding="async" />
           </figure>
         </div>
+        <Link to="/maven" className="aff-md-go">Get Maven</Link>
       </header>
 
       {/* The homepage is two parts and a footer (2026-10-29, Itish: a new company

@@ -1111,10 +1111,11 @@
 .aff[data-theme="dark"] .aff-tile-btn.is-ghost{color:#2997ff;border-color:#2997ff}
 
 /* Get Maven sits on the picture, bottom right, on purpose. */
-.aff-md-text .aff-md-go{position:absolute;right:max(24px,calc((100vw - 1200px)/2 + 24px));bottom:48px;z-index:3}
+.aff-md .aff-md-go{position:absolute;right:max(24px,calc((100vw - 1200px)/2 + 24px));bottom:48px;z-index:3}
 .aff-md-row{position:static}
 .aff-hero.aff-md{position:relative}
-@media (max-width:820px){.aff-md-text .aff-md-go{right:16px;bottom:24px}}
+@media (max-width:820px){.aff-md .aff-md-go{right:16px;bottom:24px}}
 .aff-md-text{position:static}
 .aff-md-text .aff-md-h,.aff-md-text .aff-md-p{position:relative;z-index:2}
 .aff-md-row .aff-md-shot{left:0!important;right:0!important}
+.aff-md .aff-md-go{pointer-events:auto}
