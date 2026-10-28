@@ -523,3 +523,57 @@
 .mv-yt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .mv-yt-grid span { aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #e9e3dc, #d8d0c7); animation: mvLand .35s ease both; }
 @media (prefers-reduced-motion: reduce) { .mv-isl { animation: none; } }
+
+/* ── The opening: Maven comes to life (2026-10-28) ── */
+.mvi { position: relative; display: grid; justify-items: center; align-content: center; gap: 26px; min-height: clamp(460px, 72vh, 680px); background: #050505; color: #f5f2ea; overflow: hidden; padding: 60px 20px; text-align: center; }
+.mvi::before { content: ""; position: absolute; inset: 0; background: radial-gradient(40% 40% at 50% 52%, rgba(255,170,130,.10), transparent 70%); opacity: 0; transition: opacity 1s ease; }
+.mvi-d-listen::before, .mvi-d-type::before { opacity: 1; }
+.mvi-x-listen::before, .mvi-x-think::before { opacity: 1; background: radial-gradient(40% 40% at 50% 52%, rgba(90,150,255,.14), transparent 70%); }
+.mvi-keys { display: flex; gap: 18px; opacity: 0; transition: opacity .6s ease; }
+.mvi-awake .mvi-keys, [class*="mvi-d-"] .mvi-keys, [class*="mvi-x-"] .mvi-keys { opacity: 1; }
+.mvi-key { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); color: rgba(245,242,234,.5); transition: all .25s ease; }
+.mvi-key kbd { font: 600 15px ui-monospace, Menlo, monospace; min-width: 30px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.07); box-shadow: inset 0 -2px 0 rgba(0,0,0,.5); transition: all .2s ease; }
+.mvi-key small { font: 500 12px -apple-system, sans-serif; letter-spacing: .1em; text-transform: uppercase; margin-left: 4px; }
+.mvi-key.on { color: #fff; border-color: rgba(255,190,150,.6); box-shadow: 0 0 22px rgba(255,150,110,.25); }
+.mvi-key.on kbd { background: rgba(255,255,255,.18); transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.5); }
+.mvi-key.is-do.on { border-color: rgba(140,185,255,.6); box-shadow: 0 0 22px rgba(90,150,255,.3); }
+.mvi-stage { display: grid; justify-items: center; gap: 22px; min-height: 160px; }
+/* the pill: 2x the app's size */
+.mvi-pill { --w: 116px; position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; width: var(--w); height: 60px; border-radius: 30px; background: #0b0b0a;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 20px 50px rgba(0,0,0,.6); opacity: 0; transform: scale(.7); transition: width .55s cubic-bezier(.32,.72,0,1), opacity .7s ease, transform .9s cubic-bezier(.32,.72,0,1), box-shadow .4s ease; }
+.mvi-appear .mvi-pill, .mvi-wake .mvi-pill, .mvi-awake .mvi-pill, [class*="mvi-d-"] .mvi-pill, [class*="mvi-x-"] .mvi-pill { opacity: 1; transform: none; }
+.mvi-eyes { display: flex; gap: 14px; transition: gap .4s ease; }
+.mvi-eyes i { display: block; width: 12px; height: 26px; border-radius: 8px; background: #f5f2ea; transition: height .35s cubic-bezier(.34,1.5,.5,1), transform .3s ease; }
+.mvi-dark .mvi-eyes i, .mvi-appear .mvi-eyes i { height: 3px; }                 /* eyes shut */
+.mvi-wake .mvi-eyes i { animation: mviOpen 1.5s ease both; }                       /* open with a blink */
+@keyframes mviOpen { 0%, 45% { height: 3px; } 60% { height: 26px; } 72% { height: 3px; } 86%, 100% { height: 26px; } }
+.mvi-awake .mvi-eyes i { animation: mviBlink 3.6s infinite; }
+@keyframes mviBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+.mvi-text { position: absolute; left: 70px; right: 22px; text-align: left; font: 600 17px -apple-system, "SF Pro Text", sans-serif; white-space: nowrap; overflow: hidden; opacity: 0; transition: opacity .25s ease .2s; }
+.mvi-x-think .mvi-pill, .mvi-x-reply .mvi-pill { --w: 300px; justify-content: flex-start; padding-left: 24px; }
+.mvi-x-think .mvi-eyes, .mvi-x-reply .mvi-eyes { gap: 9px; } .mvi-x-think .mvi-eyes i, .mvi-x-reply .mvi-eyes i { width: 9px; height: 20px; }
+.mvi-x-think .mvi-text, .mvi-x-reply .mvi-text { opacity: 1; }
+.mvi-x-think .mvi-text { background: linear-gradient(100deg, rgba(245,242,234,.45) 20%, #fff 45%, rgba(245,242,234,.45) 70%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: inShim 1.6s linear infinite; }
+@keyframes inShim { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.mvi-x-think .mvi-eyes i { animation: mviDrift 2s ease-in-out infinite; } @keyframes mviDrift { 50% { transform: translate(3px, -3px); } }
+/* the light tracing the outline: white once on wake, warm for dictation, blue for do */
+@property --mvia { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.mvi-ring { position: absolute; inset: -2px; border-radius: inherit; pointer-events: none; border: 2.5px solid transparent; opacity: 0; transition: opacity .3s ease;
+  background: conic-gradient(from var(--mvia), transparent 0 76%, var(--lc, rgba(255,255,255,.9)) 88%, var(--lc2, #fff) 92%, transparent 98%) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  filter: drop-shadow(0 0 6px var(--lg, rgba(255,255,255,.8))); animation: mviRun 1.2s linear infinite; }
+@keyframes mviRun { to { --mvia: 360deg; } }
+.mvi-wake .mvi-ring { opacity: 1; animation-iteration-count: 1; animation-duration: 1.1s; }
+.mvi-d-listen .mvi-ring, .mvi-d-type .mvi-ring { opacity: 1; --lc: rgba(255,190,150,.95); --lc2: #ffe9dc; --lg: rgba(255,150,110,.9); }
+.mvi-x-listen .mvi-ring, .mvi-x-think .mvi-ring { opacity: 1; --lc: rgba(150,195,255,.95); --lc2: #e6f0ff; --lg: rgba(90,150,255,.95); }
+.mvi-d-done .mvi-ring, .mvi-x-reply .mvi-ring { opacity: 1; animation: none; background: none; border-color: #7ef0aa; filter: drop-shadow(0 0 10px rgba(80,220,130,.8)); }
+.mvi-d-type .mvi-ring { animation-duration: 2s; }
+/* what you said, and what it wrote */
+.mvi-out { margin: 0; min-height: 3.2em; max-width: 34ch; font: 400 clamp(19px, 2.4vw, 26px)/1.4 var(--a-display, Georgia, serif); }
+.mvi-hint { color: rgba(245,242,234,.45); font-style: italic; }
+.mvi-typed { color: #fff; }
+.mvi-caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.12em; background: #ffd6c2; animation: mviCaret 1s steps(1) infinite; }
+@keyframes mviCaret { 50% { opacity: 0; } }
+.mvi-d-done .mvi-caret { display: none; }
+.mvi-cap { margin: 0; min-height: 1.4em; font: 500 14px -apple-system, sans-serif; letter-spacing: .02em; color: rgba(245,242,234,.6); }
+@media (prefers-reduced-motion: reduce) { .mvi *, .mvi::before { animation: none !important; transition: none !important; } }
