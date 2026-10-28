@@ -3,58 +3,91 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maven</title>
+<title>Welcome to Maven</title>
 <link rel="stylesheet" href="welcome.css">
 </head>
 <body>
 <main>
-  <header>
-    <span class="pill" aria-hidden="true"><i></i><i></i></span>
-    <h1>Maven for Chrome</h1>
-    <p class="lede">Talk instead of typing, in any text box on the web.</p>
-  </header>
-
-  <section id="mic" class="step">
-    <h2>1. Let Maven hear you</h2>
-    <p>Chrome asks once. Maven only listens while you hold a take, and audio is never kept.</p>
-    <button id="micbtn" type="button">Allow the microphone</button>
-    <span id="micstate" class="state"></span>
-  </section>
-
-  <section class="step">
-    <h2>2. The two shortcuts</h2>
-    <div class="keys">
-      <div><kbd>⌃</kbd><kbd>⌥</kbd><b>Write</b><span>Control + Option. Press, talk, press again. It writes at your cursor, cleaned up.</span></div>
-      <div><kbd>⌃</kbd><kbd>⌘</kbd><b>Do</b><span>Control + Command. Ask for one small job: “open YouTube”, “go to my Gmail tab”, “fill this form”.</span></div>
+  <section class="hero">
+    <div class="stage" aria-hidden="true">
+      <div class="glow"></div>
+      <div class="pill"><i></i><i></i><span class="ring"></span></div>
     </div>
-    <p class="small">Enter says yes to a card, Esc cancels. Works on web pages, not on Chrome's own pages (new tab, settings).</p>
+    <p class="kicker">Maven for Chrome</p>
+    <h1>Stop typing.<br><em>Start talking.</em></h1>
+    <p class="lede">Maven writes what you say, properly, in any text box on the web. Ask, and it does the small job that comes next.</p>
   </section>
 
-  <section class="step">
-    <h2>3. Your details, for forms</h2>
-    <p>Saved only in this browser. Used when you say “fill this form”.</p>
-    <form id="details">
-      <label>Name<input name="name" autocomplete="off"></label>
-      <label>Email<input name="email" type="email" autocomplete="off"></label>
-      <label>Phone<input name="phone" autocomplete="off"></label>
-      <label>Address<input name="address" autocomplete="off"></label>
-      <button type="submit">Save</button><span id="saved" class="state"></span>
-    </form>
-  </section>
+  <ol class="steps">
+    <li class="step" id="account">
+      <span class="n">1</span>
+      <div class="body">
+        <h2>Sign in</h2>
+        <p>One account for Maven on your Mac and in Chrome.</p>
+        <div class="acts">
+          <button id="signin" type="button" class="google"><svg viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>Continue with Google</button>
+          <span id="who" class="state"></span>
+          <button id="signout" type="button" class="link" hidden>Sign out</button>
+        </div>
+      </div>
+    </li>
 
-  <section class="step">
-    <h2>4. How it looks and listens</h2>
-    <div class="row">
-      <label>Look
-        <select id="theme"><option value="ink">Ink</option><option value="paper">Paper</option><option value="glass">Glass</option></select>
-      </label>
-      <label>Language
-        <select id="language"><option value="auto">Auto (English, Hindi, Hinglish)</option><option value="en">English</option><option value="hinglish">Hinglish</option><option value="hi">Hindi</option></select>
-      </label>
-    </div>
+    <li class="step" id="mic">
+      <span class="n">2</span>
+      <div class="body">
+        <h2>Let Maven hear you</h2>
+        <p>Chrome asks once. Maven only listens while a take is on, and audio is never kept.</p>
+        <div class="acts"><button id="micbtn" type="button">Allow the microphone</button><span id="micstate" class="state"></span></div>
+      </div>
+    </li>
+
+    <li class="step">
+      <span class="n">3</span>
+      <div class="body">
+        <h2>Two shortcuts. That's it.</h2>
+        <div class="keys">
+          <div class="key"><span class="caps"><kbd>⌃</kbd><kbd>⌥</kbd></span><b>Write</b><p>Control + Option. Press, talk, press again. Your words land at the cursor, cleaned up.</p></div>
+          <div class="key is-do"><span class="caps"><kbd>⌃</kbd><kbd>⌘</kbd></span><b>Do</b><p>Control + Command. “Open YouTube.” “Go to my Gmail tab.” “Fill this form.”</p></div>
+        </div>
+        <p class="small">Enter says yes, Esc cancels. Drag the pill to the left, centre or right of the window. It stays there in every tab.</p>
+      </div>
+    </li>
+
+    <li class="step">
+      <span class="n">4</span>
+      <div class="body">
+        <h2>Your details, for forms</h2>
+        <p>Used when you say “fill this form”. Kept in this browser.</p>
+        <form id="details">
+          <label>Name<input name="name" autocomplete="name"></label>
+          <label>Email<input name="email" type="email" autocomplete="email"></label>
+          <label>Phone<input name="phone" autocomplete="tel"></label>
+          <label>Address<input name="address" autocomplete="street-address"></label>
+          <div class="acts"><button type="submit">Save</button><span id="saved" class="state"></span></div>
+        </form>
+      </div>
+    </li>
+
+    <li class="step">
+      <span class="n">5</span>
+      <div class="body">
+        <h2>Look and language</h2>
+        <div class="row">
+          <label>Look<select id="theme"><option value="ink">Ink</option><option value="paper">Paper</option><option value="glass">Glass</option></select></label>
+          <label>Language<select id="language"><option value="auto">Auto: English, Hindi, Hinglish</option><option value="en">English</option><option value="hinglish">Hinglish</option><option value="hi">Hindi</option></select></label>
+        </div>
+      </div>
+    </li>
+  </ol>
+
+  <section class="try">
+    <h2>Try it now</h2>
+    <p>Click in the box, press <kbd>⌃</kbd><kbd>⌥</kbd>, say “um so the deck is done, numbers by five no wait six”, press again.</p>
+    <textarea id="tryhere" rows="3" placeholder="Maven writes here…"></textarea>
     <p class="small" id="count"></p>
   </section>
 </main>
 <script src="welcome.js"></script>
+<script src="content.js"></script>
 </body>
 </html>

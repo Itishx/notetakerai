@@ -13,7 +13,12 @@ let pending = null; // the card that is asking: { onYes, tabId, draft, timer }
 
 /* ---------- small helpers ---------- */
 const look = async () => ({ layout: "bar", theme: (await chrome.storage.local.get("islandTheme")).islandTheme || "ink" });
-async function toTab(tabId, msg) { if (tabId == null) return null; try { return await chrome.tabs.sendMessage(tabId, msg); } catch (_) { return null; } }
+/* Our own welcome page is not a content script, so it is reached by runtime message. */
+const extTabs = new Set();
+async function toTab(tabId, msg) {
+  if (tabId == null) return null;
+  try { return extTabs.has(tabId) ? await chrome.runtime.sendMessage({ ...msg, toPage: tabId }) : await chrome.tabs.sendMessage(tabId, msg); } catch (_) { return null; }
+}
 async function show(tabId, state, extra = {}) { await toTab(tabId, { t: "state", payload: { state, look: await look(), ...extra } }); }
 let hideTimer = 0;
 function hide(tabId, ms = 0) { clearTimeout(hideTimer); hideTimer = setTimeout(() => void show(tabId, "idle"), ms); }
@@ -267,7 +272,7 @@ async function log(entry) {
 
 /* ---------- messages ---------- */
 chrome.runtime.onMessage.addListener((m, sender, reply_) => {
-  if (!m || m.to === "offscreen") return;
+  if (!m || m.to === "offscreen" || m.toPage != null) return;
   const tabId = sender.tab?.id;
   if (m.t === "toggle" && tabId != null) void toggle(tabId, m.mode === "do" ? "do" : "write");
   else if (m.t === "level") { if (phase === "listening") void toTab(takeTab, { t: "level", payload: { v: m.v } }); }
@@ -277,9 +282,38 @@ chrome.runtime.onMessage.addListener((m, sender, reply_) => {
     else if (m.action === "hub") chrome.runtime.openOptionsPage();
   }
   else if (m.t === "card") void onCard(m.a);
-  else if (m.t === "hello" && tabId != null) void show(tabId, "idle");
+  else if (m.t === "hello" && tabId != null) { if (m.ext) extTabs.add(tabId); void show(tabId, "idle"); }
 });
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
-chrome.runtime.onInstalled.addListener((d) => { if (d.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") }); });
+/* Already-open tabs get Maven too, so he is there everywhere straight away. */
+async function injectEverywhere() {
+  const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+  for (const t of tabs) chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["content.js"] }).catch(() => {});
+}
+chrome.runtime.onInstalled.addListener((d) => {
+  void injectEverywhere();
+  if (d.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+});
+chrome.runtime.onStartup.addListener(() => void injectEverywhere());
+
+/* ---------- sign in with Google, through the website (same account as the site) ----------
+   The site's /auth/extension page signs you in and sends the session here. */
+const AUTH_ORIGIN = "https://affctve.com";
+let authTab = null;
+chrome.runtime.onMessage.addListener((m) => {
+  if (m && m.t === "sign-in") chrome.tabs.create({ url: `${AUTH_ORIGIN}/auth/extension?ext=${chrome.runtime.id}` }, (t) => { authTab = t?.id ?? null; });
+  if (m && m.t === "sign-out") chrome.storage.local.remove("account");
+});
+chrome.runtime.onMessageExternal.addListener((m, sender, reply_) => {
+  if (!m || m.action !== "authToken" || !m.token) return;
+  const account = { token: m.token, refreshToken: m.refreshToken || "", expiresAt: m.expiresAt || 0, userId: m.userId || "", email: m.email || "", name: m.displayName || "" };
+  chrome.storage.local.set({ account }).then(async () => {
+    reply_({ ok: true });
+    if (authTab != null) { chrome.tabs.remove(authTab).catch(() => {}); authTab = null; }
+    const [w] = await chrome.tabs.query({ url: chrome.runtime.getURL("welcome.html") });
+    if (w) chrome.tabs.update(w.id, { active: true });
+  });
+  return true;
+});
 // A tab closed mid-take: let go of the mic.
 chrome.tabs.onRemoved.addListener((id) => { if (id === takeTab && phase === "listening") void stopTake(true); });

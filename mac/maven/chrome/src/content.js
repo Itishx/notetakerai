@@ -36,12 +36,43 @@
   window.addEventListener("message", (e) => {
     const m = e.data;
     if (!frame || e.source !== frame.contentWindow || !m || m.__maven !== "up") return;
-    if (m.type === "ready") { ready = true; for (const [t, p] of queue.splice(0)) down(t, p); return; }
+    if (m.type === "ready") { ready = true; for (const [t, p] of queue.splice(0)) down(t, p); place(spot); return; }
     if (m.type === "rects") { rects = m.payload || []; return; }
-    if (m.type === "hover") { if (!m.payload) setOver(false); return; }
+    if (m.type === "hover") { if (!m.payload && !dragging) setOver(false); return; }
     if (m.type === "action") { send({ t: "island-action", action: m.payload }); return; }
     if (m.type === "card") { send({ t: "card", a: m.payload }); return; }
+    if (m.type === "drag") { onDrag(m.payload || {}); return; }
   });
+
+  /* ---------- where he sits: left, centre or right, the same in every tab ---------- */
+  let spot = "right", dragging = false;
+  function place(s) {
+    spot = s; if (!frame) return;
+    const st = frame.style;
+    st.transform = ""; st.transition = "";
+    if (s === "left") { st.left = "0"; st.right = "auto"; }
+    else if (s === "centre") { st.left = `calc(50% - ${W / 2}px)`; st.right = "auto"; }
+    else { st.right = "0"; st.left = "auto"; }
+    down("anchor", { spot: s === "left" ? "bottom-left" : s === "centre" ? "bottom-centre" : "bottom-right" });
+  }
+  function onDrag(d) {
+    if (!frame) return;
+    if (d.phase === "start") { dragging = true; frame.style.transition = "none"; return; }
+    if (d.phase === "move") { frame.style.transform = `translateX(${d.dx}px)`; return; }
+    if (d.phase === "end") {
+      dragging = false;
+      // Where the pill ended up decides the spot: thirds of the window.
+      const pill = rects[0]; const fr = frame.getBoundingClientRect();
+      const x = pill ? fr.left + pill.x + pill.w / 2 : fr.left + W / 2;
+      const s = x < innerWidth / 3 ? "left" : x > (innerWidth * 2) / 3 ? "right" : "centre";
+      place(s);
+      try { chrome.storage.local.set({ spot: s }); } catch (_) {}
+    }
+  }
+  try {
+    chrome.storage.local.get("spot").then((v) => place(v.spot || "right"));
+    chrome.storage.onChanged.addListener((c) => { if (c.spot && !dragging) place(c.spot.newValue || "right"); });
+  } catch (_) {}
 
   // Click-through except over the pill, the card and the note.
   document.addEventListener("mousemove", (e) => {
@@ -166,8 +197,10 @@
   }
 
   /* ---------- from the background ---------- */
+  const extPage = location.protocol === "chrome-extension:";
   chrome.runtime.onMessage.addListener((m, _s, reply) => {
     if (!m || !m.t) return;
+    if (extPage ? m.toPage == null : m.toPage != null) return;
     if (m.t === "state") {
       const st = m.payload?.state;
       asking = st === "ask";
@@ -183,5 +216,5 @@
   });
 
   mount();
-  send({ t: "hello" });
+  send({ t: "hello", ext: extPage });
 })();

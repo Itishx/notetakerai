@@ -11,7 +11,8 @@ sed "s/fn⌃ Do/⌃⌘ Do/g" ../renderer/island.js > dist/island.js
 # The island page, with the Chrome shim loaded before island.js (the only change).
 sed 's#<script src="island.js"></script>#<script src="island-shim.js"></script><script src="island.js"></script>#' ../renderer/island.html > dist/island.html
 { echo "(() => { const module = { exports: {} };"; cat ../lib/dictation.cjs; echo "self.MavenGate = module.exports; })();"; } > dist/dictation.js
+# One copy only, always at the same place: the old one is deleted, so Chrome's
+# reload arrow picks up the new version without loading it again.
 rm -f ~/Desktop/Maven-for-Chrome.zip
-(cd dist && zip -qr ~/Desktop/Maven-for-Chrome.zip .)
 rm -rf ~/Desktop/Maven-for-Chrome && cp -R dist ~/Desktop/Maven-for-Chrome
-echo "built: ~/Desktop/Maven-for-Chrome (folder) and ~/Desktop/Maven-for-Chrome.zip"
+echo "built: ~/Desktop/Maven-for-Chrome (v$(sed -n 's/.*"version": "\(.*\)".*/\1/p' dist/manifest.json))"
