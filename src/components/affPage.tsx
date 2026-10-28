@@ -131,7 +131,7 @@ export function AffFooter() {
           <div className="aff-foot-grid">
             <div className="aff-foot-brand">
               <strong className="aff-mark"><img src="/affective-logo.png" alt="Affective" width={1000} height={207} /></strong>
-              <p>Building tech that makes life more affective.</p>
+              <p>Affective builds voice-first AI for the computer you already own. You talk, your computer does it. No keyboard or mouse needed.</p>
               <p className="aff-foot-where">Bengaluru.</p>
             </div>
 

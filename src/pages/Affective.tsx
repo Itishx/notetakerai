@@ -753,7 +753,7 @@ export default function Affective() {
                     word continuity, and without it this is a description of an
                     assistant. */}
                 <p>
-                  Building tech that makes life more affective.
+                  Affective builds voice-first AI for the computer you already own. You talk, your computer does it. No keyboard or mouse needed.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>
