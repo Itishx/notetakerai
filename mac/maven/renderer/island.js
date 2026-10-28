@@ -53,7 +53,8 @@ function paintEdge() {
   tail += ((done ? 90 : 26) - tail) * 0.1;
   fade = done ? Math.max(0, 1 - Math.max(0, since - 450) / 350) : 1;
   const thinking = island.classList.contains("thinking");
-  edgeT += done ? 0.006 : thinking ? 0.0016 : 0.004 + level * 0.022;
+  const glint = island.classList.contains("glint");
+  edgeT += done ? 0.006 : thinking ? 0.0016 : glint ? 0.011 : 0.004 + level * 0.022;
   const cx = 50, cy = 30;
   const at = (d) => {
     d = ((d % per) + per) % per;
@@ -68,7 +69,7 @@ function paintEdge() {
   const blue = tint === "blue";
   const R = mix(blue ? 207 : 255, 120), G = mix(blue ? 227 : 236, 235), B = mix(blue ? 255 : 220, 160), gR = mix(blue ? 90 : 255, 70), gG = mix(blue ? 150 : 190, 220), gB = mix(blue ? 255 : 150, 120);
   ectx.shadowColor = `rgba(${gR},${gG},${gB},1)`; ectx.shadowBlur = 8;
-  const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : thinking ? 0.45 : 0.6 + 0.4 * level;
+  const head = (edgeT % 1) * per, n = Math.round(tail), bright = done ? 1 : thinking ? 0.45 : glint ? 0.75 : 0.6 + 0.4 * level;
   for (let i = 0; i < n; i++) {
     const [x, y] = at(head - i * (per / 90));
     ectx.fillStyle = `rgba(${R},${G},${B},${(1 - (i / n) * (done ? 0.35 : 1)) * bright * fade})`;
@@ -78,7 +79,7 @@ function paintEdge() {
 function loop() {
   // A drawing error must never stop the animation for good.
   try { paint(); paintWave(); paintEdge(); } catch (_) {}
-  anim = ["listening", "done", "thinking"].some((c) => island.classList.contains(c)) ? requestAnimationFrame(loop) : 0;
+  anim = ["listening", "done", "thinking", "glint"].some((c) => island.classList.contains(c)) ? requestAnimationFrame(loop) : 0;
 }
 
 /* Resting: a blink every few seconds, sometimes a double blink. */
@@ -91,9 +92,40 @@ function scheduleBlink() {
       if (Math.random() < 0.25) setTimeout(() => { island.classList.add("blink"); setTimeout(() => island.classList.remove("blink"), 110); }, 260);
     }
     scheduleBlink();
-  }, 2600 + Math.random() * 3400);
+  }, 1700 + Math.random() * 2300);
 }
 scheduleBlink();
+
+/* Resting, alive (2026-10-29): the eyes glance around now and then, and every
+   6 to 10 minutes the warm edge light runs round the pill two or three times. */
+let lookTimer = 0;
+function scheduleLook() {
+  clearTimeout(lookTimer);
+  lookTimer = setTimeout(() => {
+    if (island.classList.contains("idle") && !island.classList.contains("glint")) {
+      const spots = [[0, 0], [-1.6, 0], [1.6, 0], [-1.2, -1], [1.2, -1], [0, -1.2], [1, 0.6]];
+      const [x, y] = Math.random() < 0.35 ? [0, 0] : spots[1 + Math.floor(Math.random() * (spots.length - 1))];
+      island.style.setProperty("--gx", x + "px"); island.style.setProperty("--gy", y + "px");
+    } else { island.style.setProperty("--gx", "0px"); island.style.setProperty("--gy", "0px"); }
+    scheduleLook();
+  }, 2200 + Math.random() * 3800);
+}
+scheduleLook();
+let glintTimer = 0;
+function scheduleGlint() {
+  clearTimeout(glintTimer);
+  glintTimer = setTimeout(() => {
+    if (island.classList.contains("idle") && !card.isOpen?.()) {
+      const laps = 2 + Math.floor(Math.random() * 2);
+      edgeT = 0;
+      island.classList.add("glint");
+      startLoop();
+      setTimeout(() => island.classList.remove("glint"), Math.round(laps * 1500));
+    }
+    scheduleGlint();
+  }, (6 + Math.random() * 4) * 60000);
+}
+scheduleGlint();
 
 const FACES = ["idle", "listening", "done", "open", "thinking", "again", "nope", "curious", "wake"];
 function setState(name, face) {

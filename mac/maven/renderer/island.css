@@ -286,3 +286,8 @@ body.t-paper #card.k-help .jc, body.t-paper #card.k-help .jh kbd { background: #
 #card.k-help .acts { margin-top: 4px; }
 
 #card.k-help .jobs { gap: 24px; grid-template-columns: 1fr 1.55fr; }
+
+/* Resting, alive (2026-10-29): eyes glance (translate, so blinks still work),
+   and the occasional warm light round the edge. */
+.eye { translate: var(--gx, 0px) var(--gy, 0px); transition: translate .35s cubic-bezier(.3,.7,.3,1), transform .08s ease; }
+#island.glint .edge { opacity: 1; }
