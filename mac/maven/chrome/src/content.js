@@ -156,6 +156,7 @@
     return document.execCommand("insertText", false, text);
   }
   function copyText(text) {
+    try { navigator.clipboard.writeText(text).catch(() => {}); } catch (_) {}
     const ta = document.createElement("textarea");
     ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
     document.documentElement.appendChild(ta); ta.select();

@@ -132,7 +132,11 @@ async function write(tabId, raw, longTake) {
   if (longTake) { await toTab(tabId, { t: "copy", text }); await reply(tabId, "On your clipboard.", "nope", 2200); return; }
   const r = await toTab(tabId, { t: "insert", text });
   if (r && r.ok) { await show(tabId, "done"); hide(tabId, 900); }
-  else await reply(tabId, "Copied. No box.", "nope", 2000);
+  else {
+    // No text box: it is on your clipboard, and the words show in the pill (like the Mac's small box).
+    await toTab(tabId, { t: "copy", text });
+    await ask(tabId, { kind: "reply", title: "Copied. Paste anywhere.", right: "⌘V", preview: text, primary: "Done", foldMs: 9000 }, async () => {});
+  }
   await countWords(text);
 }
 async function countWords(text) {
@@ -229,14 +233,14 @@ async function details() { return (await chrome.storage.local.get("details")).de
 /* ---------- the card asking ---------- */
 async function ask(tabId, spec, onYes) {
   if (pending) clearTimeout(pending.timer);
-  pending = { tabId, onYes, draft: String(spec.preview || ""), kind: spec.kind };
+  pending = { tabId, onYes, draft: String(spec.preview || ""), kind: spec.kind, copied: /^Copied/.test(spec.title || "") };
   await show(tabId, "ask", { card: spec });
   pending.timer = setTimeout(() => void endAsk("folded"), spec.foldMs || 20000);
 }
 async function endAsk(why) {
   const job = pending; if (!job) return;
   pending = null; clearTimeout(job.timer);
-  if (/folded/.test(why) && job.draft && job.kind !== "help") { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
+  if (/folded/.test(why) && job.draft && job.kind !== "help" && !job.copied) { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
   else await show(job.tabId, "idle");
 }
 async function onCard(a) {
