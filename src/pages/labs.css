@@ -75,3 +75,13 @@
 .lb-feature-copy p { margin: 0; color: var(--a-ink-soft); font-size: 17px; line-height: 1.6; }
 .lb-feature-copy .aff-cta { align-self: flex-start; margin-top: 8px; }
 @media (max-width: 860px) { .lb-feature { grid-template-columns: 1fr; } .lb-feature-art { border-right: 0; border-bottom: 1px solid var(--a-line); min-height: 0; padding: 28px; } .lb-feature-copy { padding: 28px 22px; } }
+
+/* Braino, the lab's one resident (2026-10-28) */
+.lb-bhead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(24px, 4vw, 56px); align-items: center; margin-top: 10px; }
+.lb-bhead .aff-h1 { margin: 0; font-size: clamp(36px, 5vw, 64px); line-height: 1.04; }
+.lb-blede { margin: 18px 0 24px; max-width: 56ch; font-size: 18px; line-height: 1.6; color: var(--a-ink-soft); }
+.lb-bmascot { justify-self: end; }
+.lb-jobs { margin-top: clamp(32px, 4vw, 48px); }
+.lb-film { margin-top: clamp(28px, 4vw, 44px); }
+.lb-film video { width: 100%; border-radius: 16px; display: block; }
+@media (max-width: 760px) { .lb-bhead { grid-template-columns: 1fr; } .lb-bmascot { justify-self: start; } }
