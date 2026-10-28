@@ -389,6 +389,18 @@ function useLitWords() {
 }
 
 /* Words as lit boxes. `*word*` is set in the Didone. */
+/* The hero line types itself in, once, with a blinking caret. */
+function TypeOn({ text }: { text: string }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(text.length); return; }
+    let k = 0;
+    const t = window.setInterval(() => { k += 1; setN(k); if (k >= text.length) clearInterval(t); }, 55);
+    return () => clearInterval(t);
+  }, [text]);
+  return <span aria-hidden="true">{text.slice(0, n)}<i className="aff-caret" /></span>;
+}
+
 /* Maven's full loop on the homepage: resting, listening, done, back to rest. */
 function MavenLoop() {
   const steps = [["idle", 1800], ["listening", 3200], ["happy", 1600]] as const;
@@ -584,7 +596,7 @@ export default function Affective() {
       <header className="aff-hero aff-md">
         <div className="aff-md-row">
           <div className="aff-md-text">
-            <h1 className="aff-md-h">Stop typing on your Mac. Start talking to it.</h1>
+            <h1 className="aff-md-h" aria-label="Stop typing on your Mac. Start talking to it."><TypeOn text="Stop typing on your Mac. Start talking to it." /></h1>
             <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
             <Link to="/maven" className="aff-md-go">Get Maven</Link>
           </div>
