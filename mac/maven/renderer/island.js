@@ -105,7 +105,14 @@ function setState(name, face) {
 const startLoop = () => { if (!anim) anim = requestAnimationFrame(loop); };
 let wakeTimer = 0;
 
+function applyLook(look) {
+  if (!look) return;
+  const b = document.body;
+  b.classList.toggle("l-bar", look.layout === "bar");
+  for (const t of ["ink", "paper", "glass"]) b.classList.toggle("t-" + t, (look.theme || "ink") === t);
+}
 window.maven.onState((p) => {
+  applyLook(p.look);
   const { state, note: text } = p || {};
   if (state !== "sent" && state !== "ask" && card.isOpen()) card.close();
   if (state === "ask") { note.classList.remove("on"); showHint(""); card.open(p.card || {}); return; }
@@ -184,7 +191,9 @@ const card = (() => {
   const wrap = document.getElementById("cardwrap");
   const eyes = el.querySelector(".ceyes");
   const $ = (s) => el.querySelector(s);
-  const CW = 300, PW = 58, PH = 30;
+  const PW = 58, PH = 30;
+  // Bar is wide and low; the help list keeps the taller card width.
+  const cardW = () => (document.body.classList.contains("l-bar") && kind !== "help" ? 480 : 300);
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
   const rectX = (w) => anchor() === "left" ? 0 : anchor() === "right" ? CW - w : (CW - w) / 2;
@@ -238,6 +247,7 @@ const card = (() => {
     clearTimeout(closeTimer);
     const wasOpen = open;
     fill(c);
+    document.body.style.setProperty("--cw", cardW() + "px"); // width first, so the height is measured at the bar's width
     // Measure the natural height with the content laid out (still invisible).
     // Lay the body out in flow for a moment, so its real height is measured
     // (as an absolute child it measured short and the card cut off the buttons).
@@ -257,7 +267,7 @@ const card = (() => {
       await frame();
     }
     el.classList.add("anim", "open");
-    clip(CW, ch, 20);
+    clip(cardW(), ch, 20);
     eyesAt(22, 21.5, 1, kind === "choose" ? -6 : 0);
     open = true;
     window.maven.hover(true);

@@ -142,6 +142,7 @@ api.getSettings().then((s) => {
   $("#set-version").textContent = `version ${s.version}`;
   $("#set-login").checked = s.launchAtLogin;
   paintLangs(Array.isArray(s.languages) ? s.languages : [s.language || "auto"]);
+  paintTheme(s.islandTheme || "ink");
 });
 /* Languages: Auto, or any mix of English, Hindi and Hinglish. */
 let langs = ["auto"];
@@ -170,3 +171,7 @@ $("#set-login").addEventListener("change", (e) => api.setSetting("launchAtLogin"
 $("#set-onboard").addEventListener("click", () => api.showOnboarding());
 $("#set-data").addEventListener("click", () => api.openDataFolder());
 $("#set-delete").addEventListener("click", () => api.deleteHistory());
+
+/* Island theme: Ink (default), Paper, Glass. */
+function paintTheme(t) { document.querySelectorAll("#set-theme button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.t === t)); }
+document.querySelectorAll("#set-theme button").forEach((b) => b.addEventListener("click", () => { paintTheme(b.dataset.t); api.setSetting("islandTheme", b.dataset.t); }));

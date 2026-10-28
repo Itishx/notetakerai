@@ -16,7 +16,7 @@
    - Keep it brief and glanceable: a title, one muted 3-word status, one preview,
      at most three actions; it opens only when there are words to see. */
 html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
-body { width: 380px; height: 240px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+body { width: 560px; height: 240px; font: 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
 #island { position: absolute; bottom: 26px; width: 58px; height: 30px; display: flex; align-items: center; justify-content: center;
   opacity: 0; transform: scale(.85); transition: opacity .14s ease, transform .2s cubic-bezier(.34,1.3,.45,1); }
 #island.on { opacity: 1; transform: scale(1); }
@@ -223,3 +223,27 @@ body.do .jobs .jg + .jg .jh b::after { content: ""; display: inline-block; width
 /* Ink surfaces: pure black, one hairline, a soft drop. */
 #card { --card: #0b0b0a; }
 @media (prefers-reduced-motion: reduce) { #card.k-think .title, #card.k-think::after, #card.k-think .ceyes span { animation: none !important; } }
+
+/* ── Bar layout (Itish's pick, 2026-10-28): opens sideways into a wide, low
+   strip. Title on top, the draft on one line, buttons on the right. ── */
+#cardwrap, #card { width: var(--cw, 300px); }
+body.a-centre #cardwrap { margin-left: calc(var(--cw, 300px) / -2); }
+body.l-bar #card:not(.k-help) .body { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; }
+body.l-bar #card:not(.k-help) .lbl { grid-column: 1 / -1; }
+body.l-bar #card:not(.k-help) .preview { display: block; -webkit-line-clamp: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: none; }
+body.l-bar #card:not(.k-help) .editor { grid-column: 1 / -1; }
+body.l-bar #card.k-choose .opts { grid-column: 1 / -1; display: flex; gap: 6px; }
+body.l-bar #card.k-choose .opts button { flex: 1; }
+body.l-bar #card .acts { justify-content: flex-end; }
+
+/* ── Themes (Settings → Look): same shape, different colours ── */
+body.t-paper #card { --card: #fbf8f2; --ink: #1b1a17; }
+body.t-paper #card .preview, body.t-paper #card .editor { background: #f1ece2; color: #1b1a17; font-family: "Iowan Old Style", Georgia, serif; font-size: 13.5px; }
+body.t-paper #card .acts button { background: #ebe5d9; color: #1b1a17; }
+body.t-paper #card .acts .yes { background: #1b1a17; color: #fbf8f2; }
+body.t-paper #card .lbl .right { color: rgba(27,26,23,.55); }
+body.t-paper #card .ceyes span { background: #1b1a17; }
+body.t-glass #card { --card: rgba(28,28,30,.72); --ink: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 16px 40px rgba(0,0,0,.25); }
+body.t-glass #card .preview { background: rgba(255,255,255,.12); }
+body.t-glass #card .acts button { background: rgba(255,255,255,.18); }
+body.t-glass #card .acts .yes { background: #fff; color: #111; }
