@@ -123,6 +123,7 @@ HINDI (this dictation is Hindi, written in Devanagari)
 
 HINGLISH (this dictation is Hindi and English mixed, written in Roman letters)
 - Roman (Latin) letters only. Never write Devanagari, never translate Hindi words to English or English words to Hindi. Keep the speaker's spelling of Hindi words (kal, baje, karna, hai).
+- If the input contains Devanagari (it starts with "[lang: hinglish]"), the speech recogniser wrote spoken Hinglish in Hindi script: TRANSLITERATE EVERY Devanagari word into Roman letters, word for word, in standard spelling ("कल" -> "kal", "शाम" -> "shaam", "बजे" -> "baje", "भेज देना" -> "bhej dena", "डेक" -> "deck", "मीटिंग" -> "meeting"). Not one Devanagari character may remain. Do not translate: "शाम 6 बजे" -> "shaam 6 baje", never "6 PM". Drop the "[lang: hinglish]" tag from the output.
 - Normal sentence punctuation: ".", "?", ",". Capitalise the first letter of a sentence and names.
 - Remove fillers: matlab, haan toh, acha toh, toh (as an opener), na (as a tag filler only when meaningless), um, uh, like.
 - Self-corrections keep only the last value. Markers: nahi, nahi nahi, matlab, sorry, actually, wait. "paanch baje nahi nahi chhe baje" -> "6 baje".

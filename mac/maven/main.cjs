@@ -590,7 +590,17 @@ function quickTidy(raw, language = "en") {
   return out;
 }
 let lastRefine = {};
-async function refine(raw, timeoutMs, language = "en") {
+/* A script conversion (Devanagari -> Roman) can't be checked word by word, so it
+   gets its own check: no Devanagari left, similar length, every digit kept. */
+function scriptSafe(raw, cand) {
+  const c = String(cand || ""), r = String(raw || "");
+  if (!c || /[\u0900-\u097F]/.test(c)) return false;
+  const ratio = c.length / Math.max(1, r.length);
+  if (ratio < 0.5 || ratio > 1.9) return false;
+  const digits = (r.match(/\d+/g) || []);
+  return digits.every((d) => c.includes(d));
+}
+async function refine(raw, timeoutMs, language = "en", convert = false) {
   lastRefine = {};
   if (!raw || raw.length > 20000 || !SUPABASE_ANON_KEY) return null;
   const controller = new AbortController();
@@ -599,13 +609,13 @@ async function refine(raw, timeoutMs, language = "en") {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ transcript: raw, language }),
+      body: JSON.stringify({ transcript: convert ? "[lang: hinglish] " + raw : raw, language }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { log("refine.failed", { status: res.status }); return null; }
     const candidate = String(data?.formatted || "").trim();
-    const a = assessDictationEdit(raw, candidate);
+    const a = convert ? { accepted: scriptSafe(raw, candidate), reason: "script_conversion", sourceCoverage: 1 } : assessDictationEdit(raw, candidate);
     lastRefine = { model: String(data?.model || ""), provider: String(data?.provider || ""), candidate, verdict: a.accepted ? "accepted" : "refused", reason: a.reason || "", coverage: a.sourceCoverage };
     if (!a.accepted) { log("refine.rejected", { reason: a.reason }); return null; }
     return candidate;
@@ -718,14 +728,18 @@ async function finishDictation(reason, discard, mySession = session_, mode = "wr
     if (mode === "do") { await runDo({ raw: heard.transcript.trim(), heard, audio, t0, textMs }); return; }
     // Auto or several languages: transcribe unlocked, then read the language from the text.
     const asked = dictationLanguage();
-    const language = asked === "auto" ? mavenStore.detectLanguage(heard.transcript) : asked;
+    /* Auto writes Hindi as Roman Hinglish (2026-10-28): Whisper puts spoken
+       Hinglish in Devanagari, and mixed lines confused the cleanup. Devanagari
+       output only when Hindi alone is picked in Settings. */
+    const convert = asked === "auto" && /[\u0900-\u097F]/.test(heard.transcript);
+    const language = convert ? "hinglish" : asked === "auto" ? mavenStore.detectLanguage(heard.transcript) : asked;
     const raw = language === "en" ? spokenNumbersToDigits(heard.transcript.trim()) : heard.transcript.trim();
     const quick = quickTidy(raw, language);
     const c0 = Date.now();
-    const cleaned = quick || await refine(raw, Math.min(language === "en" ? 7000 : 9000, 2500 + raw.length * 8), language);
+    const cleaned = quick || await refine(raw, Math.min(language === "en" ? 7000 : 9000, 2500 + raw.length * 8), language, convert);
     const cleanMs = Date.now() - c0;
     mavenStore.init(app.getPath("userData"));
-    const finalText = mavenStore.expandSnippet(mavenStore.applyDictionary(gate(raw, cleaned) || raw));
+    const finalText = mavenStore.expandSnippet(mavenStore.applyDictionary((convert ? (cleaned || raw) : gate(raw, cleaned)) || raw));
     const p0 = Date.now();
     const pasted = await insertText(finalText);
     const pasteMs = Date.now() - p0;
