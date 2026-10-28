@@ -1028,3 +1028,13 @@
 .aff-stack-braino{align-items:flex-end;padding-inline:8px}
 .aff-stack-row:hover{background:none}
 .aff-stack-lines i{background:var(--a-ink)}
+
+/* Products v3: two vertical editorial columns, no borders. Graphic on top,
+   then the name, a line, and a View now button. */
+.aff-stack{display:grid;grid-template-columns:1fr 1fr;gap:48px;border-top:0}
+.aff-stack-row{display:flex;flex-direction:column;align-items:stretch;gap:24px;padding:0;border-bottom:0}
+.aff-stack-pic{order:-1;height:260px;border:0;border-radius:8px;background:color-mix(in srgb,var(--a-ink) 4%,transparent)}
+.aff-stack-num{display:none}
+.aff-stack-txt h3{font-size:clamp(40px,5vw,64px);transform:none!important}
+.aff-stack-go{align-self:flex-start;margin-top:12px;padding:10px 22px;border-radius:999px;background:var(--a-ink);color:var(--a-bg);font-size:15px;text-decoration:none!important}
+@media (max-width:720px){.aff-stack{grid-template-columns:1fr;gap:56px}.aff-stack-pic{height:200px}}

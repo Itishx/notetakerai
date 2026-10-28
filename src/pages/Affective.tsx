@@ -616,7 +616,7 @@ export default function Affective() {
                 <span className="aff-stack-tag is-live">Out now</span>
                 <h3>Maven</h3>
                 <p>Talk, and your words are written properly, wherever you type.</p>
-                <span className="aff-stack-go">Read now →</span>
+                <span className="aff-stack-go">View now</span>
               </div>
               <div className="aff-stack-pic aff-stack-maven"><span className="aff-stack-face"><MavenLoop /></span></div>
             </Link>
@@ -626,7 +626,7 @@ export default function Affective() {
                 <span className="aff-stack-tag">In the lab</span>
                 <h3>Braino</h3>
                 <p>A companion in your Mac's notch who does the work in your apps.</p>
-                <span className="aff-stack-go">View now →</span>
+                <span className="aff-stack-go">View now</span>
               </div>
               <div className="aff-stack-pic aff-stack-braino"><MiniBraino size={110} /></div>
             </Link>
