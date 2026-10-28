@@ -12,6 +12,7 @@ function createHub({ app, BrowserWindow, ipcMain, shell, dialog, showOnboarding,
   const handle = (ch, fn) => ipcMain.handle(ch, (e, ...a) => (fromHub(e) ? fn(...a) : null));
 
   handle("hub:history", () => ({ items: store.getHistory(), stats: store.stats(store.getHistory()) }));
+  handle("hub:insights", () => store.insights());
   handle("hub:correction", (c) => store.saveCorrection(c));
   handle("hub:dict:get", () => store.getDictionary());
   handle("hub:dict:save", (l) => store.saveDictionary(l));

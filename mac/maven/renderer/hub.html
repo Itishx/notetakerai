@@ -11,6 +11,7 @@
   <div class="brand"><span class="mark"><i></i><i></i></span><span>Maven</span></div>
   <nav>
     <button data-page="home" class="on">Home</button>
+    <button data-page="insights">Insights</button>
     <button data-page="jobs">What Maven does</button>
     <button data-page="dictionary">Dictionary</button>
     <button data-page="snippets">Snippets</button>
@@ -31,6 +32,38 @@
     </div>
     <input id="search" class="search" type="search" placeholder="Search your history">
     <div id="history"></div>
+  </section>
+
+  <section id="insights" class="page">
+    <header class="head"><h1>Insights</h1><p class="sub">How you've been using Maven. Worked out on this Mac from your own history.</p></header>
+    <div class="in-top">
+      <div class="in-card">
+        <b class="in-num" id="i-wpm">0</b><span class="in-k">Words per minute</span>
+        <svg class="in-gauge" viewBox="0 0 120 66" aria-hidden="true"><path d="M10 60 A50 50 0 0 1 110 60" class="g-bg"/><path id="i-gauge" d="M10 60 A50 50 0 0 1 110 60" class="g-fg" pathLength="100" stroke-dasharray="0 100"/></svg>
+        <small class="in-note" id="i-wpm-note">Typing is about 40.</small>
+      </div>
+      <div class="in-card">
+        <b class="in-num" id="i-cleaned">0</b><span class="in-k">Fixes made by Maven</span>
+        <div class="in-lines"><p><span id="i-dict">0</span> dictations cleaned up</p><p><span id="i-cmds">0</span> jobs done for you</p></div>
+      </div>
+      <div class="in-card in-wide">
+        <div class="in-row"><b class="in-num" id="i-total">0</b><span class="in-pill" id="i-month" hidden></span></div>
+        <span class="in-k">Total words dictated</span>
+        <p class="in-say" id="i-pages"></p>
+        <div class="in-langs" id="i-langs"></div>
+      </div>
+    </div>
+    <div class="in-bottom">
+      <div class="in-card">
+        <div class="in-row"><h2 class="in-h">Where you use it</h2><span class="in-k" id="i-apps-n"></span></div>
+        <div class="in-kinds" id="i-kinds"></div>
+      </div>
+      <div class="in-card">
+        <div class="in-row"><h2 class="in-h"><span id="i-streak">0</span> day streak</h2><span class="in-k">Longest <span id="i-longest">0</span> days</span></div>
+        <div class="in-heat" id="i-heat" aria-label="Words dictated per day"></div>
+        <div class="in-legend"><span>Less</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span></div>
+      </div>
+    </div>
   </section>
 
   <section id="jobs" class="page">

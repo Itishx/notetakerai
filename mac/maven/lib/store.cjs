@@ -178,4 +178,61 @@ function appendCommand(row) {
   try { fs.mkdirSync(p("training"), { recursive: true }); fs.appendFileSync(p("training", "commands.jsonl"), JSON.stringify(row) + "\n"); } catch (_) {}
 }
 
-module.exports = { LANGUAGES, getSettings, setSetting, getLanguage, setLanguage, getLanguages, setLanguages, detectLanguage, getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };
+/* ---------- Insights (2026-10-28): Wispr-style, from this Mac's own history ---------- */
+const APP_KINDS = [
+  ["AI prompts", /^(claude|chatgpt|cursor|code|visual studio code|windsurf|perplexity|gemini|terminal|iterm2?|warp)$/i],
+  ["Messages", /^(whatsapp|messages|telegram|signal|discord)$/i],
+  ["Work chat", /^(slack|microsoft teams|teams|linear|notion)$/i],
+  ["Emails", /^(mail|gmail|spark|superhuman|outlook|microsoft outlook)$/i],
+  ["Documents", /^(notes|pages|word|microsoft word|google docs|obsidian|bear|textedit)$/i],
+  ["Browser", /^(google chrome|chrome|safari|arc|brave browser|firefox|dia)$/i],
+];
+function readCommands() {
+  try { return fs.readFileSync(p("training", "commands.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean); } catch (_) { return []; }
+}
+function insights(history = getHistory(), now = new Date()) {
+  let total = 0, words = 0, spoken = 0, cleaned = 0, thisMonth = 0, lastMonth = 0;
+  const perDay = new Map(), apps = new Map(), kinds = new Map(), langs = new Map();
+  const m = now.getMonth(), y = now.getFullYear();
+  for (const d of history) {
+    const w = countWords(d.final || d.raw); total += w;
+    if (d.spokenSec > 0) { words += w; spoken += d.spokenSec; }
+    cleaned += (Array.isArray(d.removed) ? d.removed.length : 0) + (Array.isArray(d.added) ? d.added.length : 0);
+    const at = new Date(d.at), k = dayKey(at);
+    perDay.set(k, (perDay.get(k) || 0) + w);
+    if (at.getFullYear() === y && at.getMonth() === m) thisMonth += w;
+    const lm = new Date(y, m - 1, 1); if (at.getFullYear() === lm.getFullYear() && at.getMonth() === lm.getMonth()) lastMonth += w;
+    const app = String(d.app || "").replace(/[\u200e\u200f\u202a-\u202e]/g, "").trim() || "Other";
+    apps.set(app, (apps.get(app) || 0) + 1);
+    const kind = (APP_KINDS.find(([, re]) => re.test(app)) || ["Other"])[0];
+    kinds.set(kind, (kinds.get(kind) || 0) + 1);
+    const l = d.language || "en"; langs.set(l, (langs.get(l) || 0) + w);
+  }
+  // streaks: current and longest, over days with at least one dictation
+  const keys = new Set(perDay.keys());
+  let streak = 0; const cur = new Date(now);
+  if (!keys.has(dayKey(cur))) cur.setDate(cur.getDate() - 1);
+  while (keys.has(dayKey(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
+  const sorted = [...keys].map((k) => { const [a, b, c] = k.split("-").map(Number); return new Date(a, b - 1, c).getTime(); }).sort((a, b) => a - b);
+  let longest = 0, run = 0, prev = 0;
+  for (const t of sorted) { run = prev && Math.round((t - prev) / 864e5) === 1 ? run + 1 : 1; longest = Math.max(longest, run); prev = t; }
+  // 18 weeks of days for the heatmap, oldest first, starting on a Sunday
+  const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - start.getDay() - 7 * 17);
+  const heat = [];
+  for (let i = 0; i < 18 * 7; i++) { const dd = new Date(start); dd.setDate(start.getDate() + i); heat.push({ day: `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, "0")}-${String(dd.getDate()).padStart(2, "0")}`, words: perDay.get(dayKey(dd)) || 0, future: dd > now }); }
+  const commands = readCommands();
+  const totalDictations = history.length;
+  return {
+    wpm: spoken > 0 ? Math.round(words / spoken * 60) : 0,
+    total, cleaned, dictations: totalDictations,
+    commands: commands.length, commandsDone: commands.filter((c) => !/not my job|failed|cancel/i.test(String(c.result || ""))).length,
+    pages: Math.round(total / 250), books: +(total / 80000).toFixed(2),
+    monthChange: lastMonth > 0 ? Math.round((thisMonth - lastMonth) / lastMonth * 100) : null,
+    streak, longest, heat,
+    kinds: [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ k, n, pct: Math.round(n / Math.max(1, totalDictations) * 100) })),
+    topApps: [...apps.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => ({ k, n })),
+    languages: [...langs.entries()].map(([k, n]) => ({ k, n, pct: Math.round(n / Math.max(1, total) * 100) })).sort((a, b) => b.n - a.n),
+  };
+}
+
+module.exports = { insights, LANGUAGES, getSettings, setSetting, getLanguage, setLanguage, getLanguages, setLanguages, detectLanguage, getDetails, saveDetails, getMemories, addMemory, appendCommand, DETAIL_KEYS, init, dataDir, getHistory, stats, deleteHistory, saveCorrection, watchHistory, getDictionary, saveDictionary, applyDictionary, dictionaryHint, getSnippets, saveSnippets, expandSnippet, countWords };

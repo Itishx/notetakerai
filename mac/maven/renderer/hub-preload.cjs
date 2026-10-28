@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const inv = (ch, ...a) => ipcRenderer.invoke(ch, ...a);
 contextBridge.exposeInMainWorld("maven", {
   getHistory: () => inv("hub:history"),
+  getInsights: () => inv("hub:insights"),
   onHistory: (fn) => { const h = (_e, v) => fn(v); ipcRenderer.on("hub:history", h); return () => ipcRenderer.removeListener("hub:history", h); },
   saveCorrection: (c) => inv("hub:correction", c),
   getDictionary: () => inv("hub:dict:get"),

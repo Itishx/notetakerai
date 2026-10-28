@@ -175,3 +175,37 @@ $("#set-delete").addEventListener("click", () => api.deleteHistory());
 /* Island theme: Ink (default), Paper, Glass. */
 function paintTheme(t) { document.querySelectorAll("#set-theme button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.t === t)); }
 document.querySelectorAll("#set-theme button").forEach((b) => b.addEventListener("click", () => { paintTheme(b.dataset.t); api.setSetting("islandTheme", b.dataset.t); }));
+
+/* ---------- Insights (2026-10-28) ---------- */
+const LANG_NAMES = { en: "English", hi: "Hindi", hinglish: "Hinglish" };
+async function renderInsights() {
+  const i = await api.getInsights().catch(() => null);
+  if (!i) return;
+  const fmt = (n) => Number(n || 0).toLocaleString("en-IN");
+  $("#i-wpm").textContent = fmt(i.wpm);
+  $("#i-gauge").setAttribute("stroke-dasharray", `${Math.min(100, Math.round(i.wpm / 2.2))} 100`);
+  $("#i-wpm-note").textContent = i.wpm ? `About ${Math.max(1, Math.round(i.wpm / 40 * 10) / 10)}× faster than typing (~40).` : "Typing is about 40.";
+  $("#i-cleaned").textContent = fmt(i.cleaned);
+  $("#i-dict").textContent = fmt(i.dictations);
+  $("#i-cmds").textContent = fmt(i.commandsDone);
+  $("#i-total").textContent = fmt(i.total);
+  const month = $("#i-month");
+  if (i.monthChange != null) { month.hidden = false; month.textContent = `${i.monthChange >= 0 ? "↗ " : "↘ "}${Math.abs(i.monthChange)}% this month`; } else month.hidden = true;
+  $("#i-pages").textContent = i.books >= 1 ? `That's ${i.books} books' worth of writing.` : `That's about ${fmt(i.pages)} pages you didn't type.`;
+  const langs = $("#i-langs"); langs.textContent = "";
+  for (const l of i.languages) { const d = document.createElement("span"); d.style.flex = String(Math.max(1, l.pct)); d.textContent = `${LANG_NAMES[l.k] || l.k} ${l.pct}%`; langs.append(d); }
+  $("#i-apps-n").textContent = `${i.topApps.length ? "Top: " + i.topApps[0].k : ""}`;
+  const kinds = $("#i-kinds"); kinds.textContent = "";
+  for (const k of i.kinds) {
+    const r = document.createElement("div"); r.className = "in-kind";
+    const bar = document.createElement("span"); bar.className = "in-bar"; const fill = document.createElement("i"); fill.style.width = Math.max(4, k.pct) + "%"; fill.textContent = k.pct + "%"; bar.append(fill);
+    const lab = document.createElement("b"); lab.textContent = `${k.n} ${k.k.toLowerCase()}`;
+    r.append(bar, lab); kinds.append(r);
+  }
+  $("#i-streak").textContent = i.streak; $("#i-longest").textContent = i.longest;
+  const heat = $("#i-heat"); heat.textContent = "";
+  const max = Math.max(1, ...i.heat.map((h) => h.words));
+  for (const h of i.heat) { const c = document.createElement("i"); const lv = h.future ? "f" : h.words === 0 ? 0 : Math.min(4, 1 + Math.floor(h.words / max * 3.99)); c.className = "l" + lv; c.title = `${h.day}: ${h.words} words`; heat.append(c); }
+}
+document.querySelector('[data-page="insights"]')?.addEventListener("click", renderInsights);
+api.onHistory?.(() => { if (document.querySelector("#insights.on")) renderInsights(); });
