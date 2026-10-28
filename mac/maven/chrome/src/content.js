@@ -46,6 +46,7 @@
     if (m.type === "action") { send({ t: "island-action", action: m.payload }); return; }
     if (m.type === "card") { send({ t: "card", a: m.payload }); return; }
     if (m.type === "drag") { onDrag(m.payload || {}); return; }
+    if (m.type === "key") { send({ t: "toggle", mode: m.payload === "do" ? "do" : "write" }); return; }
   });
 
   /* ---------- where he sits: left, centre or right, the same in every tab ---------- */
@@ -285,6 +286,8 @@
       asking = st === "ask";
       busy = st === "listening" || st === "thinking" || st === "think";
       if (asking) setOver(true); else if (!over) setOver(false);
+      // Card gone: hand the keyboard back to the page, so the next shortcut is heard here.
+      if (!asking && document.activeElement === frame) { try { frame.blur(); (lastFocus && lastFocus.isConnected ? lastFocus : document.body).focus({ preventScroll: true }); } catch (_) {} }
       down("state", m.payload);
     }
     else if (m.t === "level") down("level", m.payload);

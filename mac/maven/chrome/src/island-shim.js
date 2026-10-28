@@ -55,5 +55,15 @@
       + "@keyframes mvPulse{50%{scale:1.06}}";
     document.head.appendChild(st);
   });
+  /* If focus is in here (you clicked the pill or a card), the shortcuts still work. */
+  let fn = false;
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Fn" || e.key === "Function") fn = true;
+    if (e.repeat || !["Control", "Alt", "Meta", "Fn"].includes(e.key)) return;
+    const write = e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
+    const doIt = !e.shiftKey && ((e.altKey && e.metaKey && !e.ctrlKey) || (e.ctrlKey && (fn || (e.getModifierState && e.getModifierState("Fn"))) && !e.altKey));
+    if (write || doIt) { e.preventDefault(); up("key", write ? "write" : "do"); }
+  }, true);
+  window.addEventListener("keyup", (e) => { if (e.key === "Fn" || e.key === "Function") fn = false; }, true);
   up("ready", true);
 })();
