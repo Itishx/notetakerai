@@ -1094,3 +1094,8 @@
 .aff-tile h3{font-family:var(--a-display);font-weight:400;font-size:clamp(48px,5.4vw,72px);letter-spacing:-.025em}
 .aff-tile-sub{font-family:var(--a-display);font-style:italic;font-size:clamp(22px,2.2vw,30px)}
 .aff-tile-note{font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+
+/* Both tiles the same: one surface, no italics. */
+.aff-tile-sub{font-style:normal}
+.aff-tile-dark{background:#f5f5f7;color:#1d1d1f}
+.aff-tile-dark .aff-tile-btn.is-ghost{color:#0071e3;border-color:#0071e3}
