@@ -208,10 +208,10 @@ const card = (() => {
   let pillText = "";
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
-  const rectX = (w) => anchor() === "left" ? 0 : anchor() === "right" ? CW - w : (CW - w) / 2;
+  const rectX = (w) => anchor() === "left" ? 0 : anchor() === "right" ? cardW() - w : (cardW() - w) / 2;
   function clip(w, h, r) {
     const x = rectX(w);
-    el.style.setProperty("--clip", `inset(${ch - h}px ${CW - w - x}px 0px ${x}px round ${r}px)`);
+    el.style.setProperty("--clip", `inset(${ch - h}px ${cardW() - w - x}px 0px ${x}px round ${r}px)`);
   }
   function eyesAt(cx, cy, s = 1, rot = 0) { eyes.style.transform = `translate(${cx - 8}px, ${cy - 5.5}px) scale(${s}) rotate(${rot}deg)`; }
   const eyesOnPill = () => eyesAt(rectX(PW) + PW / 2, ch - PH / 2, 1.25);
@@ -271,7 +271,7 @@ const card = (() => {
     body.style.position = "relative"; body.style.inset = "auto"; body.style.transform = "none"; body.style.transition = "none";
     const natural = Math.ceil(body.getBoundingClientRect().height);
     body.setAttribute("style", prev);
-    ch = Math.min(212, Math.max(96, natural));
+    ch = Math.min(212, Math.max(kind === "pill" || kind === "think" ? 34 : 96, natural)); // slim bars stay slim
     el.style.setProperty("--ch", ch + "px");
     if (!wasOpen) {
       // Start as the pill, exactly, with no transition; then spring open.
@@ -282,7 +282,7 @@ const card = (() => {
       await frame();
     }
     el.classList.add("live", "anim", "open"); // "live" again: fill() resets the class list, which hid every card that followed the thinking bar
-    clip(cardW(), ch, 20);
+    clip(cardW(), ch, Math.min(20, ch / 2));
     eyesAt(22, 21.5, 1, kind === "choose" ? -6 : 0);
     open = true;
     window.maven.hover(true);
