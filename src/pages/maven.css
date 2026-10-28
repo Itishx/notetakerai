@@ -480,3 +480,7 @@
 .mv-jobs-col q { font-family: var(--a-display); font-style: italic; font-size: 15px; line-height: 1.4; color: var(--a-ink-soft); overflow-wrap: anywhere; }
 .mv-jobs-col q::before { content: "“"; } .mv-jobs-col q::after { content: "”"; }
 @media (max-width: 960px) { .mv-jobs { grid-template-columns: minmax(0, 1fr); } }
+
+/* the two shortcuts, plainly, in the hero */
+.mv-keys-line { margin: 14px 0 6px; font-size: 15px; line-height: 1.6; color: var(--a-ink); max-width: 46ch; }
+.mv-keys-line kbd { font: 600 13px ui-monospace, Menlo, monospace; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--a-ink) 8%, transparent); }
