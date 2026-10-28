@@ -389,6 +389,70 @@ function Ribbon() {
   );
 }
 
+/* Before and after, animated (2026-10-28): what you said types in, the
+   fillers and the wrong number get struck one by one, then Maven's version
+   types out and the fixes pop in. Plays when it scrolls into view, loops. */
+function BeforeAfter() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [on, setOn] = useState(false);
+  const [said, setSaid] = useState(0);      // characters of what you said shown
+  const [struck, setStruck] = useState(0);  // how many strike parts are crossed out
+  const [out, setOut] = useState(0);        // characters of Maven's version shown
+  const [tags, setTags] = useState(0);
+  const full = SAID_PARTS.join("");
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setSaid(full.length); setStruck(4); setOut(CLEAN.length); setTags(4); return; }
+    const io = new IntersectionObserver(([e]) => setOn(e.isIntersecting), { threshold: 0.4 });
+    io.observe(el); return () => io.disconnect();
+  }, [full.length]);
+  useEffect(() => {
+    if (!on) return;
+    let alive = true; const timers: number[] = [];
+    const wait = (ms: number) => new Promise<void>((r) => timers.push(window.setTimeout(r, ms)));
+    (async () => {
+      while (alive) {
+        setSaid(0); setStruck(0); setOut(0); setTags(0);
+        for (let k = 0; k <= full.length && alive; k += 2) { setSaid(k); await wait(28); }
+        await wait(400);
+        for (let k = 1; k <= 4 && alive; k++) { setStruck(k); await wait(380); }
+        await wait(300);
+        for (let k = 0; k <= CLEAN.length && alive; k += 2) { setOut(k); await wait(26); }
+        for (let k = 1; k <= 4 && alive; k++) { setTags(k); await wait(160); }
+        await wait(4200);
+      }
+    })();
+    return () => { alive = false; timers.forEach(clearTimeout); };
+  }, [on, full.length]);
+  // Render what you said up to `said` characters, striking parts as `struck` grows.
+  let left = said, strikeIdx = 0;
+  const parts = SAID_PARTS.map((p, i) => {
+    const shown = p.slice(0, Math.max(0, left)); left -= p.length;
+    if (STRIKE.has(p)) { strikeIdx++; return <s key={i} className={strikeIdx <= struck ? "is-struck" : ""}>{shown}</s>; }
+    return <span key={i}>{shown}</span>;
+  });
+  const fixes = ["Filler removed", "Repeat removed", "Kept six, not five", "₹ written right"];
+  return (
+    <div ref={ref}>
+      <div className="mv-ba">
+        <div className="mv-ba-col">
+          <p className="mv-k">You said</p>
+          <p className="mv-ba-said">“{parts}{said < full.length && <i className="mv-ba-caret" />}”</p>
+        </div>
+        <div className="mv-ba-col is-out">
+          <p className="mv-k">Maven wrote</p>
+          <p className="mv-ba-out">{CLEAN.slice(0, out)}{out > 0 && out < CLEAN.length && <i className="mv-ba-caret" />}</p>
+          <span className="mv-ba-face"><MavenFace mood={out >= CLEAN.length ? "happy" : struck ? "listening" : "idle"} /></span>
+        </div>
+      </div>
+      <ul className="mv-tags">
+        {fixes.map((t, i) => <li key={t} className={i < tags ? "is-on" : ""}>{t}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 const STRIKE = new Set(["um", "the the", "uh", "five no wait"]);
 const SAID_PARTS = ["um", " so can you tell rahul ", "the the", " deck is done and ", "uh", " numbers by ", "five no wait", " six"];
 
@@ -762,20 +826,7 @@ export default function Maven() {
         <section className="mv-cell mv-demo" id="see">
           <SecHead pill="Product preview"><h2 className="mv-h2">Say it messy. Get it <em className="mv-it">clean</em>.</h2></SecHead>
           <Ribbon />
-          <div className="mv-ba aff-reveal">
-            <div className="mv-ba-col">
-              <p className="mv-k">You said</p>
-              <p className="mv-ba-said">“{SAID_PARTS.map((p, i) => STRIKE.has(p) ? <s key={i}>{p}</s> : <span key={i}>{p}</span>)}”</p>
-            </div>
-            <div className="mv-ba-col is-out">
-              <p className="mv-k">Maven wrote</p>
-              <p className="mv-ba-out">{CLEAN}</p>
-              <span className="mv-ba-face"><MavenFace mood="happy" /></span>
-            </div>
-          </div>
-          <ul className="mv-tags aff-reveal">
-            {["Filler removed", "Repeat removed", "Kept six, not five", "₹ written right"].map((t) => <li key={t}>{t}</li>)}
-          </ul>
+          <BeforeAfter />
         </section>
 
         {/* 3. What Maven is, in one breath */}

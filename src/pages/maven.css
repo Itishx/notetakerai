@@ -577,3 +577,13 @@
 .mvi-d-done .mvi-caret { display: none; }
 .mvi-cap { margin: 0; min-height: 1.4em; font: 500 14px -apple-system, sans-serif; letter-spacing: .02em; color: rgba(245,242,234,.6); }
 @media (prefers-reduced-motion: reduce) { .mvi *, .mvi::before { animation: none !important; transition: none !important; } }
+
+/* before/after, animated */
+.mv-ba-said s { text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 55% / 0% 1.5px no-repeat; transition: background-size .35s ease, opacity .35s ease, color .35s ease; }
+.mv-ba-said s.is-struck { background-size: 100% 1.5px; opacity: .55; color: #c0392b; }
+.mv-ba-caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.15em; background: currentColor; opacity: .6; animation: mvBaCaret 1s steps(1) infinite; }
+@keyframes mvBaCaret { 50% { opacity: 0; } }
+.mv-tags li { opacity: 0; transform: translateY(6px) scale(.96); transition: opacity .3s ease, transform .35s cubic-bezier(.34,1.4,.5,1); }
+.mv-tags li.is-on { opacity: 1; transform: none; }
+.mv-ba-out { min-height: 3em; }
+@media (prefers-reduced-motion: reduce) { .mv-tags li { opacity: 1; transform: none; } }
