@@ -119,7 +119,8 @@
     if (!mod) return;
     const write = e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
     const fn = fnDown || (e.getModifierState && e.getModifierState("Fn"));
-    const doIt = e.ctrlKey && !e.altKey && !e.shiftKey && (e.metaKey || fn);
+    // Do: Option + Command (⌥⌘), or fn+Control where Chrome can see fn.
+    const doIt = !e.shiftKey && ((e.altKey && e.metaKey && !e.ctrlKey) || (e.ctrlKey && fn && !e.altKey));
     if (write) { e.preventDefault(); toggle("write"); }
     else if (doIt) { e.preventDefault(); toggle("do"); }
   }, true);
