@@ -571,8 +571,16 @@ export default function Affective() {
             <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
             <Link to="/maven" className="aff-md-go">Get Maven</Link>
           </div>
-          <figure className="aff-md-shot">
-            <img src="/affective-hero.jpg" alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it." width={1774} height={887} loading="eager" decoding="async" />
+          <figure
+            className="aff-md-shot"
+            onPointerMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+              e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+            }}
+          >
+            <img className="aff-md-bw" src="/affective-hero.jpg" alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it." width={1774} height={887} loading="eager" decoding="async" />
+            <img className="aff-md-col" src="/affective-hero.jpg" alt="" aria-hidden="true" width={1774} height={887} decoding="async" />
           </figure>
         </div>
       </header>

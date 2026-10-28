@@ -962,3 +962,19 @@
 @keyframes affBob{to{transform:translateY(-4px)}}
 @media (prefers-reduced-motion:reduce){.aff-stack-walk,.aff-stack-walk svg,.aff-stack-lines i{animation:none}}
 @media (max-width:640px){.aff-stack-row{grid-template-columns:1fr 120px;gap:16px}.aff-stack-pic{height:110px}.aff-stack-face{transform:scale(1)}@keyframes affWalk{0%,100%{transform:translateX(0)}50%{transform:translateX(20px)}}}
+
+/* Hero picture v3: bigger, melts into the page on every edge, black and white,
+   and colour only where the cursor is (a soft torch that follows the mouse). */
+.aff-md-row{grid-template-columns:.85fr 1.15fr;gap:24px}
+.aff-md-shot{position:relative;overflow:hidden;--mx:-999px;--my:-999px;--r:0px;
+  -webkit-mask-image:radial-gradient(ellipse 72% 78% at 58% 50%,#000 45%,transparent 100%);
+          mask-image:radial-gradient(ellipse 72% 78% at 58% 50%,#000 45%,transparent 100%)}
+.aff-md-shot:hover{--r:180px}
+.aff-md-shot img{display:block;width:100%;height:100%;object-fit:cover;filter:none;transition:none}
+.aff-md-shot:hover img{filter:none}
+.aff-md-bw{filter:grayscale(1) contrast(1.05)!important}
+.aff-md-col{position:absolute;inset:0;
+  -webkit-mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 35%,transparent 100%);
+          mask-image:radial-gradient(circle var(--r) at var(--mx) var(--my),#000 0%,#000 35%,transparent 100%)}
+@media (hover:none){.aff-md-col{display:none}}
+@media (max-width:820px){.aff-md-shot{-webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 50%,transparent 100%);mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 50%,transparent 100%)}}
