@@ -595,7 +595,7 @@ export default function Affective() {
           the opposite in the first frame. */}
       <header className="aff-hero aff-md">
         <div className="aff-md-row">
-          <div className="aff-md-text">
+          <div className="aff-md-text aff-reveal">
             <h1 className="aff-md-h"><Kinetic line="Stop typing on your Mac. Start talking to it." /></h1>
             <p className="aff-md-p">Say it once. Your Mac writes it, or does it.</p>
             <Link to="/maven" className="aff-md-go">Get Maven</Link>
