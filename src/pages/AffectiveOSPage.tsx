@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { useNotchNav } from "@/components/useNotchNav";
 import "./affective.css";
+import "./affective-home.css";
+import { MacTaskFilm } from "@/components/MacTaskFilm";
 import "./affectiveos-page.css";
 import "./store-mag.css";
 import { EffortChart, Viz, VoiceToAction, CapabilityMatrix, RequestWaterfall, DataMap, NotchScene } from "./aff-figures";
@@ -126,6 +128,27 @@ export default function AffectiveOSPage() {
           </div>
         </div>
       </nav>
+
+      {/* ── Why it works: AffectiveOS, the layer under him ── */}
+      <section className="ah-os" id="technology">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Why it works</p>
+          <h2 className="aff-h1 ah-os-line">
+            Maven and Braino both run on AffectiveOS, the layer we built for the Mac you already own.
+          </h2>
+          <div className="ah-os-say aff-reveal">
+            <p>AffectiveOS gives your Mac eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. It runs on top of macOS, so there is nothing to replace or reinstall.</p>
+            
+          </div>
+        </div>
+        {/* What it gives your Mac: the senses grid, three that act and the one
+            they all land on, the way the old About page drew it. */}
+        <div className="aff-wrap">
+          <div className="ah-mac aff-reveal"><MacTaskFilm /></div>
+        </div>
+      </section>
+
+
 
       <article className="ao-col">
         <p className="ao-date">September 30, 2026 · Announcements</p>

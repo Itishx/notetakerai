@@ -907,3 +907,8 @@
   .aff-pola { scroll-snap-align: start; }
 }
 @media (prefers-reduced-motion: reduce) { .aff-pola, .aff-pola.aff-reveal { transition: none; transform: none; opacity: 1; } }
+
+/* ── Homepage, two parts (2026-10-29) ── */
+.aff-hello { padding-block: clamp(80px, 11vw, 150px); }
+.aff-hello-h { margin: 0; font-size: clamp(44px, 7vw, 92px); line-height: 1; }
+.aff-hello-p { margin: 22px 0 clamp(36px, 5vw, 56px); max-width: 48ch; font-size: clamp(18px, 1.8vw, 22px); line-height: 1.55; color: var(--a-ink-soft); }
