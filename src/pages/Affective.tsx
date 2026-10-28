@@ -99,6 +99,15 @@ const MAVEN_DOES = [
   { h: "Stop filling the same forms.", p: "\u201cFill in my address.\u201d Your saved details go in, and it stops before Submit." },
   { h: "Talk in English, Hindi or Hinglish.", p: "Maven understands all three and writes each one the way you'd type it.", key: "Only Maven" },
 ];
+/* Homepage questions are about the company only (2026-10-29). Product
+   questions live on each product's page. */
+const COMPANY_FAQS = [
+  { q: "What is Affective?", a: "A small company building AI you talk to, for the Mac you already own. You say it, your computer writes it or does it." },
+  { q: "What are you building?", a: "Two things. Maven, which writes what you say wherever you type, is out now. Braino, a companion who does the work in your apps, is still in the lab." },
+  { q: "What is AffectiveOS?", a: "The layer both run on. It lets your Mac hear you, see your screen, do the work and remember you, on top of macOS. Nothing to replace." },
+  { q: "Who is behind it?", a: "Itish Pande, building from India. Write to us any time." },
+];
+
 const MAVEN_FAQS = [
   { q: "What is Maven?", a: "A small AI buddy for your Mac. It writes what you say, properly, wherever you type, and does the one small job that comes next. It never talks back." },
   { q: "Which languages does it understand?", a: "English, Hindi and Hinglish. It works out which one you're speaking, and Hindi stays in Devanagari while Hinglish stays in Roman letters." },
@@ -550,9 +559,6 @@ export default function Affective() {
             <Link to="/maven">Maven</Link>
             <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
-            <Link to="/labs">Labs</Link>
-            <Link to="/about">About</Link>
-            <Link to="/maven" className="aff-nav-go">Get Maven for Mac</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -623,7 +629,7 @@ export default function Affective() {
             <p>Anything else? <Link to="/contact">Ask us directly</Link>.</p>
           </div>
           <div className="hb2-faq-list">
-            {MAVEN_FAQS.map((f) => (
+            {COMPANY_FAQS.map((f) => (
               <details key={f.q}>
                 <summary>{f.q}<i aria-hidden="true">+</i></summary>
                 <p>{f.a}</p>
