@@ -745,7 +745,7 @@
 
 /* ══ Maven-page frame on Braino (2026-10-29): hatched gutters, one centred
    column with hairline sides, every section a ruled cell, kickers as pills. ══ */
-.bp:not(.fl){background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in srgb,var(--a-ink) 6%,transparent) 9px 10px),var(--a-bg)}
+.bp{background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in srgb,var(--a-ink) 6%,transparent) 9px 10px),var(--a-bg)}
 .bp-frame{max-width:1200px;margin:0 auto;background:var(--a-bg);border-left:1px solid var(--a-line-strong,var(--a-line));border-right:1px solid var(--a-line-strong,var(--a-line));border-top:1px solid var(--a-line);overflow:hidden}
 .bp-frame > header,.bp-frame > section,.bp-frame .bp-story > section{border-bottom:1px solid var(--a-line)}
 .bp-frame .aff-wrap{padding-inline:clamp(16px,4vw,56px)}
