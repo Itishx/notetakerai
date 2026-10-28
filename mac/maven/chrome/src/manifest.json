@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Maven",
   "short_name": "Maven",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Talk instead of typing, in any text box. Control+Option to write, Control+Command to do.",
   "icons": {
     "16": "icons/16.png",
@@ -39,7 +39,9 @@
         "content.js"
       ],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "web_accessible_resources": [

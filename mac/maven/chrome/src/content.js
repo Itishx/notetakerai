@@ -4,15 +4,18 @@
      (or fn+Control where Chrome sees fn) does. Press to start, press to stop.
    - Puts the words where your cursor was, and fills forms. */
 (() => {
-  if (window.top !== window || window.__mavenLoaded) return;
+  if (window.__mavenLoaded) return;
   window.__mavenLoaded = true;
+  /* Inside a frame (Google Docs types into one), Maven only listens for the
+     keys and writes; the pill lives in the top page. */
+  const isTop = window.top === window;
 
   const W = 560, H = 320;
   let frame = null, ready = false, queue = [], rects = [], over = false, asking = false, busy = false;
   let lastFocus = null;
 
   function mount() {
-    if (frame) return;
+    if (frame || !isTop) return;
     frame = document.createElement("iframe");
     frame.src = chrome.runtime.getURL("island.html");
     frame.setAttribute("aria-label", "Maven");
@@ -24,6 +27,7 @@
     (document.body || document.documentElement).appendChild(frame);
   }
   function down(type, payload) {
+    if (!isTop) return;
     if (!frame) mount();
     if (!ready) { queue.push([type, payload]); return; }
     frame.contentWindow.postMessage({ __maven: "down", type, payload }, "*");
@@ -122,8 +126,17 @@
   window.addEventListener("blur", () => { fnDown = false; });
 
   /* ---------- writing at the cursor ---------- */
+  function docsPaste(el, text) {
+    // Google Docs and Sheets read a paste event, not typed input.
+    const dt = new DataTransfer(); dt.setData("text/plain", text);
+    const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return true;
+  }
+  const inDocs = /docs\.google\.com/.test(location.href) || (() => { try { return /docs\.google\.com/.test(top.location.href); } catch (_) { return false; } })();
   function insertText(text) {
     let el = lastFocus && lastFocus.isConnected ? lastFocus : deepActive();
+    if (inDocs && !isTop) return docsPaste(el || document.body, text);
     if (!editable(el)) return false;
     try { el.focus({ preventScroll: true }); } catch (_) {}
     if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {

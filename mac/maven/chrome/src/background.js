@@ -8,16 +8,19 @@ const { url: SUPABASE_URL, key: SUPABASE_KEY } = self.MAVEN_CONFIG;
 const { assessDictationEdit } = self.MavenGate;
 
 let phase = "idle"; // idle | starting | listening | working
-let takeTab = null, takeMode = "write", takeStarted = 0, autoStop = 0, stillTimer = 0;
+let takeTab = null, takeFrame = 0, takeMode = "write", takeStarted = 0, autoStop = 0, stillTimer = 0;
 let pending = null; // the card that is asking: { onYes, tabId, draft, timer }
 
 /* ---------- small helpers ---------- */
 const look = async () => ({ layout: "bar", theme: (await chrome.storage.local.get("islandTheme")).islandTheme || "ink" });
 /* Our own welcome page is not a content script, so it is reached by runtime message. */
 const extTabs = new Set();
+/* The pill is in the top page (frame 0); writing goes to the frame you were typing in. */
+const FRAME_JOBS = new Set(["insert", "copy", "editable"]);
 async function toTab(tabId, msg) {
   if (tabId == null) return null;
-  try { return extTabs.has(tabId) ? await chrome.runtime.sendMessage({ ...msg, toPage: tabId }) : await chrome.tabs.sendMessage(tabId, msg); } catch (_) { return null; }
+  const frameId = FRAME_JOBS.has(msg.t) && tabId === takeTab ? takeFrame : 0;
+  try { return extTabs.has(tabId) ? await chrome.runtime.sendMessage({ ...msg, toPage: tabId }) : await chrome.tabs.sendMessage(tabId, msg, { frameId }); } catch (_) { return null; }
 }
 async function show(tabId, state, extra = {}) { await toTab(tabId, { t: "state", payload: { state, look: await look(), ...extra } }); }
 let hideTimer = 0;
@@ -50,11 +53,11 @@ async function ensureOffscreen() {
 async function mic(t, extra = {}) { await ensureOffscreen(); return chrome.runtime.sendMessage({ to: "offscreen", t, ...extra }); }
 
 /* ---------- a take: press to start, press to stop ---------- */
-async function toggle(tabId, mode) {
+async function toggle(tabId, mode, frameId = 0) {
   if (phase === "listening") { if (tabId === takeTab) return stopTake(false); return; }
   if (phase !== "idle") return;
   if (pending) await endAsk("interrupted by a new take");
-  phase = "starting"; takeTab = tabId; takeMode = mode;
+  phase = "starting"; takeTab = tabId; takeFrame = frameId; takeMode = mode;
   const r = await mic("start").catch((e) => ({ ok: false, error: String(e) }));
   if (!r || !r.ok) {
     phase = "idle";
@@ -274,7 +277,7 @@ async function log(entry) {
 chrome.runtime.onMessage.addListener((m, sender, reply_) => {
   if (!m || m.to === "offscreen" || m.toPage != null) return;
   const tabId = sender.tab?.id;
-  if (m.t === "toggle" && tabId != null) void toggle(tabId, m.mode === "do" ? "do" : "write");
+  if (m.t === "toggle" && tabId != null) void toggle(tabId, m.mode === "do" ? "do" : "write", sender.frameId || 0);
   else if (m.t === "level") { if (phase === "listening") void toTab(takeTab, { t: "level", payload: { v: m.v } }); }
   else if (m.t === "island-action") {
     if (m.action === "cancel" && phase === "listening") void stopTake(true);
@@ -282,7 +285,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply_) => {
     else if (m.action === "hub") chrome.runtime.openOptionsPage();
   }
   else if (m.t === "card") void onCard(m.a);
-  else if (m.t === "hello" && tabId != null) { if (m.ext) extTabs.add(tabId); void show(tabId, "idle"); }
+  else if (m.t === "hello" && tabId != null && !sender.frameId) { if (m.ext) extTabs.add(tabId); void show(tabId, "idle"); }
 });
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 /* Already-open tabs get Maven too, so he is there everywhere straight away. */
