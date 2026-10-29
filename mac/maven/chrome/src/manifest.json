@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Maven",
   "short_name": "Maven",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Talk instead of typing, in any text box. Control+Option to write, Option+Command to do.",
   "icons": {
     "16": "icons/16.png",
@@ -51,9 +51,7 @@
         "island.html",
         "island.css",
         "island.js",
-        "island-shim.js",
-        "maven-character.js",
-        "vendor/affectiveos-voice.js"
+        "island-shim.js"
       ],
       "matches": [
         "<all_urls>"

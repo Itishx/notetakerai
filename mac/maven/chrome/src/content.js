@@ -283,7 +283,7 @@
     if (extPage ? m.toPage == null : m.toPage != null) return;
     if (m.t === "state") {
       const st = m.payload?.state;
-      asking = st === "ask" && m.payload?.card?.kind !== "say"; // a plain answer never takes your Enter
+      asking = st === "ask";
       busy = st === "listening" || st === "thinking" || st === "think";
       if (asking) setOver(true); else if (!over) setOver(false);
       // Card gone: hand the keyboard back to the page, so the next shortcut is heard here.
@@ -291,7 +291,6 @@
       down("state", m.payload);
     }
     else if (m.t === "level") down("level", m.payload);
-    else if (m.t === "talking") down("talking", m.on);
     else if (m.t === "insert") { const ok = insertText(m.text); if (!ok) copyText(m.text); reply({ ok }); return; }
     else if (m.t === "copy") { reply({ ok: copyText(m.text) }); return; }
     else if (m.t === "fill") { reply(fillForm(m.details || {})); return; }

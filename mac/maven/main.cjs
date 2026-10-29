@@ -216,8 +216,8 @@ function setIslandAllowed(on) {
    it) it wakes up: fades in with its eyes shut, opens them, blinks once. */
 let woke = false;
 function sendRest() {
-  if (islandAllowed && !woke && island && !island.isDestroyed() && !island.webContents.isLoading()) { woke = true; islandShow("wake"); return; }
-  islandShow("idle");
+  if (islandAllowed && !woke && island && !island.isDestroyed() && !island.webContents.isLoading()) { woke = true; sendIsland("maven:state", { state: "wake" }); return; }
+  sendIsland("maven:state", { state: "idle" });
 }
 function createIsland() {
   island = new BrowserWindow({
@@ -334,31 +334,14 @@ function showTargetsHint(on) {
 }
 
 let islandHideTimer = 0;
-/* ---------- Maven's voice (2026-10-29) ----------
-   The AffectiveOS voice (mac/shared/affectiveos-voice.js) with Maven's own
-   Fish voice. He speaks in Do mode only: what he did, or what he's asking.
-   Write mode stays silent, because you're in the middle of typing. */
-const MAVEN_VOICE_ID = "9062ee6786ec40e8a27e273279336a06";
-let doTalk = false; // true from a Do take until the next Write take
-let pendingSay = ""; // his in-character line for this Do, from the brain
-const talkHistory = []; let talkAt = 0; // the last few turns, so follow-ups make sense
-function maySay(text) {
-  if (!doTalk || !text) return;
-  if (pendingSay) { text = pendingSay; pendingSay = ""; }
-  try { mavenStore.init(app.getPath("userData")); if (mavenStore.getSettings().talk === false) return; } catch (_) {}
-  sendIsland("maven:say", { text: String(text), endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: MAVEN_VOICE_ID });
-}
-function warmVoice() { sendIsland("maven:say", { text: "-", warm: true, endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: MAVEN_VOICE_ID }); }
-
 function islandShow(state, extra = {}) {
   if (!island || island.isDestroyed()) return;
   clearTimeout(islandHideTimer);
   if (islandAllowed && !island.isVisible()) island.showInactive();
   // The look travels with every state: Bar layout, and the theme from Settings.
-  let theme = "ink", character = true;
-  try { mavenStore.init(app.getPath("userData")); const st = mavenStore.getSettings(); theme = String(st.islandTheme || "ink"); character = st.character !== false; } catch (_) {}
-  sendIsland("maven:state", { state, look: { layout: "bar", theme, character }, ...extra });
-  if (state === "sent") maySay(extra.text || "Sent.");
+  let theme = "ink";
+  try { mavenStore.init(app.getPath("userData")); theme = String(mavenStore.getSettings().islandTheme || "ink"); } catch (_) {}
+  sendIsland("maven:state", { state, look: { layout: "bar", theme }, ...extra });
 }
 function islandHide(delay = 0) {
   clearTimeout(islandHideTimer);
@@ -543,7 +526,6 @@ function collapseRepeats(text) {
 }
 let longTakeTimer1 = 0, longTakeTimer2 = 0, longTake = false;
 async function startDictation(source, mode = "write") {
-  if (mode === "do") { doTalk = true; warmVoice(); } else if (mode === "write") doTalk = false;
   longTake = false;
   if (doAsk && mode !== "confirm") void endAsk("interrupted by a new take");
   phase = "starting";
@@ -841,7 +823,7 @@ async function intentFor(raw) {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/dictation-refine`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ mode: "intent", transcript: raw, language: dictationLanguage(), persona: true, history: Date.now() - talkAt < 10 * 60000 ? talkHistory.slice(-4) : [] }),
+      body: JSON.stringify({ mode: "intent", transcript: raw, language: dictationLanguage() }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
@@ -855,17 +837,7 @@ async function intentFor(raw) {
 
 /* After every "Not my job." a tiny second line says how to see the list (3 s). */
 const HELP_HINT = "Say “what can you do?”";
-/* His answer, shown in the card above his head while he says it. */
-function sayCard(text) {
-  const t = String(text || "").trim();
-  if (!t) return;
-  pendingSay = "";
-  void ask({ kind: "say", title: "", right: "", preview: t, primary: "", foldMs: Math.min(30000, 4500 + t.length * 65) }, { result: "", at: new Date().toISOString() }, { onYes: async () => { islandShow("idle"); return "read"; } });
-  maySay(t);
-}
 function reply(text, face = "done", ms = 1700) {
-  if (doTalk && pendingSay && pendingSay.length > 18) { const t = pendingSay; sayCard(t); return; }
-  maySay(text);
   const refused = text === "Not my job.";
   islandShow("reply", { note: text, face, ...(refused ? { hint: HELP_HINT } : {}) });
   islandHide(refused ? Math.max(ms, 3000) : ms);
@@ -890,13 +862,12 @@ function armFold() {
   doAsk.timer = setTimeout(() => void endAsk(`folded after ${Math.round(ms / 1000)}s`), ms);
 }
 async function ask(spec, rec, handlers) {
-  if (spec.kind !== "say") maySay(spec.kind === "choose" || spec.kind === "help" ? spec.title : spec.right || spec.title);
   const front = doAsk ? doAsk.front : await actions.frontApp();
   if (doAsk) clearTimeout(doAsk.timer);
   doAsk = { spec, rec, draft: String(spec.preview || ""), front, editing: false, ...handlers };
   islandShow("ask", { card: spec });
   try { if (island && !island.isDestroyed()) island.setIgnoreMouseEvents(false); } catch (_) {} // buttons clickable, focus untouched
-  if (spec.kind !== "say") setAskKeys(true); // Enter / Esc reach the card from any app (never for a plain answer: you keep your Enter)
+  setAskKeys(true); // Enter / Esc reach the card from any app
   armFold();
 }
 /* Ends the question without doing it: cancelled, folded, or interrupted. */
@@ -906,7 +877,7 @@ async function endAsk(why) {
   doAsk = null;
   clearTimeout(job.timer);
   setAskKeys(false);
-  const keep = /folded/.test(why) && job.draft && job.spec.kind !== "choose" && job.spec.kind !== "say";
+  const keep = /folded/.test(why) && job.draft && job.spec.kind !== "choose";
   if (keep) clipboard.writeText(job.draft);
   islandShow("idle");
   await giveFocusBack(job.front, job.editing);
@@ -1164,10 +1135,6 @@ async function offerWrite(raw, rec) {
 async function doAction(intent, rec) {
   mavenStore.init(app.getPath("userData"));
   const act = intent.action;
-  pendingSay = String(intent.say || "").trim();
-  talkHistory.push({ user: String(rec.heard || "").slice(0, 400), maven: pendingSay || String(intent.reply3 || "") }); talkAt = Date.now();
-  if (talkHistory.length > 6) talkHistory.shift();
-  if (act === "chat") { sayCard(pendingSay || "Hm."); return "talked"; }
   const heardWords = String(rec.heard || "").split(/\s+/).length;
   if ((act === "fill" && !intent.detail) || ((act === "none" || act === "fill") && heardWords <= 12 && FORM_ASK.test(rec.heard || ""))) return fillFormFlow(rec);
   if (act === "open_app" || act === "switch_app") {
@@ -1272,7 +1239,6 @@ async function runDo({ raw, heard, audio, t0, textMs }) {
 /* One terminal block per Do command, like the dictation one, and a JSON line
    in userData/training/commands.jsonl. Seconds to one decimal. */
 function finishDo(rec) {
-  if (!rec || !rec.t0) return; // an answer card has no take of its own
   const totalMs = Date.now() - rec.t0;
   const i = rec.intent || {};
   console.log([

@@ -291,34 +291,3 @@ body.t-paper #card.k-help .jc, body.t-paper #card.k-help .jh kbd { background: #
    and the occasional warm light round the edge. */
 .eye { translate: var(--gx, 0px) var(--gy, 0px); transition: translate .35s cubic-bezier(.3,.7,.3,1), transform .08s ease; }
 #island.glint .edge { opacity: 1; }
-
-
-/* ---------- Maven, the character (2026-10-29) ----------
-   body.l-char: the pill becomes him. Same spot, same states; the cards and
-   the three-word replies grow out above his head instead of beside a pill. */
-body.l-char #island { width: 64px; height: 108px; }
-body.l-char .face { width: 64px !important; height: 108px; background: none !important; box-shadow: none !important; border-radius: 0; animation: none !important; }
-body.l-char .face > .eye, body.l-char .face > .edge, body.l-char .face > .wave { display: none !important; }
-body.l-char .mv-char { position: absolute; left: 0; bottom: 0; width: 64px; height: 108px; image-rendering: auto; }
-body.l-char #cardwrap { bottom: 136px; }
-body.l-char #note { bottom: 112px; }
-body.l-char #hint { bottom: 112px; }
-body.l-char #island .x, body.l-char #island .ok { top: auto; bottom: 112px; }
-
-/* With the body on (2026-10-29): he stays put while a card is open; the card
-   grows up out of his head and folds back down into it. The card's own pair
-   of eyes is for the pill design, so it goes; his face is right below. */
-body.l-char #island.away { opacity: 1; pointer-events: auto; }
-body.l-char #card .ceyes { display: none; }
-body.l-char #cardwrap { bottom: 122px; }
-body.l-char #cardwrap::after { content: ""; position: absolute; bottom: -9px; width: 0; height: 0; border: 9px solid transparent; border-bottom: 0; border-top-color: #0d0d0c; opacity: 0; transition: opacity .2s ease .25s; }
-body.l-char.a-right #cardwrap::after { right: 24px; }
-body.l-char.a-left #cardwrap::after { left: 24px; }
-body.l-char.a-centre #cardwrap::after { left: calc(50% - 9px); }
-body.l-char #cardwrap:has(#card.open)::after, body.l-char #cardwrap:has(#card.sent)::after { opacity: 1; }
-body.l-char.t-paper #cardwrap::after { border-top-color: #f6f3ea; }
-body.l-char.t-glass #cardwrap::after { border-top-color: rgba(30,30,32,.78); }
-
-/* "say": Maven's spoken answer, in the card above his head. Words only, no buttons. */
-#card.k-say .acts, #card.k-say .editor, #card.k-say .opts, #card.k-say .jobs, #card.k-say .lbl { display: none !important; }
-#card.k-say .preview, body.l-bar #card.k-say .preview { display: block; white-space: pre-wrap; overflow: visible; max-height: none; -webkit-line-clamp: unset; background: none; padding: 2px 2px; font-size: 13.5px; line-height: 1.45; text-overflow: clip; }

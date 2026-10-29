@@ -12,19 +12,7 @@ let takeTab = null, takeFrame = 0, takeMode = "write", takeStarted = 0, autoStop
 let pending = null; // the card that is asking: { onYes, tabId, draft, timer }
 
 /* ---------- small helpers ---------- */
-const look = async () => { const v = await chrome.storage.local.get(["islandTheme", "character"]); return { layout: "bar", theme: v.islandTheme || "ink", character: v.character !== false }; };
-/* Maven talks (2026-10-29): the AffectiveOS voice with his own Fish voice, in
-   Do mode only, three words at a time. Same as the Mac app. */
-const MAVEN_VOICE_ID = "9062ee6786ec40e8a27e273279336a06";
-let doTalk = false, sayTab = null, pendingSay = "";
-const talkHistory = []; let talkAt = 0;
-async function say(tabId, text, warm = false) {
-  if (!warm && (!doTalk || !text)) return;
-  if (!warm && pendingSay) { text = pendingSay; pendingSay = ""; }
-  if ((await chrome.storage.local.get("talk")).talk === false) return;
-  sayTab = tabId;
-  await mic("say", { text: String(text || "-"), warm, endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_KEY, referenceId: MAVEN_VOICE_ID }).catch(() => {});
-}
+const look = async () => ({ layout: "bar", theme: (await chrome.storage.local.get("islandTheme")).islandTheme || "ink" });
 /* Our own welcome page is not a content script, so it is reached by runtime message. */
 const extTabs = new Set();
 /* The pill is in the top page (frame 0); writing goes to the frame you were typing in. */
@@ -34,20 +22,11 @@ async function toTab(tabId, msg) {
   const frameId = FRAME_JOBS.has(msg.t) && tabId === takeTab ? takeFrame : 0;
   try { return extTabs.has(tabId) ? await chrome.runtime.sendMessage({ ...msg, toPage: tabId }) : await chrome.tabs.sendMessage(tabId, msg, { frameId }); } catch (_) { return null; }
 }
-async function show(tabId, state, extra = {}) { await toTab(tabId, { t: "state", payload: { state, look: await look(), ...extra } }); if (state === "sent") void say(tabId, extra.text || "Sent."); }
+async function show(tabId, state, extra = {}) { await toTab(tabId, { t: "state", payload: { state, look: await look(), ...extra } }); }
 let hideTimer = 0;
 function hide(tabId, ms = 0) { clearTimeout(hideTimer); hideTimer = setTimeout(() => void show(tabId, "idle"), ms); }
 const HELP_HINT = "Say “what can you do?”";
-/* His answer, in the card above his head while he says it. */
-async function sayCard(tabId, text) {
-  const t = String(text || "").trim(); if (!t) return;
-  pendingSay = "";
-  await ask(tabId, { kind: "say", title: "", right: "", preview: t, primary: "", foldMs: Math.min(30000, 4500 + t.length * 65) }, async () => {});
-  void say(tabId, t);
-}
 async function reply(tabId, text, face = "done", ms = 1700) {
-  if (doTalk && pendingSay && pendingSay.length > 18) return sayCard(tabId, pendingSay);
-  void say(tabId, text);
   const refused = text === "Not my job.";
   await show(tabId, "reply", { note: text, face, ...(refused ? { hint: HELP_HINT } : {}) });
   hide(tabId, refused ? Math.max(ms, 3000) : ms);
@@ -76,7 +55,7 @@ async function ensureOffscreen() {
 }
 async function openOffscreen() {
   if (await chrome.offscreen.hasDocument?.()) return;
-  try { await chrome.offscreen.createDocument({ url: "offscreen.html", reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"], justification: "Record your voice while you dictate, and play Maven's short spoken replies." }); } catch (_) {}
+  try { await chrome.offscreen.createDocument({ url: "offscreen.html", reasons: ["USER_MEDIA"], justification: "Record your voice while you dictate." }); } catch (_) {}
 }
 async function mic(t, extra = {}) { await ensureOffscreen(); return chrome.runtime.sendMessage({ to: "offscreen", t, ...extra }); }
 
@@ -86,8 +65,6 @@ async function toggle(tabId, mode, frameId = 0) {
   if (phase !== "idle") return;
   if (pending) await endAsk("interrupted by a new take");
   phase = "starting"; takeTab = tabId; takeFrame = frameId; takeMode = mode;
-  void mic("hush").catch(() => {});
-  doTalk = mode === "do"; if (doTalk) void say(tabId, "", true);
   const r = await mic("start").catch((e) => ({ ok: false, error: String(e) }));
   if (!r || !r.ok) {
     phase = "idle";
@@ -195,14 +172,10 @@ async function findTab(name) {
 async function runDo(tabId, raw) {
   await show(tabId, "think", { text: raw.length > 46 ? raw.slice(0, 44).trimEnd() + "…" : raw });
   if (raw.split(/\s+/).length <= 12 && FORM_ASK.test(raw)) return fillForm(tabId);
-  const data = await post("dictation-refine", { mode: "intent", transcript: raw, language: await language(), persona: true, history: Date.now() - talkAt < 600000 ? talkHistory.slice(-4) : [] }, 9000);
+  const data = await post("dictation-refine", { mode: "intent", transcript: raw, language: await language() }, 8000);
   const i = data?.intent;
   if (!i || !i.action) return reply(tabId, "Again?", "again");
   const act = i.action;
-  pendingSay = String(i.say || "").trim();
-  talkHistory.push({ user: raw.slice(0, 400), maven: pendingSay || String(i.reply3 || "") }); talkAt = Date.now();
-  if (talkHistory.length > 6) talkHistory.shift();
-  if (act === "chat") return sayCard(tabId, pendingSay || "Hm.");
   if (act === "fill" && !i.detail) return fillForm(tabId);
   if (act === "open_url" || act === "open_app") {
     const site = siteFor(i.app, i.url);
@@ -338,7 +311,6 @@ async function details() { return (await chrome.storage.local.get("details")).de
 
 /* ---------- the card asking ---------- */
 async function ask(tabId, spec, onYes) {
-  if (spec.kind !== "say") void say(tabId, spec.kind === "choose" || spec.kind === "help" ? spec.title : spec.right || spec.title);
   if (pending) clearTimeout(pending.timer);
   pending = { tabId, onYes, draft: String(spec.preview || ""), kind: spec.kind, copied: /^Copied/.test(spec.title || "") };
   await show(tabId, "ask", { card: spec });
@@ -351,7 +323,7 @@ async function askChoose(tabId, spec, onChoose) {
 async function endAsk(why) {
   const job = pending; if (!job) return;
   pending = null; clearTimeout(job.timer);
-  if (/folded/.test(why) && job.draft && job.kind !== "help" && job.kind !== "say" && !job.copied) { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
+  if (/folded/.test(why) && job.draft && job.kind !== "help" && !job.copied) { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
   else await show(job.tabId, "idle");
 }
 async function onCard(a) {
@@ -389,7 +361,6 @@ chrome.runtime.onMessage.addListener((m, sender, reply_) => {
     else if (m.action === "hub") chrome.runtime.openOptionsPage();
   }
   else if (m.t === "card") void onCard(m.a);
-  else if (m.t === "talking") { if (sayTab != null) void toTab(sayTab, { t: "talking", on: m.on }); }
   else if (m.t === "hello" && tabId != null && !sender.frameId) { if (m.ext) extTabs.add(tabId); void show(tabId, "idle"); }
 });
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());

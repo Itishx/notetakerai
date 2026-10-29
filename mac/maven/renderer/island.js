@@ -143,7 +143,6 @@ let wakeTimer = 0;
 function applyLook(look) {
   if (!look) return;
   const b = document.body;
-  b.classList.toggle("l-char", Boolean(look.character));
   b.classList.toggle("l-bar", look.layout === "bar");
   for (const t of ["ink", "paper", "glass"]) b.classList.toggle("t-" + t, (look.theme || "ink") === t);
 }
@@ -193,7 +192,6 @@ window.maven.onAnchor(({ spot }) => {
 });
 window.maven.onLevel(({ v }) => {
   const x = Math.max(0, Math.min(1, Number(v) || 0));
-  window.dispatchEvent(new CustomEvent("maven-level", { detail: x }));
   level = level * 0.55 + x * 0.45;
 });
 
@@ -241,7 +239,7 @@ const card = (() => {
   const $ = (s) => el.querySelector(s);
   const PW = 58, PH = 30;
   // Bar is wide and low; the help list keeps the taller card width.
-  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : kind === "help" ? 500 : kind === "say" ? 360 : document.body.classList.contains("l-bar") ? 480 : 300);
+  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : kind === "help" ? 500 : document.body.classList.contains("l-bar") ? 480 : 300);
   let pillText = "";
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";
@@ -386,21 +384,3 @@ const card = (() => {
   window.maven.onCardKey((k) => { if (k === "enter") primary(); else if (k === "esc") cancel(); });
   return { open: openCard, close: closeCard, sent, isOpen: () => open };
 })();
-
-
-/* ---------- Maven talks (2026-10-29): the AffectiveOS voice, his own voice id ----------
-   Main sends what to say; he speaks it with the shared voice module, and his
-   mouth moves while the audio plays. A new take always cuts him off. */
-let voice = null;
-window.maven.onSay?.((p) => {
-  if (!p || !p.text || !window.AffectiveVoice) return;
-  if (!voice) voice = window.AffectiveVoice.create({
-    endpoint: p.endpoint, anonKey: p.anonKey, referenceId: p.referenceId,
-    onStart: () => island.classList.add("talking"),
-    onEnd: () => island.classList.remove("talking"),
-  });
-  voice.set({ endpoint: p.endpoint, anonKey: p.anonKey, referenceId: p.referenceId });
-  if (p.warm) { voice.warm(); return; }
-  void voice.speak(String(p.text));
-});
-window.maven.onState((p) => { if (voice && p && (p.state === "listening" || p.state === "wake")) voice.stop(); });
