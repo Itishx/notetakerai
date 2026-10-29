@@ -6,6 +6,8 @@ chrome.runtime.onMessage.addListener((m, _s, reply) => {
   if (!m || m.to !== "offscreen") return;
   if (m.t === "start") { start().then(() => reply({ ok: true })).catch((e) => reply({ ok: false, error: String(e && e.name || e) })); return true; }
   if (m.t === "stop") { stop(m.discard).then(reply); return true; }
+  if (m.t === "say") { say(m); return; }
+  if (m.t === "hush") { voice && voice.stop(); return; }
 });
 async function start() {
   if (rec) return;
@@ -49,4 +51,17 @@ function stop(discard) {
     };
     r.stop();
   });
+}
+
+/* Maven's voice plays here: Chrome lets this page play sound without a click. */
+let voice = null;
+function say(m) {
+  if (!window.AffectiveVoice) return;
+  if (!voice) voice = AffectiveVoice.create({
+    endpoint: m.endpoint, anonKey: m.anonKey, referenceId: m.referenceId,
+    onStart: () => chrome.runtime.sendMessage({ t: "talking", on: true }).catch(() => {}),
+    onEnd: () => chrome.runtime.sendMessage({ t: "talking", on: false }).catch(() => {}),
+  });
+  voice.set({ endpoint: m.endpoint, anonKey: m.anonKey, referenceId: m.referenceId });
+  if (m.warm) voice.warm(); else void voice.speak(m.text);
 }

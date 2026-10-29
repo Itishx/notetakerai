@@ -291,6 +291,7 @@
       down("state", m.payload);
     }
     else if (m.t === "level") down("level", m.payload);
+    else if (m.t === "talking") down("talking", m.on);
     else if (m.t === "insert") { const ok = insertText(m.text); if (!ok) copyText(m.text); reply({ ok }); return; }
     else if (m.t === "copy") { reply({ ok: copyText(m.text) }); return; }
     else if (m.t === "fill") { reply(fillForm(m.details || {})); return; }
