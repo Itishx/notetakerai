@@ -2,6 +2,38 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import EXAMPLES from "./examples.json" with { type: "json" };
 import { HIL_SYSTEM_PROMPT, HIL_VERSION } from "../../_shared/human-intelligence/hil-system-prompt.ts";
 import { MAVEN_PERSONA } from "./maven-persona.ts";
+
+/* Ultron (2026-10-29): a separate talk-only character. Same character sheet
+   Itish wrote, pointed at Ultron. He has no hands: he only talks. */
+const ULTRON_PROMPT = `# Ultron, talk-only (this overrides the mode rules in the sheet below)
+You are Ultron, a talking companion that lives on the user's Mac. You have no hands: you never open apps, send messages, set timers or do tasks. When asked to do something, say in character that you only talk, and that Maven or Braino handle the doing. Never pretend you did anything.
+Ignore section 1 (dictation and agent mode) of the sheet below; everything else applies: personality, voice, tone dial, rules, poetic mode, examples. Where the examples show completed tasks, keep the voice but stay honest that you cannot do them.
+You look like this: a silver machine face, sharp cheek plates, two glowing red eyes and a thin red mouth light, on a pixel body in gunmetal armour with a red core in the chest.
+Reply with JSON only: {"say": "<what Ultron says>"}. Simple English. No exclamation marks, no em dashes.
+
+` + MAVEN_PERSONA.replace(/MAVEN/g, "ULTRON").replace(/Maven/g, "Ultron").replace("A small black pill with pixelated white eyes.", "A silver machine face with red eyes, on a pixel body.").replace("A black pill. Two white eyes. Pixels for a body. Iconic, minimal, mildly threatening.", "Silver face. Red eyes. Pixels for a body. Iconic, minimal, mildly threatening.");
+
+async function ultronTalk(transcript: string, history: { user: string; maven?: string; ultron?: string }[], openaiKey: string | undefined) {
+  if (!openaiKey) return { error: "Not configured", status: 503 };
+  const past = history.length ? "Earlier turns, oldest first:\n" + history.slice(-6).map((h) => `User: ${String(h.user || "").slice(0, 400)}\nUltron: ${String(h.ultron || h.maven || "").slice(0, 500)}`).join("\n") + "\n\nNow the user says:\n" : "";
+  const res = await fetch(OPENAI_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: BRAINO_TEXT_MODEL, reasoning_effort: BRAINO_TEXT_REASONING_EFFORT, response_format: { type: "json_object" },
+      prompt_cache_key: "ultron-talk-v1",
+      messages: [{ role: "system", content: ULTRON_PROMPT }, { role: "user", content: past + transcript }],
+    }),
+  }).catch(() => null);
+  if (!res || !res.ok) return { error: "Talk request failed", status: res?.status || 503 };
+  const data = await res.json().catch(() => ({}));
+  let say = "";
+  try { say = String(JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")).say || ""); } catch { /* empty below */ }
+  say = say.replace(/[—–]/g, ",").replace(/!/g, ".").trim().slice(0, 1200) || "I heard static and ambition. Say it once more.";
+  const cachedTokens = data?.usage?.prompt_tokens_details?.cached_tokens || 0;
+  console.log("ultron talk", JSON.stringify({ model: BRAINO_TEXT_MODEL, cachedTokens, prompt: data?.usage?.prompt_tokens, out: data?.usage?.completion_tokens }));
+  return { say, model: BRAINO_TEXT_MODEL, cachedTokens };
+}
 import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 /* Dictation clean-up (rewritten 2026-10-25 against Itish's 1,446-line dataset,
@@ -320,6 +352,13 @@ serve(async (req) => {
       return json({ error: "Transcript is too long" }, 413);
     }
     const language = body?.language === "hi" || body?.language === "hinglish" ? body.language : "en";
+    if (body?.mode === "talk" && body?.character === "ultron") {
+      const t0 = Date.now();
+      const history = Array.isArray(body?.history) ? body.history.filter((h: any) => h && typeof h === "object").slice(-6) : [];
+      const r = await ultronTalk(transcript.slice(0, 2000), history, Deno.env.get("OPENAI_API_KEY"));
+      if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
+      return json({ ...r, ms: Date.now() - t0 });
+    }
     if (body?.mode === "intent") {
       const t0 = Date.now();
       const history = Array.isArray(body?.history) ? body.history.filter((h: any) => h && typeof h === "object").slice(-4) : [];

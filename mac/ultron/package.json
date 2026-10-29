@@ -1,0 +1,9 @@
+{
+  "name": "ultron",
+  "productName": "Ultron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ultron: a talk-only companion by Affective. Press fn+Control and talk.",
+  "main": "main.cjs",
+  "build": { "appId": "ai.affective.ultron" }
+}
