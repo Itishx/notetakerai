@@ -241,7 +241,7 @@ const card = (() => {
   const $ = (s) => el.querySelector(s);
   const PW = 58, PH = 30;
   // Bar is wide and low; the help list keeps the taller card width.
-  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : kind === "help" ? 500 : document.body.classList.contains("l-bar") ? 480 : 300);
+  const cardW = () => (kind === "pill" ? Math.min(260, 64 + Math.round(String(pillText || "").length * 7.4)) : kind === "help" ? 500 : kind === "say" ? 360 : document.body.classList.contains("l-bar") ? 480 : 300);
   let pillText = "";
   let ch = 150, open = false, closeTimer = 0, sel = 0, kind = "";
   const anchor = () => document.body.classList.contains("a-left") ? "left" : document.body.classList.contains("a-centre") ? "centre" : "right";

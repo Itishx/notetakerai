@@ -16,9 +16,11 @@ const look = async () => { const v = await chrome.storage.local.get(["islandThem
 /* Maven talks (2026-10-29): the AffectiveOS voice with his own Fish voice, in
    Do mode only, three words at a time. Same as the Mac app. */
 const MAVEN_VOICE_ID = "9062ee6786ec40e8a27e273279336a06";
-let doTalk = false, sayTab = null;
+let doTalk = false, sayTab = null, pendingSay = "";
+const talkHistory = []; let talkAt = 0;
 async function say(tabId, text, warm = false) {
   if (!warm && (!doTalk || !text)) return;
+  if (!warm && pendingSay) { text = pendingSay; pendingSay = ""; }
   if ((await chrome.storage.local.get("talk")).talk === false) return;
   sayTab = tabId;
   await mic("say", { text: String(text || "-"), warm, endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_KEY, referenceId: MAVEN_VOICE_ID }).catch(() => {});
@@ -36,7 +38,15 @@ async function show(tabId, state, extra = {}) { await toTab(tabId, { t: "state",
 let hideTimer = 0;
 function hide(tabId, ms = 0) { clearTimeout(hideTimer); hideTimer = setTimeout(() => void show(tabId, "idle"), ms); }
 const HELP_HINT = "Say “what can you do?”";
+/* His answer, in the card above his head while he says it. */
+async function sayCard(tabId, text) {
+  const t = String(text || "").trim(); if (!t) return;
+  pendingSay = "";
+  await ask(tabId, { kind: "say", title: "", right: "", preview: t, primary: "", foldMs: Math.min(30000, 4500 + t.length * 65) }, async () => {});
+  void say(tabId, t);
+}
 async function reply(tabId, text, face = "done", ms = 1700) {
+  if (doTalk && pendingSay && pendingSay.length > 18) return sayCard(tabId, pendingSay);
   void say(tabId, text);
   const refused = text === "Not my job.";
   await show(tabId, "reply", { note: text, face, ...(refused ? { hint: HELP_HINT } : {}) });
@@ -185,10 +195,14 @@ async function findTab(name) {
 async function runDo(tabId, raw) {
   await show(tabId, "think", { text: raw.length > 46 ? raw.slice(0, 44).trimEnd() + "…" : raw });
   if (raw.split(/\s+/).length <= 12 && FORM_ASK.test(raw)) return fillForm(tabId);
-  const data = await post("dictation-refine", { mode: "intent", transcript: raw, language: await language() }, 8000);
+  const data = await post("dictation-refine", { mode: "intent", transcript: raw, language: await language(), persona: true, history: Date.now() - talkAt < 600000 ? talkHistory.slice(-4) : [] }, 9000);
   const i = data?.intent;
   if (!i || !i.action) return reply(tabId, "Again?", "again");
   const act = i.action;
+  pendingSay = String(i.say || "").trim();
+  talkHistory.push({ user: raw.slice(0, 400), maven: pendingSay || String(i.reply3 || "") }); talkAt = Date.now();
+  if (talkHistory.length > 6) talkHistory.shift();
+  if (act === "chat") return sayCard(tabId, pendingSay || "Hm.");
   if (act === "fill" && !i.detail) return fillForm(tabId);
   if (act === "open_url" || act === "open_app") {
     const site = siteFor(i.app, i.url);
@@ -324,7 +338,7 @@ async function details() { return (await chrome.storage.local.get("details")).de
 
 /* ---------- the card asking ---------- */
 async function ask(tabId, spec, onYes) {
-  void say(tabId, spec.kind === "choose" || spec.kind === "help" ? spec.title : spec.right || spec.title);
+  if (spec.kind !== "say") void say(tabId, spec.kind === "choose" || spec.kind === "help" ? spec.title : spec.right || spec.title);
   if (pending) clearTimeout(pending.timer);
   pending = { tabId, onYes, draft: String(spec.preview || ""), kind: spec.kind, copied: /^Copied/.test(spec.title || "") };
   await show(tabId, "ask", { card: spec });
@@ -337,7 +351,7 @@ async function askChoose(tabId, spec, onChoose) {
 async function endAsk(why) {
   const job = pending; if (!job) return;
   pending = null; clearTimeout(job.timer);
-  if (/folded/.test(why) && job.draft && job.kind !== "help" && !job.copied) { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
+  if (/folded/.test(why) && job.draft && job.kind !== "help" && job.kind !== "say" && !job.copied) { await toTab(job.tabId, { t: "copy", text: job.draft }); await reply(job.tabId, "On your clipboard.", "nope", 1800); }
   else await show(job.tabId, "idle");
 }
 async function onCard(a) {

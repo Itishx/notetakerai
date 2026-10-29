@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import EXAMPLES from "./examples.json" with { type: "json" };
 import { HIL_SYSTEM_PROMPT, HIL_VERSION } from "../../_shared/human-intelligence/hil-system-prompt.ts";
+import { MAVEN_PERSONA } from "./maven-persona.ts";
 import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 /* Dictation clean-up (rewritten 2026-10-25 against Itish's 1,446-line dataset,
@@ -151,9 +152,29 @@ A reply with no words given is {"action":"reply","message":"","draft":true}. The
 
 `;
 
-async function intentFor(transcript: string, openaiKey: string | undefined, language = "en") {
+/* Maven speaks (2026-10-29): agent mode only. Same one call decides the action
+   AND writes his spoken line in character, so talking costs no extra call. He
+   also understands plain talk ("chat"), but his hands stay his job list. */
+const MAVEN_SPEAKS_BLOCK = `
+
+# Maven speaks (agent mode only; overrides the reply3 style above)
+Add "say" to the JSON: Maven's spoken line, in character, following the character sheet below. Simple English. Every reply has "say".
+Decide what the user meant:
+- A command that is one of Maven's actions: choose it. "say" confirms it in character, e.g. "Opened. Try to stay under forty tabs this time."
+- Just talking: a question, a thought, chit-chat, a feeling, philosophy, a joke request, a question about Maven: {"action":"chat","say":"<his answer>"}. Answer it properly, in character, with the length the character sheet allows.
+- A command Maven has no hands for (timers, reminders, alarms, dark mode, volume, screenshots, calendars, music, shopping, booking, files, anything with several steps): {"action":"none","say":"<in character: it is not in his hands yet; never pretend it is done>"}.
+- Empty or garbled speech: {"action":"none","reply3":"Again?","say":"<in character: he did not catch it>"}.
+Honesty rule: never say a task is done unless the action you chose does it. Maven's only hands are: open an app or site, switch to an app, send or draft a message after the user's yes, reply to what is on screen, fill a saved detail, add to a list, remember something.
+If earlier turns are given, they are the last few things said; use them for follow-ups ("yes do that", "why").
+"say" never has exclamation marks or em dashes. reply3 still exists for the island (3 words max).
+
+# Maven's character sheet
+`;
+
+async function intentFor(transcript: string, openaiKey: string | undefined, language = "en", persona = false, history: { user: string; maven: string }[] = []) {
   const langNote = language !== "en" ? INTENT_LANGUAGE_NOTE : "";
-  const userMsg = { role: "user", content: transcript };
+  const past = persona && history.length ? "Earlier turns, oldest first:\n" + history.slice(-4).map((h) => `User: ${String(h.user || "").slice(0, 400)}\nMaven: ${String(h.maven || "").slice(0, 400)}`).join("\n") + "\n\nNow the user says:\n" : "";
+  const userMsg = { role: "user", content: past + transcript };
   const groqKey = Deno.env.get("GROQ_API_KEY");
   const call = (url: string, key: string, body: Record<string, unknown>, ms = 0) => {
     const ctl = new AbortController();
@@ -169,8 +190,8 @@ async function intentFor(transcript: string, openaiKey: string | undefined, lang
   if (openaiKey) {
     res = await call(OPENAI_ENDPOINT, openaiKey, {
       model, reasoning_effort: BRAINO_TEXT_REASONING_EFFORT, response_format: { type: "json_object" },
-      prompt_cache_key: `maven-hil-${HIL_VERSION}`,
-      messages: [{ role: "system", content: HIL_SYSTEM_PROMPT + MAVEN_HIL_BLOCK + INTENT_PROMPT + langNote }, userMsg],
+      prompt_cache_key: persona ? `maven-hil-persona-${HIL_VERSION}` : `maven-hil-${HIL_VERSION}`,
+      messages: [{ role: "system", content: HIL_SYSTEM_PROMPT + MAVEN_HIL_BLOCK + INTENT_PROMPT + (persona ? MAVEN_SPEAKS_BLOCK + MAVEN_PERSONA : "") + langNote }, userMsg],
     }, 6000);
     if (res && !res.ok) console.error("openai hil intent failed", res.status, res.data?.error?.message);
   }
@@ -188,9 +209,11 @@ async function intentFor(transcript: string, openaiKey: string | undefined, lang
   const data = res.data;
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || "{}")); } catch { /* none below */ }
-  const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "help", "none"];
+  const ACTIONS = ["open_app", "open_url", "switch_app", "send_message", "reply", "fill", "add_to_list", "remember", "help", "none", ...(persona ? ["chat"] : [])];
   const intent: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(parsed)) if (k !== "why" && typeof v === "string" && v.trim()) intent[k] = v.replace(/[—–]/g, ",").trim().slice(0, 4000);
+  if (typeof intent.say === "string") intent.say = (intent.say as string).replace(/!/g, ".").slice(0, 900);
+  if (!persona) delete intent.say;
   if (parsed.draft === true || parsed.draft === "true") intent.draft = true;
   if (intent.action === "reply" && intent.draft && !intent.message) intent.message = "";
   if (!ACTIONS.includes(intent.action as string)) { intent.action = "none"; intent.reply3 = "Not my job."; }
@@ -299,7 +322,8 @@ serve(async (req) => {
     const language = body?.language === "hi" || body?.language === "hinglish" ? body.language : "en";
     if (body?.mode === "intent") {
       const t0 = Date.now();
-      const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"), language);
+      const history = Array.isArray(body?.history) ? body.history.filter((h: any) => h && typeof h === "object").slice(-4) : [];
+      const r = await intentFor(transcript.slice(0, 2000), Deno.env.get("OPENAI_API_KEY"), language, body?.persona === true, history);
       if ("error" in r) return json({ error: r.error }, r.status === 429 ? 429 : 502);
       const ms = Date.now() - t0;
       return json({ ...r, ms, durationMs: ms });

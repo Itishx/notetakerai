@@ -283,7 +283,7 @@
     if (extPage ? m.toPage == null : m.toPage != null) return;
     if (m.t === "state") {
       const st = m.payload?.state;
-      asking = st === "ask";
+      asking = st === "ask" && m.payload?.card?.kind !== "say"; // a plain answer never takes your Enter
       busy = st === "listening" || st === "thinking" || st === "think";
       if (asking) setOver(true); else if (!over) setOver(false);
       // Card gone: hand the keyboard back to the page, so the next shortcut is heard here.
