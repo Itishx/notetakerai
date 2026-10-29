@@ -304,3 +304,17 @@ body.l-char #cardwrap { bottom: 136px; }
 body.l-char #note { bottom: 112px; }
 body.l-char #hint { bottom: 112px; }
 body.l-char #island .x, body.l-char #island .ok { top: auto; bottom: 112px; }
+
+/* With the body on (2026-10-29): he stays put while a card is open; the card
+   grows up out of his head and folds back down into it. The card's own pair
+   of eyes is for the pill design, so it goes; his face is right below. */
+body.l-char #island.away { opacity: 1; pointer-events: auto; }
+body.l-char #card .ceyes { display: none; }
+body.l-char #cardwrap { bottom: 122px; }
+body.l-char #cardwrap::after { content: ""; position: absolute; bottom: -9px; width: 0; height: 0; border: 9px solid transparent; border-bottom: 0; border-top-color: #0d0d0c; opacity: 0; transition: opacity .2s ease .25s; }
+body.l-char.a-right #cardwrap::after { right: 24px; }
+body.l-char.a-left #cardwrap::after { left: 24px; }
+body.l-char.a-centre #cardwrap::after { left: calc(50% - 9px); }
+body.l-char #cardwrap:has(#card.open)::after, body.l-char #cardwrap:has(#card.sent)::after { opacity: 1; }
+body.l-char.t-paper #cardwrap::after { border-top-color: #f6f3ea; }
+body.l-char.t-glass #cardwrap::after { border-top-color: rgba(30,30,32,.78); }
