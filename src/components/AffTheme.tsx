@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import "./aff-theme.css";
 
 /* ============================================================================
@@ -13,24 +13,27 @@ import "./aff-theme.css";
    globally dark site tokens cannot reach in. The same wall works in reverse.
    ============================================================================ */
 
-const KEY = "aff-theme";
+/* Dark by default (2026-10-29, Itish). Only a visitor who flips the switch
+   gets light. A new key, written only when someone actually toggles: the old
+   one was saved on every visit, so it can't tell a choice from a default. */
+const KEY = "aff-theme-choice";
 export type AffTheme = "light" | "dark";
 
 export function useAffTheme() {
   const [theme, set] = useState<AffTheme>(() => {
     // Storage throws in a private window and returns nothing on a first visit.
     try {
-      return localStorage.getItem(KEY) === "dark" ? "dark" : "light";
+      return localStorage.getItem(KEY) === "light" ? "light" : "dark";
     } catch (_) {
-      return "light";
+      return "dark";
     }
   });
 
-  useEffect(() => {
-    try { localStorage.setItem(KEY, theme); } catch (_) {}
-  }, [theme]);
-
-  const toggle = useCallback(() => set((t) => (t === "dark" ? "light" : "dark")), []);
+  const toggle = useCallback(() => set((t) => {
+    const next = t === "dark" ? "light" : "dark";
+    try { localStorage.setItem(KEY, next); } catch (_) {}
+    return next;
+  }), []);
   return { theme, toggle };
 }
 
