@@ -216,8 +216,8 @@ function setIslandAllowed(on) {
    it) it wakes up: fades in with its eyes shut, opens them, blinks once. */
 let woke = false;
 function sendRest() {
-  if (islandAllowed && !woke && island && !island.isDestroyed() && !island.webContents.isLoading()) { woke = true; sendIsland("maven:state", { state: "wake" }); return; }
-  sendIsland("maven:state", { state: "idle" });
+  if (islandAllowed && !woke && island && !island.isDestroyed() && !island.webContents.isLoading()) { woke = true; islandShow("wake"); return; }
+  islandShow("idle");
 }
 function createIsland() {
   island = new BrowserWindow({
@@ -334,14 +334,28 @@ function showTargetsHint(on) {
 }
 
 let islandHideTimer = 0;
+/* ---------- Maven's voice (2026-10-29) ----------
+   The AffectiveOS voice (mac/shared/affectiveos-voice.js) with Maven's own
+   Fish voice. He speaks in Do mode only: what he did, or what he's asking.
+   Write mode stays silent, because you're in the middle of typing. */
+const MAVEN_VOICE_ID = "9062ee6786ec40e8a27e273279336a06";
+let doTalk = false; // true from a Do take until the next Write take
+function maySay(text) {
+  if (!doTalk || !text) return;
+  try { mavenStore.init(app.getPath("userData")); if (mavenStore.getSettings().talk === false) return; } catch (_) {}
+  sendIsland("maven:say", { text: String(text), endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: MAVEN_VOICE_ID });
+}
+function warmVoice() { sendIsland("maven:say", { text: "-", warm: true, endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: MAVEN_VOICE_ID }); }
+
 function islandShow(state, extra = {}) {
   if (!island || island.isDestroyed()) return;
   clearTimeout(islandHideTimer);
   if (islandAllowed && !island.isVisible()) island.showInactive();
   // The look travels with every state: Bar layout, and the theme from Settings.
-  let theme = "ink";
-  try { mavenStore.init(app.getPath("userData")); theme = String(mavenStore.getSettings().islandTheme || "ink"); } catch (_) {}
-  sendIsland("maven:state", { state, look: { layout: "bar", theme }, ...extra });
+  let theme = "ink", character = true;
+  try { mavenStore.init(app.getPath("userData")); const st = mavenStore.getSettings(); theme = String(st.islandTheme || "ink"); character = st.character !== false; } catch (_) {}
+  sendIsland("maven:state", { state, look: { layout: "bar", theme, character }, ...extra });
+  if (state === "sent") maySay(extra.text || "Sent.");
 }
 function islandHide(delay = 0) {
   clearTimeout(islandHideTimer);
@@ -526,6 +540,7 @@ function collapseRepeats(text) {
 }
 let longTakeTimer1 = 0, longTakeTimer2 = 0, longTake = false;
 async function startDictation(source, mode = "write") {
+  if (mode === "do") { doTalk = true; warmVoice(); } else if (mode === "write") doTalk = false;
   longTake = false;
   if (doAsk && mode !== "confirm") void endAsk("interrupted by a new take");
   phase = "starting";
@@ -838,6 +853,7 @@ async function intentFor(raw) {
 /* After every "Not my job." a tiny second line says how to see the list (3 s). */
 const HELP_HINT = "Say “what can you do?”";
 function reply(text, face = "done", ms = 1700) {
+  maySay(text);
   const refused = text === "Not my job.";
   islandShow("reply", { note: text, face, ...(refused ? { hint: HELP_HINT } : {}) });
   islandHide(refused ? Math.max(ms, 3000) : ms);
@@ -862,6 +878,7 @@ function armFold() {
   doAsk.timer = setTimeout(() => void endAsk(`folded after ${Math.round(ms / 1000)}s`), ms);
 }
 async function ask(spec, rec, handlers) {
+  maySay(spec.kind === "choose" || spec.kind === "help" ? spec.title : spec.right || spec.title);
   const front = doAsk ? doAsk.front : await actions.frontApp();
   if (doAsk) clearTimeout(doAsk.timer);
   doAsk = { spec, rec, draft: String(spec.preview || ""), front, editing: false, ...handlers };

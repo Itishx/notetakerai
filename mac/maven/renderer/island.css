@@ -291,3 +291,16 @@ body.t-paper #card.k-help .jc, body.t-paper #card.k-help .jh kbd { background: #
    and the occasional warm light round the edge. */
 .eye { translate: var(--gx, 0px) var(--gy, 0px); transition: translate .35s cubic-bezier(.3,.7,.3,1), transform .08s ease; }
 #island.glint .edge { opacity: 1; }
+
+
+/* ---------- Maven, the character (2026-10-29) ----------
+   body.l-char: the pill becomes him. Same spot, same states; the cards and
+   the three-word replies grow out above his head instead of beside a pill. */
+body.l-char #island { width: 64px; height: 108px; }
+body.l-char .face { width: 64px !important; height: 108px; background: none !important; box-shadow: none !important; border-radius: 0; animation: none !important; }
+body.l-char .face > .eye, body.l-char .face > .edge, body.l-char .face > .wave { display: none !important; }
+body.l-char .mv-char { position: absolute; left: 0; bottom: 0; width: 64px; height: 108px; image-rendering: auto; }
+body.l-char #cardwrap { bottom: 136px; }
+body.l-char #note { bottom: 112px; }
+body.l-char #hint { bottom: 112px; }
+body.l-char #island .x, body.l-char #island .ok { top: auto; bottom: 112px; }

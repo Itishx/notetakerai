@@ -43,7 +43,8 @@
     "mac:arrival": "env -u ELECTRON_RUN_AS_NODE BRAINO_ARRIVAL_PREVIEW=1 electron mac/braino-mac/main.cjs",
     "mac:drop": "env -u ELECTRON_RUN_AS_NODE BRAINO_NOTCH_DROP=1 electron mac/braino-mac/main.cjs",
     "mac:screentext:build": "cd mac/braino-mac/native/BrainoScreenText && swiftc -O -o BrainoScreenText main.swift",
-    "postinstall": "node scripts/mac-dev-permissions.mjs"
+    "postinstall": "node scripts/mac-dev-permissions.mjs",
+    "voice:sync": "cp mac/shared/affectiveos-voice.js mac/maven/renderer/vendor/affectiveos-voice.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
