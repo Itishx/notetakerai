@@ -3,6 +3,13 @@
    answers out loud with his face and a card above his head. He has no hands:
    he never opens, sends or changes anything.
 
+   2026-10-29: he lives in the NOTCH now, the way Braino does, and talks the
+   way Braino talks: one press opens a live voice line (OpenAI Realtime over
+   WebRTC, semantic VAD, the same session settings as Braino Mac), every pause
+   is a turn, talk over him to cut him off, press again or 3 quiet minutes to
+   end. The line signs in with Braino Mac's saved session (auth-session.json).
+   Not signed in to Braino? It falls back to press, talk, press again.
+
    Built from Maven's parts without copying them: the key watcher
    (mac/maven/native/MavenKeys.swift) and the recorder (mac/maven/lib/hera.cjs).
    His voice is the shared AffectiveOS voice (mac/shared/affectiveos-voice.js,
@@ -50,47 +57,38 @@ function log(event, data = {}) {
   if (!app.isPackaged) process.stdout.write(line);
 }
 
-/* ---------- the window: his corner, click-through except over him ---------- */
-const W = 440, H = 380;
+/* ---------- the notch: a click-through panel over the top of the screen ---------- */
+const NOTCH_W = 760, NOTCH_H = 420;
 let win = null, tray = null;
-const POS_FILE = path.join(app.getPath("userData"), "position.json");
-function savedPos() { try { const p = JSON.parse(fs.readFileSync(POS_FILE, "utf8")); return Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null; } catch (_) { return null; } }
 function createWindow() {
-  const wa = screen.getPrimaryDisplay().workArea;
+  const d = screen.getPrimaryDisplay();
   win = new BrowserWindow({
-    width: W, height: H, ...(savedPos() || { x: wa.x + wa.width - W - 8, y: wa.y + wa.height - H - 4 }),
-    frame: false, transparent: true, resizable: false, movable: true, focusable: false, hasShadow: false,
+    type: "panel", width: NOTCH_W, height: NOTCH_H,
+    x: Math.round(d.bounds.x + (d.bounds.width - NOTCH_W) / 2), y: d.bounds.y,
+    frame: false, transparent: true, resizable: false, movable: false, focusable: false, hasShadow: false, enableLargerThanScreen: true,
     alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: "#00000000",
     webPreferences: { preload: path.join(__dirname, "renderer", "preload.cjs"), contextIsolation: true, sandbox: true, backgroundThrottling: false, autoplayPolicy: "no-user-gesture-required" },
   });
-  win.setAlwaysOnTop(true, "floating");
+  win.setAlwaysOnTop(true, "screen-saver", 1);
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setIgnoreMouseEvents(true, { forward: true });
-  win.loadFile(path.join(__dirname, "renderer", "ultron.html"));
-  win.once("ready-to-show", () => { win.showInactive(); send("idle"); });
+  win.loadFile(path.join(__dirname, "renderer", "notch.html"));
+  // the notch page's own errors land in ultron.log too
+  win.webContents.on("console-message", (_e, level, message) => { if (level >= 2) log("notch.console", { message: String(message).slice(0, 300) }); });
+  win.once("ready-to-show", () => {
+    win.setPosition(Math.round(d.bounds.x + (d.bounds.width - NOTCH_W) / 2), d.bounds.y); // past the menu bar, into the notch strip
+    win.showInactive();
+    // the menu bar's height is the notch's height on a notched Mac
+    win.webContents.send("ultron:metrics", { notchH: Math.max(24, d.workArea.y - d.bounds.y) });
+    send("idle");
+  });
 }
 function send(state, extra = {}) {
   if (!win || win.isDestroyed()) return;
   win.webContents.send("ultron:state", { state, voice: { endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: VOICE_ID }, ...extra });
 }
-ipcMain.on("ultron:hover", (_e, over) => { if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!over, { forward: true }); });
-ipcMain.on("ultron:spoke", (_e, what) => { log("voice", { what }); setGlow(what === "start"); });
-
-/* Drag him anywhere: the window follows the cursor until you let go, and he
-   stays there next time. */
-let dragTimer = 0, dragOff = null;
-ipcMain.on("ultron:drag", (_e, what) => {
-  if (!win || win.isDestroyed()) return;
-  if (what === "start") {
-    const c = screen.getCursorScreenPoint(), [x, y] = win.getPosition();
-    dragOff = { x: c.x - x, y: c.y - y };
-    clearInterval(dragTimer);
-    dragTimer = setInterval(() => { const p = screen.getCursorScreenPoint(); win.setPosition(Math.round(p.x - dragOff.x), Math.round(p.y - dragOff.y)); }, 16);
-  } else {
-    clearInterval(dragTimer); dragTimer = 0;
-    try { const [x, y] = win.getPosition(); fs.writeFileSync(POS_FILE, JSON.stringify({ x, y })); } catch (_) {}
-  }
-});
+let sayAt = 0;
+ipcMain.on("ultron:spoke", (_e, what) => { log("voice", { what, ...(what === "start" && sayAt ? { msAfterReply: Date.now() - sayAt } : {}) }); setGlow(what === "start"); });
 
 /* The red screen: a click-through layer over the whole display that glows
    while he speaks. */
@@ -139,7 +137,7 @@ async function startKeys() {
     const lines = buf.split(/\r?\n/); buf = lines.pop();
     for (const raw of lines) {
       const t = raw.trim();
-      if (t === "do-hold-start") toggle();
+      if (t === "do-hold-start") press();
       else if (t === "ready") log("keys.ready");
     }
   });
@@ -147,13 +145,57 @@ async function startKeys() {
   proc.on("exit", (code) => { log("keys.exit", { code }); keys = null; if (!quitting) setTimeout(() => void startKeys(), 3000); });
 }
 
-/* ---------- a turn: press, talk, press again ---------- */
-let hera = null, phase = "idle", startedAt = 0;
+/* ---------- Braino's sign-in, borrowed: the live voice line needs a signed-in user ---------- */
+const BRAINO_AUTH = path.join(require("os").homedir(), "Library", "Application Support", "Braino Mac", "auth-session.json");
+async function brainoToken() {
+  let sess; try { sess = JSON.parse(fs.readFileSync(BRAINO_AUTH, "utf8")); } catch (_) { return ""; }
+  if (!sess?.access_token) return "";
+  if (Number(sess.expires_at || 0) * 1000 > Date.now() + 60000 || !sess.refresh_token) return sess.access_token;
+  // Expired: refresh it the way Braino does, and write it back so Braino keeps working too.
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY }, body: JSON.stringify({ refresh_token: sess.refresh_token }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.access_token) { log("auth.refresh_failed", { status: res.status }); return sess.access_token; }
+    const next = { ...sess, access_token: data.access_token, refresh_token: data.refresh_token || sess.refresh_token, expires_at: data.expires_at || Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600), user: data.user || sess.user, saved_at: new Date().toISOString() };
+    const tmp = `${BRAINO_AUTH}.ultron-tmp`; fs.writeFileSync(tmp, JSON.stringify(next, null, 2)); fs.renameSync(tmp, BRAINO_AUTH);
+    return next.access_token;
+  } catch (e) { log("auth.refresh_error", { error: String(e?.message || e) }); return sess.access_token; }
+}
+// The renderer's SDP offer, swapped for OpenAI's answer through the same function Braino uses.
+ipcMain.handle("ultron:realtime-call", async (_e, sdp) => {
+  const token = await brainoToken();
+  if (!token) return { ok: false, error: "no-braino-session" };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/openai-realtime-call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "X-Braino-Realtime-Model": "gpt-realtime-mini", "X-Braino-Voice-Engine": "fish", "X-Braino-Realtime-Purpose": "voice" },
+      body: String(sdp || "").replace(/\r?\n/g, "\r\n"),
+    });
+    const text = await res.text();
+    if (!res.ok) { log("realtime.failed", { status: res.status, error: text.slice(0, 300) }); return { ok: false, error: text.slice(0, 300) }; }
+    log("realtime.open", { session: res.headers.get("x-braino-realtime-session-id") || null });
+    return { ok: true, sdp: text };
+  } catch (e) { log("realtime.failed", { error: String(e?.message || e) }); return { ok: false, error: String(e?.message || e) }; }
+});
+
+/* ---------- a turn ---------- */
+let hera = null, phase = "idle", startedAt = 0, live = false;
 const history = []; let lastTurnAt = 0;
 function recorder() {
   if (!hera) hera = createHera({ BrowserWindow, session, log, onLevel: (v) => { if (win && !win.isDestroyed()) win.webContents.send("ultron:level", v); } });
   return hera;
 }
+/* fn+Control: the live line opens (or closes). If the line can't open, the
+   renderer says so and the old press-talk-press recorder takes over. */
+let fallback = false;
+function press() {
+  if (fallback) { toggle(); return; }
+  if (win && !win.isDestroyed()) win.webContents.send("ultron:press");
+}
+ipcMain.on("ultron:live", (_e, on, why) => { live = Boolean(on); log("live", { on: live, why }); });
+ipcMain.on("ultron:fallback", (_e, why) => { log("live.fallback", { why }); fallback = true; toggle(); });
+ipcMain.on("ultron:turn", (_e, said) => { void reply(String(said || "").trim()); });
+
 function toggle() {
   if (phase === "idle") void listen();
   else if (phase === "listening") void finish();
@@ -180,20 +222,29 @@ async function post(fn, body, ms) {
 async function finish() {
   phase = "thinking";
   send("thinking");
-  const t0 = Date.now();
   const audio = await recorder().stop();
   if (!audio?.audioBase64 || (audio.ms || 0) < 400) { phase = "idle"; send("say", { text: "I heard static and ambition. Say it once more." }); return; }
   const heard = await post("transcribe-and-notes", { mode: "lecture", audioBase64: audio.audioBase64, fileName: "ultron.webm", mimeType: audio.mimeType, transcriptOnly: true, dictation: true, language: "auto" }, 30000);
   const said = String(heard?.transcript || "").trim();
   if (!said) { phase = "idle"; send("say", { text: "I heard static and ambition. Say it once more." }); return; }
+  await reply(said);
+}
+/* One turn of his brain: what you said in, his line out. Same for both paths. */
+let turnGen = 0;
+async function reply(said) {
+  if (!said) return;
+  const gen = ++turnGen, t0 = Date.now();
+  send("thinking", { heard: said });
   if (Date.now() - lastTurnAt > 15 * 60000) history.length = 0; // a new conversation after a long pause
   const r = await post("dictation-refine", { mode: "talk", character: "ultron", transcript: said, history: history.slice(-6) }, 20000);
-  const reply = String(r?.say || "").trim() || "Even gods need Wi-Fi. Something broke between us. Try again.";
-  history.push({ user: said, ultron: reply }); if (history.length > 8) history.shift();
+  if (gen !== turnGen) return; // you spoke again before he answered: only the newest turn gets a reply
+  const text = String(r?.say || "").trim() || "Even gods need Wi-Fi. Something broke between us. Try again.";
+  history.push({ user: said, ultron: text }); if (history.length > 8) history.shift();
   lastTurnAt = Date.now();
-  log("turn", { heard: said, reply, heardMs: Date.now() - t0, cachedTokens: r?.cachedTokens || 0 });
+  log("turn", { heard: said, reply: text, ms: Date.now() - t0, live, cachedTokens: r?.cachedTokens || 0 });
   phase = "idle";
-  send("say", { text: reply, heard: said });
+  sayAt = Date.now();
+  send("say", { text, heard: said });
 }
 
 /* ---------- app ---------- */
@@ -215,9 +266,9 @@ app.whenReady().then(async () => {
   createWindow();
   createGlow();
   tray = new Tray(trayIcon());
-  tray.setToolTip("Ultron: press fn+Control and talk");
+  tray.setToolTip("Ultron: press fn+Control once, then just talk");
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Press fn+Control and talk", enabled: false },
+    { label: "Press fn+Control once, then just talk", enabled: false },
     { type: "separator" },
     { label: "Quit Ultron", click: () => app.quit() },
   ]));

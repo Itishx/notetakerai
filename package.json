@@ -44,7 +44,7 @@
     "mac:drop": "env -u ELECTRON_RUN_AS_NODE BRAINO_NOTCH_DROP=1 electron mac/braino-mac/main.cjs",
     "mac:screentext:build": "cd mac/braino-mac/native/BrainoScreenText && swiftc -O -o BrainoScreenText main.swift",
     "postinstall": "node scripts/mac-dev-permissions.mjs",
-    "voice:sync": "cp mac/shared/affectiveos-voice.js mac/ultron/renderer/vendor/affectiveos-voice.js",
+    "voice:sync": "cp mac/shared/affectiveos-voice.js mac/ultron/renderer/vendor/affectiveos-voice.js && cp mac/braino-mac/notch-response.cjs mac/ultron/renderer/vendor/notch-response.js",
     "mac:ultron": "cd mac/ultron && env -u ELECTRON_RUN_AS_NODE electron ."
   },
   "dependencies": {
