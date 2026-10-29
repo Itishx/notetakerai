@@ -151,13 +151,20 @@
     state = "idle";
   });
 
+  // Drag him: press on him and move; let go anywhere.
+  let dragging = false;
+  cv.addEventListener("mousedown", (e) => { if (e.button !== 0) return; e.preventDefault(); dragging = true; cv.style.cursor = "grabbing"; window.ultron.drag("start"); });
+  const endDrag = () => { if (!dragging) return; dragging = false; cv.style.cursor = "grab"; window.ultron.drag("end"); };
+  window.addEventListener("mouseup", endDrag); window.addEventListener("blur", endDrag);
+  cv.style.cursor = "grab";
+
   // Hover: the window is click-through except over him and his card.
   document.addEventListener("mousemove", (e) => {
     const r = cv.getBoundingClientRect(), c = card.getBoundingClientRect();
     const inHim = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     const inCard = card.classList.contains("on") && e.clientX >= c.left && e.clientX <= c.right && e.clientY >= c.top && e.clientY <= c.bottom;
     hint.classList.toggle("on", inHim && !card.classList.contains("on"));
-    window.ultron.hover(inHim || inCard);
+    if (!dragging) window.ultron.hover(inHim || inCard);
   });
-  document.addEventListener("mouseleave", () => { hint.classList.remove("on"); window.ultron.hover(false); });
+  document.addEventListener("mouseleave", () => { hint.classList.remove("on"); if (!dragging) window.ultron.hover(false); });
 })();

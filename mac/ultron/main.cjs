@@ -53,11 +53,13 @@ function log(event, data = {}) {
 /* ---------- the window: his corner, click-through except over him ---------- */
 const W = 440, H = 380;
 let win = null, tray = null;
+const POS_FILE = path.join(app.getPath("userData"), "position.json");
+function savedPos() { try { const p = JSON.parse(fs.readFileSync(POS_FILE, "utf8")); return Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null; } catch (_) { return null; } }
 function createWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
   win = new BrowserWindow({
-    width: W, height: H, x: wa.x + wa.width - W - 8, y: wa.y + wa.height - H - 4,
-    frame: false, transparent: true, resizable: false, movable: false, focusable: false, hasShadow: false,
+    width: W, height: H, ...(savedPos() || { x: wa.x + wa.width - W - 8, y: wa.y + wa.height - H - 4 }),
+    frame: false, transparent: true, resizable: false, movable: true, focusable: false, hasShadow: false,
     alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: "#00000000",
     webPreferences: { preload: path.join(__dirname, "renderer", "preload.cjs"), contextIsolation: true, sandbox: true, backgroundThrottling: false, autoplayPolicy: "no-user-gesture-required" },
   });
@@ -72,7 +74,45 @@ function send(state, extra = {}) {
   win.webContents.send("ultron:state", { state, voice: { endpoint: `${SUPABASE_URL}/functions/v1/fish-audio-tts`, anonKey: SUPABASE_ANON_KEY, referenceId: VOICE_ID }, ...extra });
 }
 ipcMain.on("ultron:hover", (_e, over) => { if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!over, { forward: true }); });
-ipcMain.on("ultron:spoke", (_e, what) => log("voice", { what }));
+ipcMain.on("ultron:spoke", (_e, what) => { log("voice", { what }); setGlow(what === "start"); });
+
+/* Drag him anywhere: the window follows the cursor until you let go, and he
+   stays there next time. */
+let dragTimer = 0, dragOff = null;
+ipcMain.on("ultron:drag", (_e, what) => {
+  if (!win || win.isDestroyed()) return;
+  if (what === "start") {
+    const c = screen.getCursorScreenPoint(), [x, y] = win.getPosition();
+    dragOff = { x: c.x - x, y: c.y - y };
+    clearInterval(dragTimer);
+    dragTimer = setInterval(() => { const p = screen.getCursorScreenPoint(); win.setPosition(Math.round(p.x - dragOff.x), Math.round(p.y - dragOff.y)); }, 16);
+  } else {
+    clearInterval(dragTimer); dragTimer = 0;
+    try { const [x, y] = win.getPosition(); fs.writeFileSync(POS_FILE, JSON.stringify({ x, y })); } catch (_) {}
+  }
+});
+
+/* The red screen: a click-through layer over the whole display that glows
+   while he speaks. */
+let glowWin = null;
+function createGlow() {
+  const d = screen.getDisplayMatching(win.getBounds());
+  glowWin = new BrowserWindow({
+    ...d.bounds, frame: false, transparent: true, resizable: false, movable: false, focusable: false, hasShadow: false,
+    alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: "#00000000", enableLargerThanScreen: true,
+    webPreferences: { preload: path.join(__dirname, "renderer", "preload.cjs"), contextIsolation: true, sandbox: true },
+  });
+  glowWin.setAlwaysOnTop(true, "screen-saver");
+  glowWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  glowWin.setIgnoreMouseEvents(true);
+  glowWin.loadFile(path.join(__dirname, "renderer", "glow.html"));
+  glowWin.once("ready-to-show", () => glowWin.showInactive());
+}
+function setGlow(on) {
+  if (!glowWin || glowWin.isDestroyed()) return;
+  if (on) glowWin.setBounds(screen.getDisplayMatching(win.getBounds()).bounds); // the screen he's on
+  glowWin.webContents.send("ultron:glow", on);
+}
 
 /* ---------- keys: Maven's watcher, only fn+Control matters here ---------- */
 let keys = null, quitting = false;
@@ -173,6 +213,7 @@ app.whenReady().then(async () => {
   if (process.platform === "darwin") { try { app.dock.hide(); } catch (_) {} }
   try { await systemPreferences.askForMediaAccess("microphone"); } catch (_) {}
   createWindow();
+  createGlow();
   tray = new Tray(trayIcon());
   tray.setToolTip("Ultron: press fn+Control and talk");
   tray.setContextMenu(Menu.buildFromTemplate([

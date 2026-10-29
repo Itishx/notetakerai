@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld("ultron", {
   onLevel: (fn) => ipcRenderer.on("ultron:level", (_e, v) => fn(v)),
   hover: (over) => ipcRenderer.send("ultron:hover", Boolean(over)),
   spoke: (what) => ipcRenderer.send("ultron:spoke", what),
+  drag: (what) => ipcRenderer.send("ultron:drag", what),
+  onGlow: (fn) => ipcRenderer.on("ultron:glow", (_e, on) => fn(on)),
 });

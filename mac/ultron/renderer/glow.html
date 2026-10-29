@@ -1,0 +1,13 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+/* The whole screen glows red at the edges while Ultron speaks, breathing with his voice. */
+#g { position: fixed; inset: 0; opacity: 0; transition: opacity .45s ease;
+  box-shadow: inset 0 0 90px 22px rgba(255, 30, 20, .55), inset 0 0 260px 40px rgba(200, 0, 0, .28);
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 20, 10, .10) 100%); }
+#g.on { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { filter: brightness(1.35); } }
+</style></head>
+<body><div id="g"></div><script src="glow.js"></script></body></html>
